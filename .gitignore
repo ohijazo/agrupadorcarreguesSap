@@ -37,3 +37,8 @@ dist/
 
 # PDFs externs guardats al docs/ que no pertanyen a aquest projecte
 docs/Manual_Recepcionista_Visites.pdf
+
+# Reports de discovery — contenen noms de transportistes/dades internes SAP
+udt_report.txt
+*_report.txt
+

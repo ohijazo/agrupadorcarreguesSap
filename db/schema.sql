@@ -145,40 +145,11 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_accio ON audit_logs (accio);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user  ON audit_logs (user_id) WHERE user_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- Data planificada de càrrega: protecció contra la sobreescriptura de KAIS.
--- Quan una càrrega passa a "Sortida" (car_estat=2), KAIS sobreescriu
--- car_fecsalida amb la data/hora del canvi d'estat — la càrrega "salta" de dia
--- al calendari. Aquestes taules locals conserven la data planificada original.
--- Lookup: override (manual admin) > snapshot (auto) > valor live de KAIS.
+-- Nota SAP: les taules `kais_carrega_snapshot` i `kais_carrega_override`
+-- que hi ha a la variant KAIS no s'apliquen aqui. SAP B1 no sobreescriu
+-- U_SEIDataS quan la carrega canvia d'estat, aixi que no cal snapshot ni
+-- override manual de la data planificada.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS kais_carrega_snapshot (
-    carrega_id              TEXT         PRIMARY KEY,
-    car_fecsalida_original  TIMESTAMP    NOT NULL,
-    car_estat_snapshot      INTEGER      NOT NULL,
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_kais_carrega_snapshot_updated
-    ON kais_carrega_snapshot (updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS kais_carrega_override (
-    carrega_id              TEXT         PRIMARY KEY,
-    car_fecsalida_override  TIMESTAMP    NOT NULL,
-    motiu                   TEXT,
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    created_by_id           INTEGER
-);
-
-CREATE INDEX IF NOT EXISTS idx_kais_carrega_override_updated
-    ON kais_carrega_override (updated_at DESC);
-
-DO $$ BEGIN
-    ALTER TABLE kais_carrega_override
-        ADD CONSTRAINT fk_kais_carrega_override_created_by
-        FOREIGN KEY (created_by_id) REFERENCES usuaris(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ---------------------------------------------------------------------------
 -- Vista: una agrupació es considera "finalitzada" si l'oficina l'ha tancada

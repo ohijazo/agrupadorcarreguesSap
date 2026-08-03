@@ -182,7 +182,7 @@ def secure_headers(resp):
         "script-src 'self'; "
         "img-src 'self' data:; "
         "frame-ancestors 'self' http://comandes.agrienergia.local "
-        "http://127.0.0.1:5001 http://localhost:5001;"
+        "http://127.0.0.1:5002 http://localhost:5002;"
     )
     return resp
 
@@ -1197,4 +1197,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001, debug=False)
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "5004")), debug=False)
