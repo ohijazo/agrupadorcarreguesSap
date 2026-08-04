@@ -163,7 +163,7 @@
 
         const desde = isoLocal(state.diaInici);
         const fins  = isoLocal(state.diaFi);
-        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000`;
+        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000&estat=1`;
 
         try {
             const resp = await fetch(url, { signal: ctrl.signal, credentials: "same-origin" });

@@ -127,10 +127,12 @@ def llistar_carregues(
         tra_codis = []
 
     # WHERE base: rang de data sobre U_SEIDataS (fallback a CreateDate).
-    # Excloem Canceled.
+    # No filtrem per Canceled: SAP B1 ignora aquest flag a la finestra
+    # "Ordenes de Carga Abiertas" (mostra fins i tot Canceled='Y' si
+    # U_SEIEstado='P'). Si cal restringir a un estat concret, es fa amb
+    # el parametre opcional `estat`.
     where_sql = """
-        WHERE (h.Canceled IS NULL OR h.Canceled <> 'Y')
-          AND COALESCE(h.U_SEIDataS, h.CreateDate) >= ?
+        WHERE COALESCE(h.U_SEIDataS, h.CreateDate) >= ?
           AND COALESCE(h.U_SEIDataS, h.CreateDate) <  ?
     """
     where_params: list = [desde_d, fins_d]
@@ -278,8 +280,7 @@ def llistar_estats_carregues() -> list[dict]:
     sql = """
         SELECT UPPER(RTRIM(U_SEIEstado)) AS estat_char, COUNT(*) AS n
         FROM   [@SEI_ORDENCARGA] WITH (NOLOCK)
-        WHERE  (Canceled IS NULL OR Canceled <> 'Y')
-          AND  COALESCE(U_SEIDataS, CreateDate) >= DATEADD(YEAR, -1, GETDATE())
+        WHERE  COALESCE(U_SEIDataS, CreateDate) >= DATEADD(YEAR, -1, GETDATE())
         GROUP  BY UPPER(RTRIM(U_SEIEstado))
         ORDER  BY estat_char
     """
@@ -306,8 +307,7 @@ def llistar_transportistes() -> list[dict]:
         SELECT DISTINCT RTRIM(t.Code) AS tra_codi, RTRIM(t.Name) AS tra_nom
         FROM   [@SEITRANSPORTEF] t WITH (NOLOCK)
         JOIN   [@SEI_ORDENCARGA] h WITH (NOLOCK) ON h.U_SEITransp = t.Code
-        WHERE  (h.Canceled IS NULL OR h.Canceled <> 'Y')
-          AND  COALESCE(h.U_SEIDataS, h.CreateDate) >= DATEADD(YEAR, -1, GETDATE())
+        WHERE  COALESCE(h.U_SEIDataS, h.CreateDate) >= DATEADD(YEAR, -1, GETDATE())
         ORDER  BY tra_nom
     """
     conn = connectar()
