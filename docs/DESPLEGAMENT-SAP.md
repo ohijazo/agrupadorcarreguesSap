@@ -13,11 +13,11 @@ en producció, sense tocar-la.
 |---|---|---|
 | Directori | `/var/www/agrupacio-carregues` | `/var/www/agrupacio-carregues-sap` |
 | Servei systemd | `agrupacio-carregues` | `agrupacio-carregues-sap` |
-| Port intern (Gunicorn) | 50004 | **50005** |
+| Port intern (Gunicorn) | 50004 | **50006** |
 | URL | `agrupacions.agrienergia.local` | **`agrupacions-sap.agrienergia.local`** |
 | Base de dades PostgreSQL | `agrupaciocarregues` | **`agrupaciocarregues_sap`** |
 | Usuari PostgreSQL | `app_agrupacions` | **`app_agrupacions_sap`** |
-| Origen de dades | SQL Server `vkais:50058` | SQL Server `AE01SAPSQL` (`DB_FARINERA_TEST`) |
+| Origen de dades | SQL Server `vkais:50058` | SQL Server `AE01SAPSQL` (`DB_FARIN_TEST`) |
 | Motor d'embalatges | `/var/www/comandes-venda` | **`/var/www/comandes-venda-sap`** |
 | Repositori | `Agrupador-de-Carregues` | `agrupadorcarreguesSap` |
 
@@ -33,7 +33,7 @@ compatibles i barrejar-los corrompria les agrupacions.
    Comprovació ràpida al servidor:
    ```bash
    ls /var/www/comandes-venda-sap/motor.py
-   grep KAIS_APP_PATH /var/www/comandes-venda-sap/.env   # ha de dir /var/www/comandes-venda
+   systemctl is-active comandes-venda-sap
    ```
 
 2. **El Kais canònic** (`/var/www/comandes-venda`) ha d'existir: el `_bootstrap.py`
@@ -60,7 +60,7 @@ sudo bash agrup-sap-tmp/deploy.sh --first-install
 
 El script fa, en aquest ordre:
 
-1. Comprova els prerequisits (app germana, Kais, `KAIS_APP_PATH`).
+1. Comprova els prerequisits (app germana i Kais canònic).
 2. Instal·la paquets del sistema i, si cal, el driver ODBC de SQL Server.
 3. Clona el repo a `/var/www/agrupacio-carregues-sap`.
 4. Crea el venv i instal·la `requirements.txt` + `gunicorn` + **les dependències
@@ -84,7 +84,7 @@ sudo systemctl start agrupacio-carregues-sap
 sudo systemctl status agrupacio-carregues-sap
 
 # 3. Verificar dependències (db = SQL Server SAP, pg = PostgreSQL, motor = embalatges)
-curl -s http://127.0.0.1:50005/health
+curl -s http://127.0.0.1:50006/health
 # esperat: {"db":{"ok":true},"motor":{"ok":true},"ok":true,"pg":{"ok":true}}
 
 # 4. Primer usuari admin (demana la contrasenya per stdin)
@@ -114,10 +114,16 @@ sincronitza logrotate i el vhost si han canviat, reinicia el servei i comprova
 - **`AllowEncodedSlashes NoDecode` + `nocanon`** al vhost són imprescindibles: els
   `carrega_id` tenen format `2026/01/0002266` i viatgen com a `%2F` dins la URL.
   Sense això, Apache respon 404.
-- **No posis `KAIS_APP_PATH` al `.env` d'aquesta app.** `app.py` carrega el `.env`
-  de `PREPARACIO_PATH` com a *fallback*, i és d'allà que ha de venir. Si el
-  defineixes aquí, guanya el teu valor i pots trencar els imports de
-  `models`/`regles`/`mailer`.
+- **`KAIS_APP_PATH` va a la unitat systemd, no al `.env`.** El `_bootstrap.py` de
+  `comandes-venda-sap` hi resol `models`/`regles`/`mailer`. Al servidor, el `.env`
+  de `comandes-venda-sap` **no** el defineix: cada servei se'l passa per
+  `Environment=`. Com que nosaltres importem `motor.py` dins del nostre procés,
+  l'hem de passar nosaltres (`Environment=KAIS_APP_PATH=/var/www/comandes-venda`,
+  ho fa el `deploy.sh`). Sense això, `_bootstrap` el buscaria a
+  `/var/www/preparacioComandesVenda`, que no existeix, i `/health` diria
+  `motor: false`.
+  En local (Windows) no cal: allà el `.env` de `P:\preparacioComandesVendaSAP` sí
+  que el defineix, i `app.py` el carrega com a *fallback*.
 - **Un sol venv per a les dues apps.** `motor.py` viu a `comandes-venda-sap` però
   s'importa dins del procés d'aquesta app, així que les seves dependències han
   d'estar instal·lades al venv d'aquí (ho fa el `deploy.sh`).
@@ -129,7 +135,7 @@ sincronitza logrotate i el vhost si han canviat, reinicia el servei i comprova
   `EnvironmentFile`, i allà un `#` dins d'un valor comença un comentari i els
   espais no citats trenquen la línia. Si la contrasenya SAP en té, posa-la entre
   cometes simples: `SQL_PASSWORD='la meva#clau'`.
-- **Port 50005**: el fixa el `systemd` (`Environment=PORT=50005`, després de
+- **Port 50006**: el fixa el `systemd` (`Environment=PORT=50006`, després de
   l'`EnvironmentFile`) i el `--bind` de Gunicorn. El `PORT` del `.env` de
   desenvolupament (5004) no hi pinta res.
 

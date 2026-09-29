@@ -21,7 +21,7 @@ from fpdf import FPDF
 APP_NAME = "Agrupador de Càrregues (variant SAP B1)"
 APP_DIR = "/var/www/agrupacio-carregues-sap"
 SERVICE_NAME = "agrupacio-carregues-sap"
-APP_PORT = "50005"
+APP_PORT = "50006"
 SERVER_NAME = "agrupacions-sap.agrienergia.local"
 SERVER_HOST = "ae01farwebsrv.agrienergia.local (192.168.11.244)"
 GITHUB_REPO = "https://github.com/ohijazo/agrupadorcarreguesSap.git"
@@ -339,7 +339,7 @@ def generate():
         [22, 58, 110],
     )
     pdf.body_text(
-        "No cal obrir cap port nou al tallafocs perimetral: el 50005 només escolta a "
+        "No cal obrir cap port nou al tallafocs perimetral: el 50006 només escolta a "
         "127.0.0.1 i l'accés des de la xarxa passa sempre per Apache al port 80."
     )
 

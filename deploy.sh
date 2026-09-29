@@ -24,7 +24,8 @@ APP_DIR="/var/www/agrupacio-carregues-sap"
 SERVICE_NAME="agrupacio-carregues-sap"
 PYTHON_BIN="python3"
 VENV_DIR="$APP_DIR/venv"
-APP_PORT=50005
+# 50005 el te el DeCA; 5000/5001/5002/50002/50003/50004 tambe estan ocupats.
+APP_PORT=50006
 APP_USER="www-data"
 SERVER_NAME="agrupacions-sap.agrienergia.local"
 
@@ -89,13 +90,16 @@ if [ "$1" == "--first-install" ]; then
     if [ ! -f "$PREPARACIO_PATH/motor.py" ]; then
         error "$PREPARACIO_PATH existeix pero no hi ha motor.py. Instal·lacio incompleta?"
     fi
+    # El _bootstrap.py de comandes-venda-sap resol models/regles/mailer a
+    # KAIS_APP_PATH. El seu .env NO el defineix: el seu servei el passa per
+    # Environment= a la unitat systemd. Com que nosaltres importem motor.py
+    # dins del nostre proces, l'hem de passar nosaltres tambe (ho fem a la
+    # nostra unitat, mes avall). Sense aixo, _bootstrap buscaria a
+    # /var/www/preparacioComandesVenda, que no existeix, i /health diria
+    # motor: false.
     if [ ! -d "$KAIS_PATH" ]; then
-        warn "No existeix $KAIS_PATH (Kais canonic). El _bootstrap de comandes-venda-sap"
-        warn "el necessita per resoldre models/regles/mailer. L'import de motor fallara."
-    fi
-    if ! grep -qE "^KAIS_APP_PATH=" "$PREPARACIO_PATH/.env" 2>/dev/null; then
-        warn "$PREPARACIO_PATH/.env no defineix KAIS_APP_PATH."
-        warn "Afegeix-hi: KAIS_APP_PATH=$KAIS_PATH"
+        error "No existeix $KAIS_PATH (Kais canonic). El motor d'embalatges hi
+       resol models/regles/mailer i sense ell l'app no arrenca."
     fi
 
     # ---- Dependencies del sistema ----
@@ -177,17 +181,17 @@ if [ "$1" == "--first-install" ]; then
 
 # --- SAP B1 SQL Server (nomes lectura) ---
 SAP_SQL_SERVER=AE01SAPSQL.Agrienergia.local
-SAP_SQL_DATABASE=DB_FARINERA_TEST
+SAP_SQL_DATABASE=DB_FARIN_TEST
 SAP_SQL_USER=sa
 SAP_SQL_PASSWORD=CANVIA_AQUESTA_CONTRASENYA
 
 SQL_SERVER=AE01SAPSQL.Agrienergia.local
-SQL_DATABASE=DB_FARINERA_TEST
+SQL_DATABASE=DB_FARIN_TEST
 SQL_USER=sa
 SQL_PASSWORD=CANVIA_AQUESTA_CONTRASENYA
 
 # --- App germana SAP (motor d'embalatges) ---
-# NO afegir KAIS_APP_PATH aqui: ve del .env de comandes-venda-sap.
+# KAIS_APP_PATH no va aqui: el passa la unitat systemd.
 PREPARACIO_PATH=$PREPARACIO_PATH
 
 # --- Seguretat administracio ---
@@ -214,7 +218,7 @@ PBI_API_KEY=
 
 # --- SAP Service Layer (fase futura d'escriptura) ---
 SAP_SL_URL=https://192.168.11.238:50000/b1s/v1
-SAP_SL_COMPANY=DB_FARINERA_TEST
+SAP_SL_COMPANY=DB_FARIN_TEST
 SAP_SL_USER=OHijazo
 SAP_SL_PASSWORD=CANVIA_AQUESTA_CONTRASENYA
 SAP_SL_VERIFY_SSL=false
@@ -248,6 +252,7 @@ Group=$APP_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 Environment=PORT=$APP_PORT
+Environment=KAIS_APP_PATH=$KAIS_PATH
 ExecStart=$VENV_DIR/bin/gunicorn \\
     --bind 127.0.0.1:$APP_PORT \\
     --workers 2 \\
