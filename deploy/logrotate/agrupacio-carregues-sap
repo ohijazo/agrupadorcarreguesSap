@@ -1,0 +1,21 @@
+# =============================================================================
+# logrotate - Agrupador de Carregues (variant SAP B1)
+# =============================================================================
+# Desti al servidor: /etc/logrotate.d/agrupacio-carregues-sap
+# El deploy.sh --first-install el copia automaticament.
+# Test dry-run: sudo logrotate -d /etc/logrotate.d/agrupacio-carregues-sap
+#
+# Nota: agrupacio.log NO hi surt — l'app ja el rota ella mateixa amb
+# RotatingFileHandler (2 MB x 5 fitxers). Aqui nomes els logs de Gunicorn.
+# =============================================================================
+
+/var/www/agrupacio-carregues-sap/access.log
+/var/www/agrupacio-carregues-sap/error.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

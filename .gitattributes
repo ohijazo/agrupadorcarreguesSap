@@ -1,0 +1,7 @@
+# Els fitxers que s'executen o es llegeixen a Ubuntu han de tenir finals de
+# linia LF sempre. Amb CRLF, bash peta amb: $'\r': command not found.
+*.sh              text eol=lf
+*.sql             text eol=lf
+deploy/apache/*   text eol=lf
+deploy/logrotate/* text eol=lf
+deploy/env.production.example text eol=lf
