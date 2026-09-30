@@ -182,6 +182,11 @@ def secure_headers(resp):
         "script-src 'self'; "
         "img-src 'self' data:; "
         "frame-ancestors 'self' http://comandes.agrienergia.local "
+        "http://comandessap.agrienergia.local "
+        # Transitori: mentre comandessap.agrienergia.local no resolgui al DNS,
+        # l'app de comandes SAP s'obre per IP i port, i aquest es l'origen que
+        # veu el navegador. Es pot treure quan el nom estigui en us.
+        "http://192.168.11.244:5002 "
         "http://127.0.0.1:5002 http://localhost:5002;"
     )
     return resp
