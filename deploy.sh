@@ -423,8 +423,20 @@ $GIT_AS_APP fetch origin
 $GIT_AS_APP reset --hard origin/main
 
 NEW_COMMIT=$($GIT_AS_APP rev-parse --short HEAD)
+
+# Les unitats es sincronitzen ABANS de comprovar si hi ha versio nova, i hi ha
+# un motiu que costa un desplegament d'aprendre: aquest script s'actualitza a
+# si mateix amb el `git reset --hard` de sobre, pero bash ja ha llegit el
+# fitxer. Per tant la execucio que PORTA una millora del desplegament encara
+# aplica la logica VELLA; la nova no entra en vigor fins a la seguent. I si
+# aquella seguent no te res a baixar i surt per l'early exit, no s'aplica mai.
+# Posant-ho aqui, una execucio sense canvis tambe convergeix.
+instal_la_unitats
+
 if [ "$OLD_COMMIT" == "$NEW_COMMIT" ]; then
-    info "Ja estas a l'ultima versio ($NEW_COMMIT). No cal fer res."
+    info "Ja estas a l'ultima versio ($NEW_COMMIT). Unitats sincronitzades."
+    info "Si has canviat la unitat del servei, cal reiniciar-lo:"
+    info "  sudo systemctl restart $SERVICE_NAME"
     exit 0
 fi
 info "Nova versio: $NEW_COMMIT"
@@ -463,10 +475,6 @@ if $GIT_AS_APP diff "$OLD_COMMIT" "$NEW_COMMIT" -- "deploy/apache/${SERVICE_NAME
 fi
 
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-
-# Les unitats poden haver canviat amb la versio nova (timers nous,
-# opcions de Gunicorn). Sincronitzar-les abans de reiniciar.
-instal_la_unitats
 
 info "Reiniciant servei..."
 systemctl restart "$SERVICE_NAME"
