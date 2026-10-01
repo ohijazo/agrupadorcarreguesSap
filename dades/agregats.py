@@ -76,12 +76,17 @@ def estat() -> dict:
     )
     if not f:
         return {"ok": False, "msg": "agregats_meta sense fila"}
-    ultim = f["ultim_refresc_incr"] or f["ultim_refresc_complet"]
+    # El MES RECENT dels dos, no l'incremental sempre. Amb `or` es reportava
+    # l'antiguitat de l'incremental anterior just despres d'un refresc complet
+    # (vist al servidor: "antiguitat 104 s" amb la taula acabada de
+    # reconstruir), i el /health se n'hauria menjat el fals positiu.
+    marques = [m for m in (f["ultim_refresc_incr"], f["ultim_refresc_complet"])
+               if m is not None]
     antiguitat = None
-    if ultim is not None:
+    if marques:
         ara = datetime.now(timezone.utc)
-        if ultim.tzinfo is None:
-            ultim = ultim.replace(tzinfo=timezone.utc)
+        ultim = max(m.replace(tzinfo=timezone.utc) if m.tzinfo is None else m
+                    for m in marques)
         antiguitat = (ara - ultim).total_seconds()
     return {
         "antiguitat_s": None if antiguitat is None else int(antiguitat),
