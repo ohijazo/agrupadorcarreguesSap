@@ -11,6 +11,7 @@ la documentacio de les variables `SAP_BACKEND*`.
 from __future__ import annotations
 
 import os
+import sys
 
 # --- Carrega .env local -------------------------------------------------
 # Es manté aqui (i no nomes a app.py) perque hi ha scripts que importen
@@ -25,7 +26,18 @@ if os.path.exists(_env_path):
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-from dades import backend as _b  # noqa: E402
+# La capa de lectura del Service Layer i el commutador viuen a l'app germana
+# (una sola copia del codi de sessio, compartida per les dues apps). Inserim el
+# seu path aqui i no nomes a app.py perque hi ha scripts i tests que importen
+# aquest modul directament.
+# Append, no insert(0): els moduls LOCALS han de guanyar. Amb insert(0), el
+# directori `tests/` de l'app germana tapava el nostre i pytest carregava el
+# seu conftest. Es la mateixa convencio que ja segueix el _bootstrap d'alla.
+_PREP = os.environ.get("PREPARACIO_PATH", "")
+if _PREP and os.path.isdir(_PREP) and _PREP not in sys.path:
+    sys.path.append(_PREP)
+
+from sl_lectura import backend as _b  # noqa: E402
 from dades.sql import carregues as _sql  # noqa: E402
 
 # Implementacio Service Layer: encara no existeix cap funcio migrada. A mesura
