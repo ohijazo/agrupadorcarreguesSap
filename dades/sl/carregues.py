@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 
 from dades import agregats
 from dades.sl import cache_articles
-from dades.sl import odata as q
+from dades.sl import odata as od
 from dades.sl.client import client
 from dades.sql.carregues import _carrega_id, _estat_char_to_int, _estat_int_to_char
 from dades.sql.carregues import _tunitat_es_palletizable as _es_palletizable
@@ -63,9 +63,9 @@ def _fa_un_any(ara: datetime | None = None) -> datetime:
 def _finestra_ultim_any() -> str:
     """`COALESCE(U_SEIDataS, CreateDate) >= fa un any`, sense limit superior."""
     desde = _fa_un_any()
-    return q.o(
-        q.i("U_SEIDataS ne null", f"U_SEIDataS ge {q.data_hora(desde)}"),
-        q.i("U_SEIDataS eq null", f"CreateDate ge {q.data_hora(desde)}"),
+    return od.o(
+        od.i("U_SEIDataS ne null", f"U_SEIDataS ge {od.data_hora(desde)}"),
+        od.i("U_SEIDataS eq null", f"CreateDate ge {od.data_hora(desde)}"),
     )
 
 
@@ -160,7 +160,7 @@ def _clau_collation(valor: str) -> tuple[str, str]:
 ARTICLES = "Items"
 
 
-def cercar_articles(q_text: str, limit: int = 20) -> list[dict]:
+def cercar_articles(q: str, limit: int = 20) -> list[dict]:
     """Autocomplete d'articles. Una o dues crides.
 
     El SQL fa, en una sola consulta:
@@ -181,13 +181,13 @@ def cercar_articles(q_text: str, limit: int = 20) -> list[dict]:
     buscat son comodins; a `substringof` son literals. Nomes es nota si algu
     escriu aquests caracters al cercador.
     """
-    q_text = (q_text or "").strip()
-    if len(q_text) < 2:
+    q = (q or "").strip()
+    if len(q) < 2:
         return []
     limit = max(1, min(int(limit), 50))
 
     c = client()
-    patro = q.text(q_text)
+    patro = od.text(q)
 
     per_codi = c.tot(ARTICLES, select="ItemCode,ItemName",
                      filtre=f"substringof({patro},ItemCode)",
@@ -317,10 +317,10 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
     ciutat_cli: dict[str, str] = {}
     adreces: dict[tuple[str, str], str] = {}
     if codis_cli:
-        for tros in q.trossos(codis_cli):
+        for tros in od.trossos(codis_cli):
             for bp in c.tot(INTERLOCUTORS,
                             select="CardCode,CardName,City,BPAddresses",
-                            filtre=q.qualsevol_de("CardCode", tros)):
+                            filtre=od.qualsevol_de("CardCode", tros)):
                 codi = (bp.get("CardCode") or "").strip()
                 noms_cli[codi] = (bp.get("CardName") or "").strip()
                 ciutat_cli[codi] = (bp.get("City") or "").strip()
@@ -490,7 +490,7 @@ def llistar_carregues(
     # No filtrem per `Canceled`, igual que el SQL: SAP l'ignora a la finestra
     # "Ordenes de Carga Abiertas" i hi mostra fins i tot els cancel·lats si
     # l'estat es planificada.
-    filtre = q.finestra_coalesce("U_SEIDataS", "CreateDate", desde_d, fins_d)
+    filtre = od.finestra_coalesce("U_SEIDataS", "CreateDate", desde_d, fins_d)
     capceleres = client().tot(ORDRES, select=_CAMPS_CAPCALERA,
                               filtre=filtre, ordre="DocEntry")
 
