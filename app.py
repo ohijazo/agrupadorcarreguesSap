@@ -1163,7 +1163,23 @@ def _calc_health():
             ok_sl = False
             msg_sl = str(e)[:200]
 
-    tot_ok = ok_db and ok_motor and ok_pg and (ok_sl is not False)
+    # Antiguitat dels agregats per carrega. Nomes importa si el llistat va per
+    # Service Layer, perque es l'unic que els llegeix. Un refrescador encallat
+    # en silenci es la pitjor fallada d'aquest disseny: el llistat segueix
+    # responent, amb dades velles, i ningu se n'adona. Per aixo es 503.
+    estat_agregats = None
+    if backends.get("llistar_carregues") == backend_dades.SL:
+        try:
+            from dades import agregats as _agr
+            estat_agregats = _agr.estat()
+            limit_s = int(os.environ.get("AGREGATS_MAX_ANTIGUITAT_S", "900"))
+            ant = estat_agregats.get("antiguitat_s")
+            estat_agregats["ok"] = ant is not None and ant <= limit_s
+        except Exception as e:
+            estat_agregats = {"ok": False, "error": str(e)[:200]}
+
+    tot_ok = (ok_db and ok_motor and ok_pg and (ok_sl is not False)
+              and (estat_agregats is None or estat_agregats.get("ok") is True))
     status = 200 if tot_ok else 503
     expose_detail = (os.environ.get("EXPOSE_HEALTH_DETAIL", "").strip().lower()
                      in ("1", "true", "yes"))
@@ -1175,6 +1191,8 @@ def _calc_health():
     }
     if ok_sl is not None:
         body["sl"] = {"ok": ok_sl}
+    if estat_agregats is not None:
+        body["agregats"] = estat_agregats
     # Quin backend serveix cada funcio de dades. Davant d'una incidencia cal
     # poder saber si s'esta llegint per SQL o per Service Layer sense haver
     # d'entrar al servidor a mirar el .env.

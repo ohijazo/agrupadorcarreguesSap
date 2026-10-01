@@ -194,6 +194,13 @@ SQL_PASSWORD=CANVIA_AQUESTA_CONTRASENYA
 # KAIS_APP_PATH no va aqui: el passa la unitat systemd.
 PREPARACIO_PATH=$PREPARACIO_PATH
 
+# --- Backend de dades: sql | sl ---
+# Les lectures s'estan migrant al Service Layer. Commutar es editar aquesta
+# linia (o la de la funcio concreta) i reiniciar el servei. Vegeu
+# deploy/env.production.example per a la llista de variables.
+SAP_BACKEND=sql
+SAP_BACKEND_FALLBACK=off
+
 # --- Seguretat administracio ---
 ADMIN_KEY=$ADMIN_KEY
 
@@ -271,6 +278,76 @@ UNIT
     systemctl daemon-reload
     systemctl enable "$SERVICE_NAME"
 
+    # ---- Refrescador dels agregats per carrega ----
+    # El llistat necessita kg_total, num_comandes, palletitzable i is_granel,
+    # i el Service Layer no els pot calcular: no permet agregar ni filtrar
+    # sobre linies de document, i portar-se les linies a cada peticio son 247
+    # camps i ~19 KB per comanda (una pagina del llistat son 500 carregues).
+    # Per aixo es precalculen a PostgreSQL amb aquests timers.
+    #
+    # Nomes fan falta si SAP_BACKEND_LLISTAR_CARREGUES=sl. S'instal·len
+    # igualment: estan actius pero son inofensius mentre el llistat vagi per
+    # SQL, i aixi la taula ja esta calenta el dia que es commuti.
+    info "Instal·lant el refrescador d'agregats..."
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.service" <<UNITAGR
+[Unit]
+Description=Refresc dels agregats per carrega (variant SAP B1)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py
+UNITAGR
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.timer" <<TIMERAGR
+[Unit]
+Description=Refresc incremental dels agregats cada 2 minuts
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+TIMERAGR
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.service" <<UNITAGRC
+[Unit]
+Description=Reconstruccio completa dels agregats per carrega (variant SAP B1)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py --complet
+UNITAGRC
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.timer" <<TIMERAGRC
+[Unit]
+Description=Reconstruccio completa dels agregats, de matinada
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMERAGRC
+
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_NAME}-agregats.timer"
+    systemctl enable --now "${SERVICE_NAME}-agregats-complet.timer"
+
     # ---- Apache ----
     info "Configurant Apache..."
     a2enmod proxy proxy_http headers expires > /dev/null 2>&1 || true
@@ -294,7 +371,9 @@ UNIT
     info "     cd $APP_DIR && sudo -u $APP_USER venv/bin/python scripts/crear_admin.py"
     info "5) Demanar al DNS corporatiu una entrada A/CNAME:"
     info "     $SERVER_NAME -> ae01farwebsrv.agrienergia.local"
-    info "6) Provar: http://$SERVER_NAME/"
+    info "6) Primera carrega dels agregats del llistat:"
+    info "     sudo systemctl start ${SERVICE_NAME}-agregats-complet"
+    info "7) Provar: http://$SERVER_NAME/"
     info ""
     info "Comandes utils:"
     info "  systemctl {start|stop|restart|status} $SERVICE_NAME"

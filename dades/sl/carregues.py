@@ -19,14 +19,18 @@ Tres limitacions del Service Layer que condicionen tot el que hi ha aqui
 from __future__ import annotations
 
 import logging
+import os
+import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from dades import agregats
 from dades.sl import cache_articles
 from dades.sl import odata as q
 from dades.sl.client import client
-from dades.sql.carregues import _estat_char_to_int
+from dades.sql.carregues import _carrega_id, _estat_char_to_int, _estat_int_to_char
 from dades.sql.carregues import _tunitat_es_palletizable as _es_palletizable
+from sap_service_layer import SLError
 
 log = logging.getLogger("agrupacio")
 
@@ -387,3 +391,179 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
                                str(x.get("pobla") or "").upper(),
                                str(x.get("cli_nom") or "").upper()))
     return {"comandes": out_com, "total_sacs": total_sacs, "total_kg": round(total_kg, 2)}
+
+
+# =============================================================================
+# Llistat de carregues
+# =============================================================================
+# Camps de la capcalera que necessita el llistat. Sense $select el Service
+# Layer torna les 40 propietats de l'entitat.
+_CAMPS_CAPCALERA = (
+    "DocEntry,DocNum,Series,CreateDate,U_SEINomCarg,U_SEIDataS,U_SEIHoraS,"
+    "U_SEIEstado,U_SEITransp,U_SEIMatric,U_SEIPesoC,U_SEIComent"
+)
+
+# Cache del nom dels transportistes: substitueix el LEFT JOIN amb la UDT.
+# Es una taula petita i gairebe estatica.
+_noms_transp: dict[str, str] | None = None
+_noms_transp_a: float = 0.0
+
+
+def _noms_transportistes() -> dict[str, str]:
+    global _noms_transp, _noms_transp_a
+    ttl = float(os.environ.get("SAP_SL_CACHE_TRANSP_TTL", "900"))
+    if _noms_transp is None or (time.monotonic() - _noms_transp_a) > ttl:
+        files = client().tot(TRANSPORTISTES, select="Code,Name")
+        _noms_transp = {(f.get("Code") or "").strip(): (f.get("Name") or "").strip()
+                        for f in files}
+        _noms_transp_a = time.monotonic()
+    return _noms_transp
+
+
+def _data(valor) -> str | None:
+    """`2026-04-22T00:00:00Z` -> `2026-04-22`.
+
+    Agafem els 10 primers caracters i prou: la `Z` que posa el Service Layer es
+    falsa (son dates locals sense zona) i qualsevol conversio de zona
+    desplacaria el dia respecte del que retorna el SQL.
+    """
+    if not valor:
+        return None
+    return str(valor)[:10]
+
+
+def _hora(valor) -> str | None:
+    """`13:30:00` (Edm.Time del SL) -> `13:30`.
+
+    Al SQL el camp es un smallint HHMM i el converteix `_fmt_hora`; pel Service
+    Layer arriba ja com a hora, aixi que nomes cal escurcar-la.
+    """
+    if not valor:
+        return None
+    parts = str(valor).split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+    except ValueError:
+        return None
+
+
+def llistar_carregues(
+    desde: str,
+    fins: str,
+    tra_codis: list[str] | str | None = None,
+    estat: int | None = None,
+    art_codi: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict:
+    """Llista carregues. Dues crides al Service Layer i una consulta a PostgreSQL.
+
+    Tres coses no es poden fer al Service Layer i es fan aqui:
+
+    1. **L'ordenacio.** El SQL ordena per `COALESCE(U_SEIDataS, CreateDate)
+       DESC` i `$orderby` no accepta funcions. Per tant ens portem la finestra
+       de dates sencera (el filtre SI es expressable) i ordenem i paginem en
+       Python. La UI sempre envia un rang, de manera que el conjunt esta fitat.
+
+    2. **Els filtres d'igualtat de text** (estat i transportista). El SQL
+       compara amb `UPPER(RTRIM(...))` i amb la semantica de farciment d'ANSI;
+       el Service Layer no te `toupper` ni `trim`. Fer-los aqui garanteix la
+       mateixa semantica exacta i no costa res, perque el camp ja ve al
+       payload.
+
+    3. **Els quatre camps derivats i el filtre per article**, que surten de la
+       taula d'agregats de PostgreSQL. Vegeu
+       `db/migrations/006_agregats_carrega.sql`.
+    """
+    desde_d = datetime.strptime(desde, "%Y-%m-%d").date()
+    fins_d = datetime.strptime(fins, "%Y-%m-%d").date() + timedelta(days=1)
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, int(offset))
+
+    if isinstance(tra_codis, str):
+        tra_codis = [c.strip() for c in tra_codis.split(",") if c.strip()]
+    elif tra_codis is None:
+        tra_codis = []
+
+    # No filtrem per `Canceled`, igual que el SQL: SAP l'ignora a la finestra
+    # "Ordenes de Carga Abiertas" i hi mostra fins i tot els cancel·lats si
+    # l'estat es planificada.
+    filtre = q.finestra_coalesce("U_SEIDataS", "CreateDate", desde_d, fins_d)
+    capceleres = client().tot(ORDRES, select=_CAMPS_CAPCALERA,
+                              filtre=filtre, ordre="DocEntry")
+
+    maxim = int(os.environ.get("SL_MAX_CAPCALERES", "5000"))
+    if len(capceleres) > maxim:
+        raise SLError(
+            f"El rang demanat torna {len(capceleres)} carregues i el maxim es "
+            f"{maxim}. Redueix el rang de dates."
+        )
+
+    # --- Filtres que es fan aqui per tenir la semantica exacta del SQL ----
+    if estat is not None:
+        estat_c = _estat_int_to_char(int(estat))
+        if estat_c:
+            capceleres = [h for h in capceleres
+                          if (h.get("U_SEIEstado") or "").strip().upper() == estat_c]
+    if tra_codis:
+        vols = {c.strip() for c in tra_codis}
+        capceleres = [h for h in capceleres
+                      if (h.get("U_SEITransp") or "").strip() in vols]
+    if art_codi:
+        amb_article = agregats.carregues_amb_article(art_codi)
+        capceleres = [h for h in capceleres if int(h["DocEntry"]) in amb_article]
+
+    # --- Ordenacio i paginacio -------------------------------------------
+    def clau(h):
+        efectiva = h.get("U_SEIDataS") or h.get("CreateDate") or ""
+        return (str(efectiva), int(h.get("DocNum") or 0))
+
+    capceleres.sort(key=clau, reverse=True)
+    total = len(capceleres)
+    pagina = capceleres[offset:offset + limit]
+
+    # --- Camps derivats, de la taula d'agregats ---------------------------
+    docentries = [int(h["DocEntry"]) for h in pagina]
+    derivats = agregats.per_carrega(docentries)
+    neutre = {"kg_total": 0.0, "num_comandes": 0,
+              "palletitzable": False, "is_granel": False}
+    noms = _noms_transportistes()
+
+    items = []
+    for h in pagina:
+        series = h.get("Series") if h.get("Series") is not None else 0
+        docentry = int(h["DocEntry"])
+        tra_codi = (h.get("U_SEITransp") or "").strip()
+        d = derivats.get(docentry, neutre)
+        coment = h.get("U_SEIComent") or ""
+        items.append({
+            "eje_ejercicio": "SAP",
+            "sca_serie": str(series),
+            "car_numero": str(docentry),
+            "carrega_id": _carrega_id(series, docentry),
+            "car_descripcion": (h.get("U_SEINomCarg") or "").strip(),
+            "car_fecha": _data(h.get("CreateDate")),
+            "car_fecsalida": _data(h.get("U_SEIDataS")),
+            "car_fecsalida_hora": _hora(h.get("U_SEIHoraS")),
+            # SAP no te data d'arribada: None per compatibilitat amb KAIS.
+            "car_fecllegada": None,
+            "car_fecllegada_hora": None,
+            "car_estat": _estat_char_to_int(h.get("U_SEIEstado")) or 0,
+            "tra_codi": tra_codi,
+            "transportista": noms.get(tra_codi, ""),
+            "car_matricula": (h.get("U_SEIMatric") or "").strip(),
+            # SAP no te camp conductor.
+            "car_nomconductor": "",
+            "car_pesonetocarga": (float(h["U_SEIPesoC"])
+                                  if h.get("U_SEIPesoC") is not None else 0.0),
+            "car_pesoteorico": 0.0,
+            # El SQL fa CAST(... AS varchar(500)): les observacions es trunquen.
+            "car_observaciones": str(coment)[:500].strip(),
+            "palletitzable": bool(d["palletitzable"]),
+            "is_granel": bool(d["is_granel"]),
+            "kg_total": float(d["kg_total"]),
+            "num_comandes": int(d["num_comandes"]),
+        })
+    return {"items": items, "total": int(total), "limit": limit, "offset": offset}
