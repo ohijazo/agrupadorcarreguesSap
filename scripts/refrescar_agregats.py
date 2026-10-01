@@ -28,9 +28,9 @@ if _ROOT not in sys.path:
 import app  # noqa: F401,E402
 
 from dades import agregats  # noqa: E402
-from dades.sl import cache_articles  # noqa: E402
-from dades.sl import odata as q  # noqa: E402
-from dades.sl.client import client  # noqa: E402
+from sl_lectura import cache_articles  # noqa: E402
+from sl_lectura import odata as q  # noqa: E402
+from sl_lectura.client import client  # noqa: E402
 
 log = logging.getLogger("agrupacio")
 

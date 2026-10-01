@@ -1154,7 +1154,7 @@ def _calc_health():
     backends = backend_dades.backends_actius(FUNCIONS_DADES)
     if any(b == backend_dades.SL for b in backends.values()):
         try:
-            from dades.sl.client import client as _sl_client
+            from sl_lectura.client import client as _sl_client
             ok_sl = _sl_client().viu()
             if backends.get("obtenir_descrip_articles") == backend_dades.SL                     or backends.get("cercar_articles") == backend_dades.SL:
                 from dades.sl.carregues import escalfa as _sl_escalfa

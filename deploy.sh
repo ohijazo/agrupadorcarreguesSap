@@ -90,6 +90,14 @@ if [ "$1" == "--first-install" ]; then
     if [ ! -f "$PREPARACIO_PATH/motor.py" ]; then
         error "$PREPARACIO_PATH existeix pero no hi ha motor.py. Instal·lacio incompleta?"
     fi
+    # La capa de lectura del Service Layer viu a l'app germana (una sola copia
+    # del codi de sessio, compartida per les dues apps). Si alla encara hi ha
+    # una versio anterior, aquesta app peta amb un ImportError en arrencar;
+    # millor avortar aqui amb un missatge que es pugui llegir.
+    if [ ! -f "$PREPARACIO_PATH/sl_lectura/client.py" ]; then
+        error "Falta $PREPARACIO_PATH/sl_lectura/. Actualitza primer l'app germana
+       (cd $PREPARACIO_PATH && sudo -u $APP_USER git pull) i torna-ho a provar."
+    fi
     # El _bootstrap.py de comandes-venda-sap resol models/regles/mailer a
     # KAIS_APP_PATH. El seu .env NO el defineix: el seu servei el passa per
     # Environment= a la unitat systemd. Com que nosaltres importem motor.py
@@ -389,6 +397,8 @@ info "=== Actualitzant aplicacio (variant SAP) ==="
 
 [ -d "$APP_DIR" ] || error "$APP_DIR no existeix. Executa primer: sudo bash deploy.sh --first-install"
 [ -d "$VENV_DIR" ] || error "Entorn virtual no trobat a $VENV_DIR"
+[ -f "$PREPARACIO_PATH/sl_lectura/client.py" ] || error "Falta $PREPARACIO_PATH/sl_lectura/.
+       Actualitza primer l'app germana: cd $PREPARACIO_PATH && sudo -u $APP_USER git pull"
 
 cd "$APP_DIR"
 

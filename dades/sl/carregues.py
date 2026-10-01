@@ -25,9 +25,9 @@ import unicodedata
 from datetime import datetime, timedelta
 
 from dades import agregats
-from dades.sl import cache_articles
-from dades.sl import odata as od
-from dades.sl.client import client
+from sl_lectura import cache_articles
+from sl_lectura import odata as od
+from sl_lectura.client import client
 from dades.sql.carregues import _carrega_id, _estat_char_to_int, _estat_int_to_char
 from dades.sql.carregues import _tunitat_es_palletizable as _es_palletizable
 from sap_service_layer import SLError
