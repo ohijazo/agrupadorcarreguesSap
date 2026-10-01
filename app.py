@@ -1145,19 +1145,36 @@ def _calc_health():
             msg_motor = "motor sense calcular_embalatges"
     except Exception as e:
         msg_motor = str(e)[:200]
-    status = 200 if (ok_db and ok_motor and ok_pg) else 503
+    # Sonda del Service Layer: nomes si alguna funcio hi llegeix. Si cap no
+    # l'usa, no val la pena pagar-ne el login. Quan s'usa, aquesta sonda fa
+    # doble servei: comprova i mante la sessio calenta (el monitoring passa
+    # cada 30 s i el login en fred costa ~2 s).
+    ok_sl = None
+    msg_sl = ""
+    backends = backend_dades.backends_actius(FUNCIONS_DADES)
+    if any(b == backend_dades.SL for b in backends.values()):
+        try:
+            from dades.sl.client import client as _sl_client
+            ok_sl = _sl_client().viu()
+        except Exception as e:
+            ok_sl = False
+            msg_sl = str(e)[:200]
+
+    tot_ok = ok_db and ok_motor and ok_pg and (ok_sl is not False)
+    status = 200 if tot_ok else 503
     expose_detail = (os.environ.get("EXPOSE_HEALTH_DETAIL", "").strip().lower()
                      in ("1", "true", "yes"))
     body = {
-        "ok": ok_db and ok_motor and ok_pg,
+        "ok": tot_ok,
         "db": {"ok": ok_db},
         "motor": {"ok": ok_motor},
         "pg": {"ok": ok_pg},
     }
+    if ok_sl is not None:
+        body["sl"] = {"ok": ok_sl}
     # Quin backend serveix cada funcio de dades. Davant d'una incidencia cal
     # poder saber si s'esta llegint per SQL o per Service Layer sense haver
     # d'entrar al servidor a mirar el .env.
-    backends = backend_dades.backends_actius(FUNCIONS_DADES)
     body["backends"] = backends
     fallbacks = backend_dades.comptador_fallbacks()
     if fallbacks:
@@ -1168,6 +1185,8 @@ def _calc_health():
         body["db"]["msg"] = msg_db
         body["motor"]["msg"] = msg_motor
         body["pg"]["msg"] = msg_pg
+        if ok_sl is not None:
+            body["sl"]["msg"] = msg_sl
     return body, status
 
 
