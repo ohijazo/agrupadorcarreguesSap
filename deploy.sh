@@ -258,6 +258,7 @@ ExecStart=$VENV_DIR/bin/gunicorn \\
     --workers 2 \\
     --timeout 120 \\
     --access-logfile $APP_DIR/access.log \\
+    --access-logformat '%(h)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss' \\
     --error-logfile $APP_DIR/error.log \\
     app:app
 Restart=always

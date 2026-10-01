@@ -11,6 +11,9 @@ venv/
 env/
 .venv/
 .env
+# Copies de seguretat del .env: contenen credencials reals
+.env.bak*
+.env.*.bak
 
 # IDE
 .vscode/

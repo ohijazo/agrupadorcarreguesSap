@@ -16,7 +16,6 @@ from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from threading import Lock
 
-import pyodbc
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 # --- Bootstrap .env i sys.path ABANS d'importar agregador ----------------
@@ -50,9 +49,15 @@ if _PREP_PATH and os.path.isdir(_PREP_PATH) and _PREP_PATH not in sys.path:
 # Imports locals (després del sys.path)
 from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
-    cercar_articles, connectar, debug_resolucio_sal, llistar_carregues,
+    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_carregues,
     llistar_estats_carregues, llistar_transportistes, resum_carrega,
 )
+from dades import backend as backend_dades  # noqa: E402
+# Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
+# Service Layer caldria portar-se les linies de totes les comandes (247 camps
+# per linia, ~19 KB per comanda). Import explicit perque l'excepcio es vegi
+# al codi i no quedi amagada a la configuracio.
+from dades.sql.carregues import llistar_carregues as llistar_carregues_sql  # noqa: E402
 from valida import (  # noqa: E402
     valida_codi, valida_int, valida_llista_carregues, valida_rang_dates,
 )
@@ -614,7 +619,7 @@ def magatzem_prep(id_):
 def api_transportistes():
     try:
         return jsonify(llistar_transportistes())
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a transportistes")
         return _err_db()
     except Exception:
@@ -672,7 +677,7 @@ def api_carregues():
         for item in resp.get("items", []):
             item["agrupacions"] = index.get(item["carrega_id"], [])
         return jsonify(resp)
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a carregues")
         return _err_db()
     except Exception:
@@ -685,7 +690,7 @@ def api_carregues():
 def api_estats_carregues():
     try:
         return jsonify(llistar_estats_carregues())
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a estats-carregues")
         return _err_db()
     except Exception:
@@ -703,7 +708,7 @@ def api_articles():
         return _err_validacio("'q' té un format invàlid.")
     try:
         return jsonify(cercar_articles(q))
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a articles")
         return _err_db()
     except Exception:
@@ -925,35 +930,11 @@ def api_carrega_detall():
         return _err_validacio(err)
     try:
         return jsonify(resum_carrega(eje, sca, car))
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a carrega-detall")
         return _err_db()
     except Exception:
         log.exception("carrega-detall")
-        return _err_genèric()
-
-
-# Endpoint TEMPORAL per diagnosticar la resolució de sal_real (bug del
-# modal del calendari). Eliminar quan el fix definitiu estigui validat.
-@app.route("/api/debug/carrega-sal")
-@auth.requires_rol("admin")
-def api_debug_carrega_sal():
-    eje, err = valida_codi(request.args.get("eje"), "eje", max_len=4)
-    if err:
-        return _err_validacio(err)
-    sca, err = valida_codi(request.args.get("sca"), "sca", max_len=2)
-    if err:
-        return _err_validacio(err)
-    car, err = valida_codi(request.args.get("car"), "car", max_len=7)
-    if err:
-        return _err_validacio(err)
-    try:
-        return jsonify(debug_resolucio_sal(eje, sca, car))
-    except pyodbc.Error:
-        log.exception("DB error a debug/carrega-sal")
-        return _err_db()
-    except Exception:
-        log.exception("debug/carrega-sal")
         return _err_genèric()
 
 
@@ -991,7 +972,7 @@ def api_agrupar():
             out.get("total_palets_fisics", 0),
         )
         return jsonify(out)
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a agrupar")
         return _err_db()
     except ModuleNotFoundError:
@@ -1052,7 +1033,7 @@ def api_pbi_carregues():
     PAS = 1000
     try:
         while True:
-            resp = llistar_carregues(
+            resp = llistar_carregues_sql(
                 desde_d.isoformat(), fins_d.isoformat(),
                 limit=PAS, offset=offset,
             )
@@ -1069,7 +1050,7 @@ def api_pbi_carregues():
                 )
                 items = items[:PBI_MAX_FILES]
                 break
-    except pyodbc.Error:
+    except backend_dades.ERRORS_DADES:
         log.exception("DB error a pbi/carregues")
         return _err_db()
     except Exception:
@@ -1173,6 +1154,16 @@ def _calc_health():
         "motor": {"ok": ok_motor},
         "pg": {"ok": ok_pg},
     }
+    # Quin backend serveix cada funcio de dades. Davant d'una incidencia cal
+    # poder saber si s'esta llegint per SQL o per Service Layer sense haver
+    # d'entrar al servidor a mirar el .env.
+    backends = backend_dades.backends_actius(FUNCIONS_DADES)
+    body["backends"] = backends
+    fallbacks = backend_dades.comptador_fallbacks()
+    if fallbacks:
+        # Si el fallback a SQL salta, ha de ser visible: sense aixo un backend
+        # SL que falli sovint sembla que funcioni perfectament.
+        body["fallbacks_sql"] = fallbacks
     if expose_detail:
         body["db"]["msg"] = msg_db
         body["motor"]["msg"] = msg_motor
