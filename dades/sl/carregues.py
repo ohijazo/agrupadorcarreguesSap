@@ -22,6 +22,7 @@ import logging
 import unicodedata
 from datetime import datetime
 
+from dades.sl import cache_articles
 from dades.sl import odata as q
 from dades.sl.client import client
 from dades.sql.carregues import _estat_char_to_int
@@ -146,3 +147,84 @@ def _clau_collation(valor: str) -> tuple[str, str]:
     base = "".join(c for c in d if not unicodedata.combining(c))
     marques = "".join(c for c in d if unicodedata.combining(c))
     return (base, marques)
+
+
+# =============================================================================
+# Articles
+# =============================================================================
+ARTICLES = "Items"
+
+
+def cercar_articles(q_text: str, limit: int = 20) -> list[dict]:
+    """Autocomplete d'articles. Una o dues crides.
+
+    El SQL fa, en una sola consulta:
+
+        WHERE ItemCode LIKE '%q%' OR ItemName LIKE '%q%'
+        ORDER BY CASE WHEN ItemCode LIKE '%q%' THEN 0 ELSE 1 END, ItemCode
+
+    es a dir, dos grups: primer el que casa pel codi, despres el que nomes
+    casa pel nom, cada grup per codi, i tallat a `limit`. Ho reproduim amb dues
+    crides, i la segona nomes si la primera no ha omplert el limit.
+
+    La cerca es fa al servidor (`substringof`) i no sobre la cache d'articles a
+    proposit: el Service Layer la tradueix a SQL i per tant hereta la collation
+    de la BD (`CP850_CI_AS`, insensible a majuscules). Un matching en Python
+    seria sensible a majuscules i divergiria.
+
+    Diferencia coneguda i acceptada: a `LIKE`, un `%` o un `_` dins del text
+    buscat son comodins; a `substringof` son literals. Nomes es nota si algu
+    escriu aquests caracters al cercador.
+    """
+    q_text = (q_text or "").strip()
+    if len(q_text) < 2:
+        return []
+    limit = max(1, min(int(limit), 50))
+
+    c = client()
+    patro = q.text(q_text)
+
+    per_codi = c.tot(ARTICLES, select="ItemCode,ItemName",
+                     filtre=f"substringof({patro},ItemCode)",
+                     ordre="ItemCode", top=limit)
+    out = [{"art_codi": (f.get("ItemCode") or "").strip(),
+            "art_descrip": (f.get("ItemName") or "").strip()}
+           for f in per_codi]
+    if len(out) >= limit:
+        return out[:limit]
+
+    # Nomes els que casen pel nom i NO pel codi (els del primer grup ja hi son,
+    # i el primer grup es complet perque no ha arribat al limit).
+    ja_hi_son = {r["art_codi"] for r in out}
+    per_nom = c.tot(ARTICLES, select="ItemCode,ItemName",
+                    filtre=f"substringof({patro},ItemName)",
+                    ordre="ItemCode", top=limit)
+    for f in per_nom:
+        codi = (f.get("ItemCode") or "").strip()
+        if codi in ja_hi_son:
+            continue
+        out.append({"art_codi": codi,
+                    "art_descrip": (f.get("ItemName") or "").strip()})
+        if len(out) >= limit:
+            break
+    return out[:limit]
+
+
+def obtenir_descrip_articles(codis: list[str]) -> dict[str, str]:
+    """Descripcions dels articles demanats. Normalment 0 crides (cache)."""
+    codis = [c for c in (codis or []) if c]
+    if not codis:
+        return {}
+    unics = list(dict.fromkeys(codis))   # dedup preservant l'ordre, com el SQL
+    return {c: d["art_descrip"] for c, d in cache_articles.consulta(unics).items()}
+
+
+def escalfa() -> None:
+    """Prepara el que es car de preparar, per no fer-ho pagar al primer usuari.
+
+    La crida /health ho invoca si alguna funcio llegeix per Service Layer.
+    Portar-se el mestre d'articles son ~1,3 s; fer-ho aqui vol dir que la
+    primera agrupacio del dia no se'ls menja. Es idempotent: despres de la
+    primera vegada la cache el serveix de memoria fins que caduca.
+    """
+    cache_articles.mapa()

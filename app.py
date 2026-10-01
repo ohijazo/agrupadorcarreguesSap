@@ -1156,6 +1156,9 @@ def _calc_health():
         try:
             from dades.sl.client import client as _sl_client
             ok_sl = _sl_client().viu()
+            if backends.get("obtenir_descrip_articles") == backend_dades.SL                     or backends.get("cercar_articles") == backend_dades.SL:
+                from dades.sl.carregues import escalfa as _sl_escalfa
+                _sl_escalfa()
         except Exception as e:
             ok_sl = False
             msg_sl = str(e)[:200]
