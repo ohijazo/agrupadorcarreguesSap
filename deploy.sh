@@ -75,6 +75,116 @@ llegir_env() {
     grep -E "^$1=" "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-
 }
 
+# ---- Unitats systemd (servei + timers dels agregats) ----------------
+# En una funcio, i no nomes dins del --first-install, perque el mode
+# ACTUALITZACIO tambe les ha de sincronitzar: si no, una instal·lacio
+# anterior no veuria mai els timers nous ni els canvis a la unitat del
+# servei. Tot el que fa es idempotent.
+instal_la_unitats() {
+    info "Instal·lant o actualitzant el servei systemd (Gunicorn)..."
+    cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<UNIT
+[Unit]
+Description=Agrupador de Carregues (variant SAP B1)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=PORT=$APP_PORT
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/gunicorn \\
+    --bind 127.0.0.1:$APP_PORT \\
+    --workers 2 \\
+    --timeout 120 \\
+    --access-logfile $APP_DIR/access.log \\
+    --access-logformat '%(h)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss' \\
+    --error-logfile $APP_DIR/error.log \\
+    app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+    systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME"
+
+    # ---- Refrescador dels agregats per carrega ----
+    # El llistat necessita kg_total, num_comandes, palletitzable i is_granel,
+    # i el Service Layer no els pot calcular: no permet agregar ni filtrar
+    # sobre linies de document, i portar-se les linies a cada peticio son 247
+    # camps i ~19 KB per comanda (una pagina del llistat son 500 carregues).
+    # Per aixo es precalculen a PostgreSQL amb aquests timers.
+    #
+    # Nomes fan falta si SAP_BACKEND_LLISTAR_CARREGUES=sl. S'instal·len
+    # igualment: estan actius pero son inofensius mentre el llistat vagi per
+    # SQL, i aixi la taula ja esta calenta el dia que es commuti.
+    info "Instal·lant o actualitzant el refrescador d'agregats..."
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.service" <<UNITAGR
+[Unit]
+Description=Refresc dels agregats per carrega (variant SAP B1)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py
+UNITAGR
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.timer" <<TIMERAGR
+[Unit]
+Description=Refresc incremental dels agregats cada 2 minuts
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+TIMERAGR
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.service" <<UNITAGRC
+[Unit]
+Description=Reconstruccio completa dels agregats per carrega (variant SAP B1)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py --complet
+UNITAGRC
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.timer" <<TIMERAGRC
+[Unit]
+Description=Reconstruccio completa dels agregats, de matinada
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMERAGRC
+
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_NAME}-agregats.timer"
+    systemctl enable --now "${SERVICE_NAME}-agregats-complet.timer"
+}
+
 # ==============================================================
 # PRIMERA INSTAL·LACIO
 # ==============================================================
@@ -253,108 +363,7 @@ ENVFILE
     # ---- Servei systemd ----
     # EnvironmentFile va ABANS de Environment: systemd aplica les variables
     # en ordre d'aparicio, aixi PORT=$APP_PORT guanya sobre un PORT del .env.
-    info "Creant servei systemd (Gunicorn)..."
-    cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<UNIT
-[Unit]
-Description=Agrupador de Carregues (variant SAP B1)
-After=network.target postgresql.service
-Requires=postgresql.service
-
-[Service]
-Type=simple
-User=$APP_USER
-Group=$APP_USER
-WorkingDirectory=$APP_DIR
-EnvironmentFile=$APP_DIR/.env
-Environment=PORT=$APP_PORT
-Environment=KAIS_APP_PATH=$KAIS_PATH
-ExecStart=$VENV_DIR/bin/gunicorn \\
-    --bind 127.0.0.1:$APP_PORT \\
-    --workers 2 \\
-    --timeout 120 \\
-    --access-logfile $APP_DIR/access.log \\
-    --access-logformat '%(h)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss' \\
-    --error-logfile $APP_DIR/error.log \\
-    app:app
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-    systemctl daemon-reload
-    systemctl enable "$SERVICE_NAME"
-
-    # ---- Refrescador dels agregats per carrega ----
-    # El llistat necessita kg_total, num_comandes, palletitzable i is_granel,
-    # i el Service Layer no els pot calcular: no permet agregar ni filtrar
-    # sobre linies de document, i portar-se les linies a cada peticio son 247
-    # camps i ~19 KB per comanda (una pagina del llistat son 500 carregues).
-    # Per aixo es precalculen a PostgreSQL amb aquests timers.
-    #
-    # Nomes fan falta si SAP_BACKEND_LLISTAR_CARREGUES=sl. S'instal·len
-    # igualment: estan actius pero son inofensius mentre el llistat vagi per
-    # SQL, i aixi la taula ja esta calenta el dia que es commuti.
-    info "Instal·lant el refrescador d'agregats..."
-    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.service" <<UNITAGR
-[Unit]
-Description=Refresc dels agregats per carrega (variant SAP B1)
-After=network.target postgresql.service
-
-[Service]
-Type=oneshot
-User=$APP_USER
-Group=$APP_USER
-WorkingDirectory=$APP_DIR
-EnvironmentFile=$APP_DIR/.env
-Environment=KAIS_APP_PATH=$KAIS_PATH
-ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py
-UNITAGR
-
-    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats.timer" <<TIMERAGR
-[Unit]
-Description=Refresc incremental dels agregats cada 2 minuts
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=2min
-AccuracySec=15s
-
-[Install]
-WantedBy=timers.target
-TIMERAGR
-
-    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.service" <<UNITAGRC
-[Unit]
-Description=Reconstruccio completa dels agregats per carrega (variant SAP B1)
-After=network.target postgresql.service
-
-[Service]
-Type=oneshot
-User=$APP_USER
-Group=$APP_USER
-WorkingDirectory=$APP_DIR
-EnvironmentFile=$APP_DIR/.env
-Environment=KAIS_APP_PATH=$KAIS_PATH
-ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/refrescar_agregats.py --complet
-UNITAGRC
-
-    cat > "/etc/systemd/system/${SERVICE_NAME}-agregats-complet.timer" <<TIMERAGRC
-[Unit]
-Description=Reconstruccio completa dels agregats, de matinada
-
-[Timer]
-OnCalendar=*-*-* 03:30:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-TIMERAGRC
-
-    systemctl daemon-reload
-    systemctl enable --now "${SERVICE_NAME}-agregats.timer"
-    systemctl enable --now "${SERVICE_NAME}-agregats-complet.timer"
+    instal_la_unitats
 
     # ---- Apache ----
     info "Configurant Apache..."
@@ -454,6 +463,10 @@ if $GIT_AS_APP diff "$OLD_COMMIT" "$NEW_COMMIT" -- "deploy/apache/${SERVICE_NAME
 fi
 
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+
+# Les unitats poden haver canviat amb la versio nova (timers nous,
+# opcions de Gunicorn). Sincronitzar-les abans de reiniciar.
+instal_la_unitats
 
 info "Reiniciant servei..."
 systemctl restart "$SERVICE_NAME"
