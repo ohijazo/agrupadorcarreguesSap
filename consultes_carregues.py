@@ -37,7 +37,7 @@ _PREP = os.environ.get("PREPARACIO_PATH", "")
 if _PREP and os.path.isdir(_PREP) and _PREP not in sys.path:
     sys.path.append(_PREP)
 
-from sl_lectura import backend as _b  # noqa: E402
+from dades import backend as _b  # noqa: E402
 from dades.sql import carregues as _sql  # noqa: E402
 
 # Implementacio Service Layer: encara no existeix cap funcio migrada. A mesura

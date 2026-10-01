@@ -52,7 +52,7 @@ from consultes_carregues import (  # noqa: E402
     FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_carregues,
     llistar_estats_carregues, llistar_transportistes, resum_carrega,
 )
-from sl_lectura import backend as backend_dades  # noqa: E402
+from dades import backend as backend_dades  # noqa: E402
 # Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
 # Service Layer caldria portar-se les linies de totes les comandes (247 camps
 # per linia, ~19 KB per comanda). Import explicit perque l'excepcio es vegi
