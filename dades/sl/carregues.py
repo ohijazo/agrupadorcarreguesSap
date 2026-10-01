@@ -26,6 +26,7 @@ from dades.sl import cache_articles
 from dades.sl import odata as q
 from dades.sl.client import client
 from dades.sql.carregues import _estat_char_to_int
+from dades.sql.carregues import _tunitat_es_palletizable as _es_palletizable
 
 log = logging.getLogger("agrupacio")
 
@@ -228,3 +229,161 @@ def escalfa() -> None:
     primera vegada la cache el serveix de memoria fins que caduca.
     """
     cache_articles.mapa()
+
+
+# =============================================================================
+# Comandes d'una carrega
+# =============================================================================
+COMANDES = "Orders"
+INTERLOCUTORS = "BusinessPartners"
+
+
+def obtenir_comandes_carrega(eje: str, sca: str, car: str) -> list[dict]:
+    """Comandes que pertanyen a una carrega. Una crida.
+
+    La relacio carrega -> comandes va per un camp d'usuari de la capcalera de
+    comanda (`U_SEIOrdCargId`), que SI es filtrable al Service Layer. La taula
+    filla de l'UDO (`@ASEI_ORDENCARGA`) no hi esta exposada, pero no ens fa
+    falta precisament per aixo.
+
+    No demanem `DocumentLines`: aqui no es fan servir, i afegir-les
+    multiplicaria el payload per ~50.
+    """
+    try:
+        docentry_carrega = int(car)
+    except (TypeError, ValueError):
+        return []
+
+    files = client().tot(
+        COMANDES,
+        select="DocEntry,DocNum,Series",
+        filtre=f"U_SEIOrdCargId eq {docentry_carrega}",
+        ordre="Series,DocNum",
+    )
+    return [
+        {
+            "eje_ejercicio": eje or "SAP",
+            "sal_codigo": str(f.get("Series") if f.get("Series") is not None else 0),
+            "cpa_albara": str(f.get("DocNum")),
+            "det_tipo": "A",
+        }
+        for f in files
+    ]
+
+
+# =============================================================================
+# Previsualitzacio de carrega (comandes + linies + kg)
+# =============================================================================
+def resum_carrega(eje: str, sca: str, car: str) -> dict:
+    """Contingut d'una carrega: comandes amb les seves linies i els totals.
+
+    Dues o tres crides, contra les tres consultes del SQL:
+
+      1. `Orders` amb `DocumentLines` al `$select`. Les linies venen INLINE
+         perque `DocumentLines` es una propietat complexa de col·leccio, no una
+         navigation property: per aixo `$expand` la rebutja pero `$select` la
+         serveix. Es l'unica manera d'evitar una crida per comanda.
+      2. `BusinessPartners` amb `BPAddresses`, que pel mateix mecanisme ve
+         inline i substitueix OCRD *i* CRD1 en una sola crida.
+      3. La unitat de venda, de la cache d'articles (normalment 0 crides).
+    """
+    try:
+        docentry_carrega = int(car)
+    except (TypeError, ValueError):
+        return {"comandes": [], "total_sacs": 0, "total_kg": 0.0}
+
+    c = client()
+    comandes = c.tot(
+        COMANDES,
+        select="DocEntry,DocNum,Series,CardCode,ShipToCode,DocumentLines",
+        filtre=f"U_SEIOrdCargId eq {docentry_carrega}",
+        ordre="Series,DocNum",
+    )
+    if not comandes:
+        return {"comandes": [], "total_sacs": 0, "total_kg": 0.0}
+
+    # --- Clients i poblacio d'enviament ---------------------------------
+    # El SQL busca la ciutat a CRD1 per (CardCode, Address) amb AdresType='S',
+    # i si no la troba cau a OCRD.City. Aqui les dues taules arriben juntes:
+    # BPAddresses porta AddressName (= CRD1.Address) i AddressType
+    # ('bo_ShipTo' = 'S').
+    codis_cli = sorted({(o.get("CardCode") or "").strip()
+                        for o in comandes if (o.get("CardCode") or "").strip()})
+    noms_cli: dict[str, str] = {}
+    ciutat_cli: dict[str, str] = {}
+    adreces: dict[tuple[str, str], str] = {}
+    if codis_cli:
+        for tros in q.trossos(codis_cli):
+            for bp in c.tot(INTERLOCUTORS,
+                            select="CardCode,CardName,City,BPAddresses",
+                            filtre=q.qualsevol_de("CardCode", tros)):
+                codi = (bp.get("CardCode") or "").strip()
+                noms_cli[codi] = (bp.get("CardName") or "").strip()
+                ciutat_cli[codi] = (bp.get("City") or "").strip()
+                for a in bp.get("BPAddresses") or []:
+                    if a.get("AddressType") != "bo_ShipTo":
+                        continue
+                    nom_adr = (a.get("AddressName") or "").strip()
+                    if nom_adr:
+                        adreces[(codi, nom_adr)] = (a.get("City") or "").strip()
+
+    # --- Unitats de venda, per decidir si una linia es palletitzable ------
+    codis_art = {(l.get("ItemCode") or "").strip()
+                 for o in comandes for l in (o.get("DocumentLines") or [])
+                 if (l.get("ItemCode") or "").strip()}
+    unitats_art = cache_articles.unitats_venda(sorted(codis_art)) if codis_art else {}
+
+    # --- Mateixa agregacio que fa el SQL en Python ------------------------
+    total_sacs = 0
+    total_kg = 0.0
+    out_com: list[dict] = []
+    for o in comandes:
+        linies: list[dict] = []
+        for l in sorted((o.get("DocumentLines") or []),
+                        key=lambda x: x.get("LineNum") or 0):
+            art_codi = (l.get("ItemCode") or "").strip()
+            # COALESCE(NULLIF(PackQty, 0), Quantity)
+            pack = float(l.get("PackageQuantity") or 0)
+            quan = float(l.get("Quantity") or 0)
+            unitats = pack if pack else quan
+            # El SQL fa LEFT JOIN amb OITM: una linia sense article a OITM
+            # arriba amb tunitat buida, i una tunitat buida compta com a
+            # palletitzable. Ho repliquem amb el `.get(..., "")`.
+            tun = (unitats_art.get(art_codi) or "").strip()
+            linies.append({
+                "art_codi": art_codi,
+                "art_descrip": (l.get("ItemDescription") or "").strip(),
+                "sacs": int(unitats),
+                "quan": quan,
+                "tunitat": tun,
+                "kg": round(quan if quan > 0 else 0.0, 2),
+                "palletitzable": _es_palletizable(tun, unitats),
+            })
+
+        a_sacs = sum(int(x["sacs"]) for x in linies if x["palletitzable"])
+        a_kg = sum(float(x["kg"]) for x in linies)
+        total_sacs += a_sacs
+        total_kg += a_kg
+
+        cli_codi = (o.get("CardCode") or "").strip()
+        adr_codi = (o.get("ShipToCode") or "").strip()
+        pobla = adreces.get((cli_codi, adr_codi), "") or ciutat_cli.get(cli_codi, "")
+        series = o.get("Series") if o.get("Series") is not None else 0
+        out_com.append({
+            "comanda": f"{series}/{o.get('DocNum')}",
+            "det_tipo": "A",
+            "cli_codi": cli_codi,
+            "cli_nom": noms_cli.get(cli_codi, ""),
+            "pobla": pobla,
+            "total_sacs": a_sacs,
+            "total_kg": round(a_kg, 2),
+            "linies": linies,
+        })
+
+    # Mateixa ordenacio que el SQL: les comandes sense poblacio, al final.
+    # S'usa .upper() i no la clau de collation a proposit: aquesta ordenacio ja
+    # es feia en Python abans de la migracio i ha de donar el mateix.
+    out_com.sort(key=lambda x: (1 if not (x.get("pobla") or "") else 0,
+                               str(x.get("pobla") or "").upper(),
+                               str(x.get("cli_nom") or "").upper()))
+    return {"comandes": out_com, "total_sacs": total_sacs, "total_kg": round(total_kg, 2)}
