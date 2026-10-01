@@ -88,9 +88,16 @@ def estat() -> dict:
         ultim = max(m.replace(tzinfo=timezone.utc) if m.tzinfo is None else m
                     for m in marques)
         antiguitat = (ara - ultim).total_seconds()
+    # `comandes` ha de dir quantes n'hi ha a la cache, no quantes n'ha tocat
+    # l'ultima execucio. Son coses diferents i la segona enganya: despres d'un
+    # refresc complet de 88 comandes, el primer incremental (que nomes mira les
+    # modificades els ultims dos dies) deixava el camp a 17, i al /health es
+    # llegia com si la cache s'hagues buidat.
+    fila = db.fetch_one("SELECT count(*) AS n FROM ordre_carrega_cache")
     return {
         "antiguitat_s": None if antiguitat is None else int(antiguitat),
-        "comandes": int(f["comandes"] or 0),
+        "comandes": int((fila or {}).get("n") or 0),
+        "ultim_lot": int(f["comandes"] or 0),
         "error": f["ultim_error"] or "",
     }
 
