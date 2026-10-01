@@ -158,3 +158,89 @@ deploy/logrotate/agrupacio-carregues-sap      # rotació dels logs de Gunicorn
 deploy/postgres/setup_prod_sap.sql            # creació de rol + BD (referència manual)
 deploy/env.production.example                 # referència del .env de producció
 ```
+
+## 8. Backend de dades: SQL Server o Service Layer
+
+SAP no suporta llegir les seves taules per SQL directe, i les lectures s'han
+migrat al **Service Layer**. Les dues implementacions conviuen i es commuten des
+del `.env`, així que revertir és canviar una línia i reiniciar el servei —sense
+desplegar codi.
+
+```bash
+# Global
+SAP_BACKEND=sql            # sql | sl
+
+# Per funció (guanya sobre la global)
+SAP_BACKEND_LLISTAR_CARREGUES=sl
+```
+
+Funcions commutables: `LLISTAR_CARREGUES`, `LLISTAR_ESTATS_CARREGUES`,
+`LLISTAR_TRANSPORTISTES`, `CERCAR_ARTICLES`, `OBTENIR_DESCRIP_ARTICLES`,
+`OBTENIR_COMANDES_CARREGA`, `RESUM_CARREGA`. La llista completa de variables és a
+`deploy/env.production.example`.
+
+`/health` diu quin backend serveix cada funció. Davant d'una incidència, és el
+primer que s'ha de mirar:
+
+```bash
+curl -s http://127.0.0.1:50006/health | python3 -m json.tool
+```
+
+### 8.1 Abans de commutar res: l'arnès de paritat
+
+```bash
+cd /var/www/agrupacio-carregues-sap
+sudo -u www-data venv/bin/python scripts/paritat_backends.py
+```
+
+Compara els dos backends sobre 259 casos i surt amb codi 1 si en troba cap
+diferència. **Executar-ho al servidor**, perquè el camí de xarxa compta i perquè
+els temps mesurats en una base de proves de 85 càrregues no extrapolen a
+producció.
+
+### 8.2 Els agregats del llistat
+
+El llistat necessita `kg_total`, `num_comandes`, `palletitzable` i `is_granel`,
+i el Service Layer **no els pot calcular**: no agrega ni filtra sobre línies de
+document, i les línies no es poden retallar amb `$select` (vénen amb 247 camps,
+~19 KB per comanda, i una pàgina són 500 càrregues). Es precalculen a PostgreSQL:
+
+```bash
+# Primera càrrega (o reconstrucció manual)
+sudo systemctl start agrupacio-carregues-sap-agregats-complet
+
+# Estat dels timers
+systemctl list-timers 'agrupacio-carregues-sap-agregats*'
+journalctl -u agrupacio-carregues-sap-agregats -n 20
+```
+
+Dos timers: incremental cada 2 minuts i reconstrucció completa a les 03:30.
+
+**Conseqüència funcional:** aquests quatre camps del llistat i del calendari
+porten fins a uns 2 minuts de retard. La fitxa de detall d'una càrrega
+(`/api/carrega-detall`) segueix llegint en viu del Service Layer, així que en
+obrir una càrrega les xifres són del moment.
+
+Si el refrescador s'encalla, `/health` respon **503** amb `agregats.ok = false`.
+És deliberat: el llistat seguiria responent amb dades velles i no se'n veuria res.
+
+### 8.3 Marxa enrere
+
+```bash
+sudo nano /var/www/agrupacio-carregues-sap/.env   # SAP_BACKEND=sql
+sudo systemctl restart agrupacio-carregues-sap
+```
+
+Hi ha també `SAP_BACKEND_FALLBACK=sql`, que reintenta per SQL si el Service Layer
+falla. És útil els primers dies de cada commutació, però amaga els defectes del
+backend nou: `/health` compta els cops que salta a `fallbacks_sql`. Desactivar-lo
+quan ja no calgui.
+
+### 8.4 El que encara llegeix per SQL
+
+- **`/api/pbi/carregues`**, a propòsit: pagina fins a 5000 files i és consum
+  màquina, no interactiu. L'import és explícit al codi, no configurable.
+- **El motor d'embalatges** de `comandes-venda-sap`, que s'importa dins d'aquest
+  procés i llegeix 10 taules per SQL. Per tant `pyodbc` i les credencials
+  `SAP_SQL_*` segueixen fent falta, i `/api/agrupar` continua tocant SQL. Migrar
+  aquell mòdul és un projecte propi, al seu repositori.

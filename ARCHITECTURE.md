@@ -4,7 +4,7 @@
 
 Aplicació Flask que combina dues fonts de dades:
 
-- **SQL Server** (lectura, via `pyodbc` amb `ApplicationIntent=ReadOnly`) — ERP `GWSV_AGRI` amb les càrregues reals (taules `Cargas`, `Detcargas`, `ALBLINIA`, `ARTICLES`, etc.).
+- **SAP B1** (lectura) per dues vies commutables: **Service Layer** (OData v3, el camí suportat per SAP) i **SQL Server directe** amb `pyodbc` i `ApplicationIntent=ReadOnly` (el d'abans, que es manté com a xarxa de seguretat). Taules i UDT: `@SEI_ORDENCARGA`, `@SEITRANSPORTEF`, `ORDR`, `RDR1`, `OITM`, `OCRD`, `CRD1`.
 - **PostgreSQL** (lectura/escriptura, via `psycopg` + pool) — persistència local: agrupacions desades, productes preparats, usuaris, audit log.
 
 El càlcul d'embalatges es delega a una app germana (`preparacioComandesVenda`) carregada via `sys.path` (`agregador.py` → `motor.calcular_embalatges`).
@@ -30,22 +30,24 @@ El càlcul d'embalatges es delega a una app germana (`preparacioComandesVenda`) 
        ▼                          ▼                      ▼
 ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────┐
 │ consultes_carregues  │  │ agregador.py         │  │ agrupacions_   │
-│ • llistar_carregues  │  │  ↓ (sys.path)        │  │ store.py       │
-│ • llistar_estats     │  │ motor.calcular_      │  │ • CRUD         │
-│ • cercar_articles    │  │   embalatges()       │  │ • cache index  │
-│ • resum_carrega      │  │ (app germana)        │  │ • get_version  │
-└──────┬───────────────┘  └──────┬───────────────┘  └──────┬─────────┘
-       │ pyodbc                  │ lectura locals          │ psycopg
-       ▼                          ▼                         ▼
-┌────────────────────────────┐               ┌──────────────────────────┐
-│ SQL Server (ReadOnly)      │               │ PostgreSQL                │
-│ Cargas · Detcargas         │               │ • agrupacions            │
-│ ALBLINIA · ARTICLES        │               │ • productes_preparats    │
-│ CPALBARA · SERIEALB · TRANS│               │ • agrupacio_carregues    │
-└────────────────────────────┘               │ • v_agrupacions_estat    │
-                                             │ • usuaris (auth)         │
-                                             │ • audit_logs             │
-                                             └──────────────────────────┘
+│ (façana)             │  │  ↓ (sys.path)        │  │ store.py       │
+│   ↓ dades/backend.py │  │ motor.calcular_      │  │ • CRUD         │
+│   SAP_BACKEND=sql|sl │  │   embalatges()       │  │ • cache index  │
+│                      │  │ (app germana, SQL)   │  │ • get_version  │
+└──────┬────────┬──────┘  └──────┬───────────────┘  └──────┬─────────┘
+       │        │                │ pyodbc                  │ psycopg
+       │ pyodbc │ HTTPS          ▼                         ▼
+       ▼        ▼         ┌──────────────┐  ┌──────────────────────────┐
+┌─────────────┐ ┌───────┐ │ SQL Server   │  │ PostgreSQL                │
+│ SQL Server  │ │Service│ │ (motor)      │  │ • agrupacions            │
+│ (ReadOnly)  │ │Layer  │ └──────────────┘  │ • productes_preparats    │
+│ @SEI_ORDEN- │ │OData  │                   │ • agrupacio_carregues    │
+│  CARGA ·    │ │v3     │                   │ • v_agrupacions_estat    │
+│ ORDR · RDR1 │ │       │                   │ • usuaris (auth)         │
+│ OITM · OCRD │ │       │                   │ • audit_logs             │
+│ CRD1        │ │       │                   │ • ordre_carrega_cache ───┼── agregats
+└─────────────┘ └───────┘                   │ • agregats_meta          │   del llistat
+                                            └──────────────────────────┘
 ```
 
 ## Components
@@ -58,14 +60,33 @@ El càlcul d'embalatges es delega a una app germana (`preparacioComandesVenda`) 
   - Configura `RotatingFileHandler` (2MB × 5).
   - Middlewares `@app.before_request`/`@app.after_request`: headers de seguretat (CSP, X-Frame, Referrer-Policy), CSRF check + cookie, autenticació quan `AUTH_ENABLED=true`.
   - Decoradors per rol als endpoints concrets (`@auth.requires_rol("admin", "oficina")`).
-  - Errors gestionats: `pyodbc.Error` → 503, `ModuleNotFoundError` → 503, resta → 500. Missatges interns només al log; `/health` retorna només booleans en producció (`EXPOSE_HEALTH_DETAIL=false`).
+  - Errors gestionats: `backend_dades.ERRORS_DADES` (`pyodbc.Error` + `SLError`) → 503, `ModuleNotFoundError` → 503, resta → 500. Missatges interns només al log; `/health` retorna només booleans en producció (`EXPOSE_HEALTH_DETAIL=false`).
 
 - **`valida.py`** — Validadors purs (sense efectes laterals). Cada funció retorna `(valor, err)`.
 
-- **`consultes_carregues.py`** — Totes les queries SQL parametritzades. Una connexió per request, tancada en `finally`. SQL especialment pesat (CROSS APPLY + EXISTS) per a:
-  - `kg_total` per càrrega (resol la sèrie via CPALBARA per evitar comptar dues vegades).
-  - `is_granel` (al·les càrregues amb almenys una línia `art_descunit = 'GRA'`).
-  - `palletitzable` (existeix una línia amb `lin_unit > 0` i unitat ≠ UNI/GRA).
+- **`consultes_carregues.py`** — Façana. Manté la superfície d'import de sempre
+  (`app.py` i `agregador.py` no la coneixen de cap altra manera) i despatxa cada
+  funció al backend que digui el `.env`. La implementació real viu a `dades/`:
+
+  - **`dades/sql/carregues.py`** — SQL Server directe amb `pyodbc`, la de sempre.
+    Una connexió per crida, tancada al `finally`. SQL pesat (subconsultes
+    correlacionades) per a `kg_total`, `num_comandes`, `is_granel` i `palletitzable`.
+  - **`dades/sl/`** — Service Layer. `client.py` (capa de lectura OData sobre
+    l'`SLClient` de l'app germana), `odata.py` (literals i filtres),
+    `cache_articles.py` (mestre d'articles en memòria) i `carregues.py` (les set
+    funcions).
+  - **`dades/backend.py`** — El commutador: `SAP_BACKEND`,
+    `SAP_BACKEND_<FUNCIO>`, `SAP_BACKEND_FALLBACK`, i `ERRORS_DADES` (la tupla
+    d'excepcions dels dos backends, perquè `SLError` no hereta de `pyodbc.Error`).
+  - **`dades/agregats.py`** — Els quatre camps derivats del llistat, precalculats
+    a PostgreSQL. El Service Layer no els pot calcular: no agrega ni filtra sobre
+    línies de document, i les línies no es poden retallar amb `$select`. Els
+    refresca `scripts/refrescar_agregats.py` per timer, i això fa que el llistat
+    sigui **eventualment consistent** (la fitxa de detall segueix en viu).
+
+  Per què existeix la migració: SAP no suporta llegir les seves taules per SQL
+  directe. `scripts/paritat_backends.py` compara els dos backends i és la porta
+  abans de commutar-ne cap.
 
 - **`agregador.py`** — Per cada càrrega seleccionada:
   1. Llegeix les comandes (Detcargas amb `det_tipo IN ('A','P')`).
@@ -170,7 +191,8 @@ Vanilla JS sense framework. Tres "modes":
 ## Errors i robustesa
 
 - Validació estricta a tots els endpoints — qualsevol input deformat retorna 400 amb un missatge clar abans de tocar SQL.
-- Errors SQL Server retornen 503 "Error de connexió amb la base de dades"; el detall queda al log.
+- Errors de dades de SAP (SQL Server o Service Layer) retornen 503 "Error de connexió amb la base de dades"; el detall queda al log.
+- Si el llistat va per Service Layer, `/health` vigila l'antiguitat dels agregats i retorna 503 si se passa d'`AGREGATS_MAX_ANTIGUITAT_S`: un refrescador encallat en silenci serviria dades velles sense avisar.
 - Si `motor.py` no es pot importar, l'agrupació retorna 503 "Motor no disponible".
 - Si `audit.log()` falla (PG caigut, taula absent), només `log.warning` — l'acció principal mai falla per culpa de l'audit.
 - La cache d'`index_carregues_agrupades` es valida contra el comptador global de versió a la taula `meta_agrupacions` (BD), així que workers Gunicorn diferents detecten les escriptures dels altres a la propera lectura.
