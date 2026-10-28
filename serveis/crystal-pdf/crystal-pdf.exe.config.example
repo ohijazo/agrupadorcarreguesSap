@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copiar com a crystal-pdf.exe.config al costat de l'exe i omplir.
+     En produccio no hi ha cap contrasenya: SqlUser buit = seguretat integrada
+     amb el compte del servei. El Token es xifra amb `crystal-pdf.exe --protegeix`. -->
+<configuration>
+  <startup useLegacyV2RuntimeActivationPolicy="true">
+    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
+  </startup>
+  <appSettings>
+    <add key="Port" value="8095" />
+    <!-- + = totes les interficies (cal executar-lo com a servei o fer netsh http add urlacl).
+         localhost = nomes local, per provar-lo sense permisos d'administrador. -->
+    <add key="Escolta" value="+" />
+    <!-- Secret compartit amb l'app Flask (CRYSTAL_PDF_TOKEN). Minim 24 caracters. -->
+    <add key="Token" value="" />
+    <add key="SqlServer" value="localhost" />
+    <add key="SqlDatabase" value="DB_FARIN_TEST" />
+    <!-- Buit (recomanat) = seguretat integrada amb el compte del servei.
+         Nomes per a proves a ma: un usuari SQL de lectura i la seva contrasenya. -->
+    <add key="SqlUser" value="" />
+    <add key="SqlPassword" value="" />
+    <!-- Buit = el proveidor amb que es va desar el .rpt (MSOLEDBSQL). -->
+    <add key="Proveidor" value="" />
+    <add key="MaxJobs" value="2" />
+    <add key="EsperaJobSegons" value="30" />
+  </appSettings>
+</configuration>
