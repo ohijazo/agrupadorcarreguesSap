@@ -1852,3 +1852,6 @@ body.has-action-bar main.container { padding-bottom: 96px; }
     #oficina-print { display: block !important; }
 }
 
+
+/* Icona de PDA (templates/_icona_pda.html), alineada amb el text */
+.icona-pda { display: inline-block; vertical-align: -0.18em; flex-shrink: 0; }
