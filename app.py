@@ -50,7 +50,8 @@ if _PREP_PATH and os.path.isdir(_PREP_PATH) and _PREP_PATH not in sys.path:
 from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
     FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_carregues,
-    llistar_estats_carregues, llistar_transportistes, resum_carrega,
+    llistar_estats_carregues, llistar_pendents_pistolejar, llistar_transportistes,
+    resum_carrega,
 )
 from dades import backend as backend_dades  # noqa: E402
 # Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
@@ -612,6 +613,35 @@ def magatzem_prep(id_):
     if not obj:
         return render_template("magatzem_llista.html", error="Agrupació no trobada."), 404
     return render_template("magatzem_prep.html", agrupacio_id=id_, nom=obj.get("nom", ""))
+
+
+@app.route("/magatzem/pendents", strict_slashes=False)
+@auth.requires_rol("admin", "oficina", "magatzem")
+def magatzem_pendents():
+    return render_template("magatzem_pendents.html")
+
+
+@app.route("/api/pistolejat/pendents")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_pendents_pistolejar():
+    """Articles pendents de pistolejar per carrega. `tots=1` inclou tambe les
+    linies ja completes i les carregues sortides. Vegeu dades/pistolejat.py."""
+    rang, err = valida_rang_dates(request.args.get("desde"), request.args.get("fins"))
+    if err:
+        return _err_validacio(err)
+    desde_d, fins_d = rang
+    if (fins_d - desde_d).days > 31:
+        return _err_validacio("El rang màxim és de 31 dies.")
+    nomes_pendents = request.args.get("tots") != "1"
+    try:
+        return jsonify(llistar_pendents_pistolejar(
+            desde_d.isoformat(), fins_d.isoformat(), nomes_pendents=nomes_pendents))
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error a pendents de pistolejar")
+        return _err_db()
+    except Exception:
+        log.exception("pendents de pistolejar")
+        return _err_genèric()
 
 
 @app.route("/api/transportistes")

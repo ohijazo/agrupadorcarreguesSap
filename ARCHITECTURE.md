@@ -143,6 +143,11 @@ Vanilla JS sense framework. Tres "modes":
   - Pintat optimista al togglar: aplica immediatament a la UI i fa rollback si el `PATCH` falla.
   - `fetchJ()` injecta automàticament `X-CSRF-Token`.
 
+- **Pendents de pistolejar (`/magatzem/pendents`, `static/js/pendents.js`)** — només lectura:
+  - Per a cada càrrega que surt al rang triat (avui, demà, avui i demà, 7 dies): les línies obertes de les comandes obertes, menys el que l'SGA ja ha pistolejat i encara no ha passat a albarà (`@SEIOPIC`). També mostra l'últim estat de cada comanda (`@SEIESTATSCOM`).
+  - El càlcul és a `dades/pistolejat.py`, que és pur i no toca SAP. Les dades crues surten de `obtenir_dades_pistolejat`, que passa pel commutador SQL/SL igual que la resta. Vegeu `docs/descoberta_pistolejat_albarans.md`.
+  - Polling cada 15 s amb la pestanya visible. Si SAP falla, es manté a la pantalla l'última llista bona.
+
 - **Administració (`/admin/usuaris`, `static/js/admin_usuaris.js`)** — només rol `admin`:
   - Taula d'usuaris amb 3 accions per fila (editar nom/rol/actiu, canvi de contrasenya, desactivar/activar).
   - Modals `<dialog>` per crear/editar i per resetejar contrasenya.
@@ -159,7 +164,8 @@ Vanilla JS sense framework. Tres "modes":
 |---|---|---|---|
 | `GET` | `/` | admin, oficina | (magatzem → redirigit a `/magatzem`) |
 | `GET` | `/calendari` | tots auth | |
-| `GET` | `/magatzem`, `/magatzem/<id>` | tots auth | |
+| `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
+| `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

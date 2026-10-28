@@ -11,6 +11,9 @@
             <div class="user-menu-username">{{ current_user.username }}</div>
             <span class="user-menu-rol user-menu-rol-{{ current_user.rol }}">{{ current_user.rol }}</span>
         </div>
+        <a href="/magatzem/pendents" class="user-menu-item" role="menuitem">
+            <span aria-hidden="true">🔫</span> Pendents de pistolejar
+        </a>
         {% if current_user.rol in ('admin', 'oficina') %}
         <a href="/control" class="user-menu-item" role="menuitem">
             <span aria-hidden="true">📊</span> Control d'agrupacions

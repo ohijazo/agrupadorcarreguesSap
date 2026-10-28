@@ -839,3 +839,133 @@
     .control-table th,
     .control-table td { padding: 8px 6px; }
 }
+
+/* -------------------------------------------------------------
+   Pendents de pistolejar (/magatzem/pendents)
+   Cards grans per a tablet: el número gran és el que falta.
+   ------------------------------------------------------------- */
+.pend-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem 1.5rem;
+    flex-wrap: wrap;
+    margin: 1.25rem 0 1rem;
+    padding: .75rem 1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.pend-rangs { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pend-rang {
+    min-height: 48px;
+    padding: 0 1.1rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1a365d;
+    background: #fff;
+    border: 2px solid #cbd5e0;
+    border-radius: 10px;
+    cursor: pointer;
+}
+.pend-rang.is-on { background: #2c5282; border-color: #2c5282; color: #fff; }
+.pend-actualitzat { margin-left: auto; color: #5a6675; font-size: .92rem; }
+
+.pend-carrega {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-left: 6px solid #2c5282;
+    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+}
+.pend-carrega.is-acabada { border-left-color: #38a169; opacity: .75; }
+.pend-carrega-cap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: .9rem 1.1rem;
+    background: #edf2f7;
+}
+.pend-carrega-nom { font-size: 1.3rem; font-weight: 700; color: #1a365d; }
+.pend-carrega-num { color: #5a6675; font-weight: 600; font-size: 1rem; }
+.pend-carrega-meta { color: #4a5568; margin-top: .2rem; }
+.pend-carrega-progres { text-align: right; }
+.pend-carrega-pct { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pend-carrega-falten { color: #4a5568; font-size: .92rem; }
+
+.pend-comanda { padding: .5rem 1.1rem .9rem; border-top: 1px solid #e2e8f0; }
+.pend-comanda-cap {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    flex-wrap: wrap;
+    padding: .4rem 0 .5rem;
+}
+.pend-client { font-weight: 700; font-size: 1.1rem; }
+.pend-comanda-num { color: #5a6675; }
+.pend-badge-comanda {
+    font-size: .8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #2c5282;
+    background: #ebf4ff;
+    border-radius: 999px;
+    padding: .1rem .6rem;
+}
+
+.pend-linies { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.pend-linia {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 1rem;
+    padding: .75rem 1rem;
+    border: 2px solid #e2e8f0;
+    border-left-width: 8px;
+    border-radius: 10px;
+}
+.pend-linia.is-pendent { border-left-color: #c53030; }
+.pend-linia.is-parcial { border-left-color: #d69e2e; background: #fffbeb; }
+.pend-linia.is-complet { border-left-color: #38a169; background: #f0fff4; }
+.pend-art-descrip { font-size: 1.15rem; font-weight: 600; }
+.pend-art-codi { color: #5a6675; font-variant-numeric: tabular-nums; }
+.pend-qtat { text-align: right; min-width: 9rem; }
+.pend-qtat-big { font-size: 1.9rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pend-linia.is-complet .pend-qtat-big { color: #276749; }
+.pend-qtat-lbl { color: #5a6675; font-size: .9rem; }
+.pend-kg { white-space: nowrap; }
+.pend-kg::before { content: "· "; }
+.pend-barra { height: 6px; background: #e2e8f0; border-radius: 999px; margin-top: .35rem; overflow: hidden; }
+.pend-barra-fill { height: 100%; background: #38a169; }
+.pend-estat {
+    font-weight: 700;
+    font-size: .85rem;
+    text-transform: uppercase;
+    padding: .3rem .7rem;
+    border-radius: 999px;
+    color: #fff;
+    white-space: nowrap;
+}
+.pend-estat-pendent { background: #c53030; }
+.pend-estat-parcial { background: #b7791f; }
+.pend-estat-complet { background: #38a169; }
+
+@media (max-width: 640px) {
+    .pend-linia { grid-template-columns: 1fr auto; }
+    .pend-estat { grid-column: 1 / -1; justify-self: start; }
+    .pend-actualitzat { margin-left: 0; }
+}
+.btn-pendents {
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 1.1rem;
+    color: #1a365d;
+    background: #fff;
+    border-radius: 10px;
+    font-weight: 700;
+    text-decoration: none;
+}
+.btn-pendents:hover { background: #ebf4ff; }

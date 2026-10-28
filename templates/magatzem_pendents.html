@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magatzem — Pendents de pistolejar</title>
+    <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
+    <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('css/magatzem.css') }}">
+</head>
+<body class="mag-body">
+
+<header class="mag-header">
+    <div class="container mag-header-row">
+        <div>
+            <a href="/magatzem" class="mag-back">← Preparació de càrregues</a>
+            <h1>🔫 Pendents de pistolejar</h1>
+            <p class="mag-subtitle">Línies de comanda obertes de les càrregues que surten, menys el que ja s'ha pistolejat</p>
+        </div>
+        <div class="mag-header-tools">
+            <div class="mag-progres-box" id="pend-resum-box">
+                <div class="mag-progres-text" id="pend-resum-text">—</div>
+                <div class="mag-progres-bar"><div class="mag-progres-fill" id="pend-resum-fill"></div></div>
+            </div>
+            {% include '_user_menu.html' %}
+        </div>
+    </div>
+</header>
+
+<main class="container">
+    <div class="pend-toolbar">
+        <div class="pend-rangs" role="group" aria-label="Dies">
+            <button type="button" class="pend-rang" data-rang="avui">Avui</button>
+            <button type="button" class="pend-rang" data-rang="dema">Demà</button>
+            <button type="button" class="pend-rang" data-rang="avui-dema">Avui i demà</button>
+            <button type="button" class="pend-rang" data-rang="setmana">7 dies</button>
+        </div>
+        <label class="mag-toggle">
+            <input type="checkbox" id="pend-tots">
+            <span>Mostra també el que ja està pistolejat</span>
+        </label>
+        <span class="pend-actualitzat" id="pend-actualitzat" aria-live="polite"></span>
+    </div>
+
+    <div id="pend-error" class="mag-error" hidden></div>
+    <div id="pend-llista"></div>
+    <p id="pend-buit" class="mag-empty" hidden>🎉 No queda res per pistolejar en aquests dies.</p>
+</main>
+
+<script src="{{ static_url('js/fmt.js') }}"></script>
+<script src="{{ static_url('js/pendents.js') }}"></script>
+<script src="{{ static_url('js/user-menu.js') }}"></script>
+</body>
+</html>

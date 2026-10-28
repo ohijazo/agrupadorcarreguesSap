@@ -30,7 +30,9 @@ if _ROOT not in sys.path:
 import app  # noqa: F401,E402  — carrega .env i PREPARACIO_PATH
 
 from dades.sl import carregues as sl  # noqa: E402
+from dades.sl import pistolejat as sl_pist  # noqa: E402
 from dades.sql import carregues as sql  # noqa: E402
+from dades.sql import pistolejat as sql_pist  # noqa: E402
 
 RANG_AMPLI = ("2020-01-01", "2030-12-31")
 
@@ -118,6 +120,25 @@ def _casos_descrip() -> list[dict]:
     ]
 
 
+def _casos_pistolejat() -> list[dict]:
+    """Totes les carregues de cop, una per una les que tenen comandes, i els
+    casos limit (llista buida, inexistent, duplicats)."""
+    ids = [int(c["car_numero"]) for c in sql.llistar_carregues(*RANG_AMPLI, limit=1000)["items"]]
+    amb_comandes = sorted({c["carrega"] for c in sql_pist.obtenir_dades_pistolejat(ids)["comandes"]})
+    return ([{"carregues": ids}, {"carregues": []}, {"carregues": [999999]},
+             {"carregues": ids[:3] * 2}]
+            + [{"carregues": [i]} for i in amb_comandes])
+
+
+# Funcions que no viuen a dades/{sql,sl}/carregues.py.
+MODULS = {"obtenir_dades_pistolejat": (sql_pist, sl_pist)}
+
+
+def _impls(nom: str):
+    msql, msl = MODULS.get(nom, (sql, sl))
+    return getattr(msql, nom), getattr(msl, nom)
+
+
 FUNCIONS = {
     "llistar_carregues": _casos_llistar,
     "obtenir_descrip_articles": _casos_descrip,
@@ -126,6 +147,7 @@ FUNCIONS = {
     "cercar_articles": _casos_articles,
     "obtenir_comandes_carrega": lambda: _casos_per_carrega("obtenir_comandes_carrega"),
     "resum_carrega": lambda: _casos_per_carrega("resum_carrega"),
+    "obtenir_dades_pistolejat": _casos_pistolejat,
 }
 
 
@@ -160,7 +182,7 @@ def _primera_diferencia(a, b) -> str:
 
 def compara(nom: str, detall: bool) -> tuple[int, int, float, float]:
     casos = FUNCIONS[nom]()
-    fa, fb = getattr(sql, nom), getattr(sl, nom)
+    fa, fb = _impls(nom)
     ko = 0
     ta = tb = 0.0
     for kw in casos:
@@ -189,8 +211,8 @@ def comprova_signatures(noms: list[str]) -> int:
     """
     ko = 0
     for nom in noms:
-        sa = inspect.signature(getattr(sql, nom))
-        sb = inspect.signature(getattr(sl, nom))
+        fa, fb = _impls(nom)
+        sa, sb = inspect.signature(fa), inspect.signature(fb)
         if str(sa) != str(sb):
             ko += 1
             print(f"  SIGNATURA DIFERENT a {nom}:")
