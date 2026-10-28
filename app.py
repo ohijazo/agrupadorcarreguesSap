@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from threading import Lock
 
+import requests
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 # --- Bootstrap .env i sys.path ABANS d'importar agregador ----------------
@@ -49,9 +50,9 @@ if _PREP_PATH and os.path.isdir(_PREP_PATH) and _PREP_PATH not in sys.path:
 # Imports locals (després del sys.path)
 from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
-    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_carregues,
-    llistar_estats_carregues, llistar_pendents_pistolejar, llistar_transportistes,
-    resum_carrega,
+    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_carregues,
+    llistar_carregues, llistar_estats_carregues, llistar_pendents_pistolejar,
+    llistar_transportistes, resum_carrega,
 )
 from dades import backend as backend_dades  # noqa: E402
 # Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
@@ -140,6 +141,7 @@ def _inject_static_helper():
 @app.context_processor
 def _inject_auth_context():
     return {
+        "pdf_albarans": bool(_crystal_pdf_url()),
         "auth_enabled": auth.auth_enabled(),
         "current_user": {
             "username": session.get("user_username"),
@@ -642,6 +644,74 @@ def api_pendents_pistolejar():
     except Exception:
         log.exception("pendents de pistolejar")
         return _err_genèric()
+
+
+# --- Albarans: llista per carrega i PDF amb el Crystal de SAP ------------
+# El PDF el genera `serveis/crystal-pdf`, un servei Windows al servidor de SAP
+# (Crystal no funciona a Linux). Sense CRYSTAL_PDF_URL la funcio esta apagada.
+def _crystal_pdf_url() -> str:
+    return os.environ.get("CRYSTAL_PDF_URL", "").strip().rstrip("/")
+
+
+@app.route("/api/albarans")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_albarans():
+    """Albarans de venda de les carregues indicades: `?carregues=87,98`
+    (DocEntry de `@SEI_ORDENCARGA`)."""
+    crues = [x.strip() for x in (request.args.get("carregues") or "").split(",") if x.strip()]
+    if not crues or len(crues) > 50 or not all(x.isdigit() for x in crues):
+        return _err_validacio("'carregues' ha de ser una llista de fins a 50 números separats per comes.")
+    try:
+        return jsonify({
+            "albarans": llistar_albarans_carregues([int(x) for x in crues]),
+            "pdf": bool(_crystal_pdf_url()),
+        })
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error a albarans")
+        return _err_db()
+    except Exception:
+        log.exception("albarans")
+        return _err_genèric()
+
+
+def _text(msg: str, status: int):
+    # La ruta del PDF s'obre en una pestanya nova: un JSON hi quedaria lleig.
+    return msg, status, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/albarans/<int:doc_entry>/pdf")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def albara_pdf(doc_entry: int):
+    """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
+    url = _crystal_pdf_url()
+    if not url:
+        return _text("La impressió d'albarans no està activada.", 404)
+    try:
+        r = requests.get(
+            f"{url}/pdf",
+            params={"tipus": "DLN2", "docentry": doc_entry},
+            headers={"X-Token": os.environ.get("CRYSTAL_PDF_TOKEN", "")},
+            timeout=int(os.environ.get("CRYSTAL_PDF_TIMEOUT", "60")),
+        )
+    except requests.RequestException:
+        log.exception("crystal-pdf no respon (albara %s)", doc_entry)
+        return _text("El servei d'impressió d'albarans no respon. Torna-ho a provar d'aquí a una "
+                     "estona i, si continua, avisa administració.", 503)
+    if r.status_code == 404:
+        return _text("Aquest albarà no existeix a SAP.", 404)
+    if r.status_code != 200 or not r.headers.get("Content-Type", "").startswith("application/pdf"):
+        log.error("crystal-pdf ha respost %s per a l'albara %s: %s",
+                  r.status_code, doc_entry, r.text[:300])
+        return _text("No s'ha pogut generar el PDF de l'albarà. Avisa administració.", 503)
+
+    num = r.headers.get("X-DocNum", "")
+    num = num if num.isdigit() else str(doc_entry)
+    audit.log("imprimir_albara", target=num, detall={"docentry": doc_entry})
+    resp = make_response(r.content)
+    resp.headers["Content-Type"] = "application/pdf"
+    resp.headers["Content-Disposition"] = f'inline; filename="Albara_{num}.pdf"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/transportistes")

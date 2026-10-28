@@ -331,10 +331,52 @@ async function refrescar({ fromPolling = false } = {}) {
         magState.preparats = new Set(obj.productes_preparats || []);
         magState.pendingRefresh = null;
         renderArticles();
+        if (!fromPolling) carregaAlbarans();
     } catch (e) {
         // Errors del polling silenciosos (no embrutim la UI cada 5s)
         if (!fromPolling) toast("error", "No s'ha pogut refrescar: " + e.message);
     }
+}
+
+// --- Albarans de SAP de les càrregues de l'agrupació ---------------------
+// Només hi és si l'app té el servei de PDF configurat (la secció no es pinta
+// a la plantilla). Es carrega en obrir i amb "Refresca", no amb el polling:
+// els albarans no canvien cada 5 segons i cada consulta va a SAP.
+async function carregaAlbarans() {
+    const sec = $m("#mag-albarans");
+    if (!sec) return;
+    const carregues = magState.obj?.resultat?.carregues || [];
+    const ids = [...new Set(carregues
+        .map(c => String(c.carrega_id).split("/").pop().replace(/^0+/, ""))
+        .filter(x => /^\d+$/.test(x)))];
+    if (!ids.length) { sec.hidden = true; return; }
+    let j;
+    try {
+        j = await fetchJ(`/api/albarans?carregues=${ids.join(",")}`);
+    } catch (e) {
+        sec.hidden = true;
+        return;
+    }
+    const albs = j.albarans || [];
+    sec.hidden = albs.length === 0;
+    $m("#mag-albarans-n").textContent = albs.length ? `(${albs.length})` : "";
+    const perNum = new Map(carregues.map(c => [String(c.carrega_id).split("/").pop().replace(/^0+/, ""), c]));
+    $m("#mag-albarans-llista").innerHTML = albs.map(a => {
+        const car = perNum.get(String(a.carrega));
+        const col = magState.colorsCarrega.get(car?.carrega_id) || { color: "#718096" };
+        const nomCar = (car?.descripcio || `Càrrega ${a.carrega}`).trim();
+        const accio = a.cancelat
+            ? `<span class="mag-albara-cancelat">cancel·lat</span>`
+            : `<a class="btn btn-ghost mag-albara-pdf" href="/albarans/${a.docentry}/pdf" target="_blank" rel="noopener"
+                  aria-label="Obre l'albarà ${escapeM(a.docnum)} en PDF per imprimir-lo">🖨 Albarà</a>`;
+        return `<li class="mag-albara${a.cancelat ? " is-cancelat" : ""}" style="--cb-color:${col.color}">
+                    <span class="dot" aria-hidden="true"></span>
+                    <span class="mag-albara-num">${escapeM(a.docnum)}</span>
+                    <span class="mag-albara-cli">${escapeM(a.cli_nom || a.cli_codi)}</span>
+                    <span class="mag-albara-meta">${escapeM(nomCar)} #${escapeM(a.carrega)}${a.data ? " · " + escapeM(fmtData(a.data)) : ""}</span>
+                    ${accio}
+                </li>`;
+    }).join("");
 }
 
 async function togglePreparat(artCodi, nouEstat) {

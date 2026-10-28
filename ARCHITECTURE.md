@@ -148,6 +148,12 @@ Vanilla JS sense framework. Tres "modes":
   - El càlcul és a `dades/pistolejat.py`, que és pur i no toca SAP. Les dades crues surten de `obtenir_dades_pistolejat`, que passa pel commutador SQL/SL igual que la resta. Vegeu `docs/descoberta_pistolejat_albarans.md`.
   - Polling cada 15 s amb la pestanya visible. Si SAP falla, es manté a la pantalla l'última llista bona.
 
+- **Albarans de SAP a la preparació (`/magatzem/<id>`)**:
+  - Llista els albarans (`ODLN`) de les càrregues de l'agrupació amb un botó "🖨 Albarà" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_carregues`, que passa pel commutador SQL/SL.
+  - El PDF el genera `serveis/crystal-pdf`, un servei Windows (C#) al servidor de SAP, amb el **mateix Crystal** que imprimeix SAP: llegeix el layout per defecte (`RTYP.DEFLT_REP` → `RDOC.Template`) a cada petició i li passa `DocKey@`. Crystal no funciona a Linux, i el Service Layer sobre SQL Server no exporta PDF.
+  - L'app només fa de proxy (`/albarans/<docentry>/pdf`) amb un token compartit. No desa cap PDF. Sense `CRYSTAL_PDF_URL` la secció no surt.
+  - El servei entra a SQL amb el seu compte de Windows (`NT SERVICE\CrystalPdf`, només lectura) i no té cap contrasenya en fitxers.
+
 - **Administració (`/admin/usuaris`, `static/js/admin_usuaris.js`)** — només rol `admin`:
   - Taula d'usuaris amb 3 accions per fila (editar nom/rol/actiu, canvi de contrasenya, desactivar/activar).
   - Modals `<dialog>` per crear/editar i per resetejar contrasenya.
@@ -166,6 +172,8 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/calendari` | tots auth | |
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
+| `GET` | `/api/albarans?carregues=87,98` | tots auth | màxim 50 càrregues |
+| `GET` | `/albarans/<docentry>/pdf` | tots auth | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

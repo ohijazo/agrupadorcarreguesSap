@@ -30,8 +30,10 @@ if _ROOT not in sys.path:
 import app  # noqa: F401,E402  — carrega .env i PREPARACIO_PATH
 
 from dades.sl import carregues as sl  # noqa: E402
+from dades.sl import albarans as sl_alb  # noqa: E402
 from dades.sl import pistolejat as sl_pist  # noqa: E402
 from dades.sql import carregues as sql  # noqa: E402
+from dades.sql import albarans as sql_alb  # noqa: E402
 from dades.sql import pistolejat as sql_pist  # noqa: E402
 
 RANG_AMPLI = ("2020-01-01", "2030-12-31")
@@ -130,8 +132,21 @@ def _casos_pistolejat() -> list[dict]:
             + [{"carregues": [i]} for i in amb_comandes])
 
 
+def _casos_albarans() -> list[dict]:
+    """Totes les carregues de cop, una per una les que tenen albarans
+    (inclosos els cancel·lats), i els casos limit."""
+    ids = [int(c["car_numero"]) for c in sql.llistar_carregues(*RANG_AMPLI, limit=1000)["items"]]
+    amb_albarans = sorted({a["carrega"] for a in sql_alb.llistar_albarans_carregues(ids)})
+    return ([{"carregues": ids}, {"carregues": []}, {"carregues": [999999]},
+             {"carregues": ids[:3] * 2}]
+            + [{"carregues": [i]} for i in amb_albarans])
+
+
 # Funcions que no viuen a dades/{sql,sl}/carregues.py.
-MODULS = {"obtenir_dades_pistolejat": (sql_pist, sl_pist)}
+MODULS = {
+    "obtenir_dades_pistolejat": (sql_pist, sl_pist),
+    "llistar_albarans_carregues": (sql_alb, sl_alb),
+}
 
 
 def _impls(nom: str):
@@ -148,6 +163,7 @@ FUNCIONS = {
     "obtenir_comandes_carrega": lambda: _casos_per_carrega("obtenir_comandes_carrega"),
     "resum_carrega": lambda: _casos_per_carrega("resum_carrega"),
     "obtenir_dades_pistolejat": _casos_pistolejat,
+    "llistar_albarans_carregues": _casos_albarans,
 }
 
 

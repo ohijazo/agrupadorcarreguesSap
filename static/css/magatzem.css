@@ -369,6 +369,7 @@
     /* Amaga el que no aporta al paper */
     .mag-header,
     .mag-toolbar,
+    .mag-albarans,
     .mag-llista-bar,
     .toasts,
     #mag-buit,
@@ -969,3 +970,54 @@
     text-decoration: none;
 }
 .btn-pendents:hover { background: #ebf4ff; }
+
+/* ===== Albarans de SAP a la preparació ================================== */
+.mag-albarans {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: .5rem 0;
+}
+.mag-albarans summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1.05rem;
+    padding: .35rem 0;
+}
+.mag-albarans-n { color: #718096; font-weight: 500; }
+.mag-albarans-llista {
+    list-style: none;
+    margin: .4rem 0 .2rem;
+    padding: 0;
+    display: grid;
+    gap: .4rem;
+}
+.mag-albara {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+    padding: .45rem .65rem;
+    border-left: 4px solid var(--cb-color, #718096);
+    background: #f8fafc;
+    border-radius: 6px;
+}
+.mag-albara .dot {
+    width: .6rem; height: .6rem; border-radius: 50%;
+    background: var(--cb-color, #718096);
+    flex: none;
+}
+.mag-albara-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mag-albara-cli { font-weight: 500; }
+.mag-albara-meta { color: #4a5568; font-size: .9rem; }
+.mag-albara-pdf { margin-left: auto; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+.mag-albara.is-cancelat { opacity: .6; }
+.mag-albara-cancelat {
+    margin-left: auto;
+    font-size: .85rem;
+    color: #9b2c2c;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+@media (max-width: 640px) {
+    .mag-albara-pdf { margin-left: 0; width: 100%; justify-content: center; }
+}

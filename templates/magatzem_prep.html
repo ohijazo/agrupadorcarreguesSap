@@ -42,6 +42,17 @@
     </div>
 </section>
 
+{% if pdf_albarans %}
+<section class="mag-albarans" id="mag-albarans" hidden>
+    <div class="container">
+        <details id="mag-albarans-det">
+            <summary>🧾 Albarans de SAP <span class="mag-albarans-n" id="mag-albarans-n"></span></summary>
+            <ul class="mag-albarans-llista" id="mag-albarans-llista"></ul>
+        </details>
+    </div>
+</section>
+{% endif %}
+
 <div class="print-only mag-print-header" id="mag-print-header"></div>
 
 <main class="container">

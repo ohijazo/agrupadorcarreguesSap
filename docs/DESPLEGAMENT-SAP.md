@@ -244,3 +244,18 @@ quan ja no calgui.
   procés i llegeix 10 taules per SQL. Per tant `pyodbc` i les credencials
   `SAP_SQL_*` segueixen fent falta, i `/api/agrupar` continua tocant SQL. Migrar
   aquell mòdul és un projecte propi, al seu repositori.
+
+## 9. Impressió d'albarans (servei `crystal-pdf`)
+
+El PDF de l'albarà el genera un servei Windows al **servidor de SAP**, amb el mateix
+Crystal que fa servir SAP. La instal·lació d'aquell servei és a
+`serveis/crystal-pdf/README.md`. Un cop respon `curl http://AE01SAPSQL:8095/health`
+des d'aquest servidor, afegiu al `.env` de l'app:
+
+```bash
+CRYSTAL_PDF_URL=http://AE01SAPSQL:8095
+CRYSTAL_PDF_TOKEN=<el mateix Token del crystal-pdf.exe.config>
+```
+
+Després cal reiniciar l'app. Si `CRYSTAL_PDF_URL` és buit, la funció queda apagada i a
+la preparació no surt la secció "Albarans de SAP".
