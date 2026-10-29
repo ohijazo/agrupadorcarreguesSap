@@ -339,7 +339,7 @@ async function refrescar({ fromPolling = false } = {}) {
 }
 
 // --- Albarans de SAP de les càrregues de l'agrupació ---------------------
-// Només hi és si l'app té el servei de PDF configurat (la secció no es pinta
+// Només hi és si l'app té el servei de PDF o la cancel·lació activats (la secció no es pinta
 // a la plantilla). Es carrega en obrir i amb "Refresca", no amb el polling:
 // els albarans no canvien cada 5 segons i cada consulta va a SAP.
 async function carregaAlbarans() {
@@ -365,10 +365,18 @@ async function carregaAlbarans() {
         const car = perNum.get(String(a.carrega));
         const col = magState.colorsCarrega.get(car?.carrega_id) || { color: "#718096" };
         const nomCar = (car?.descripcio || `Càrrega ${a.carrega}`).trim();
+        const pdf = j.pdf
+            ? `<a class="btn btn-ghost mag-albara-pdf" href="/albarans/${a.docentry}/pdf" target="_blank" rel="noopener"
+                  aria-label="Obre l'albarà ${escapeM(a.docnum)} en PDF per imprimir-lo">🖨 Albarà</a>`
+            : "";
+        const cancel = a.cancelable
+            ? `<button type="button" class="btn btn-ghost mag-albara-cancel" data-act="cancel-alb"
+                       data-docentry="${a.docentry}" data-docnum="${escapeM(a.docnum)}"
+                       aria-label="Cancel·la l'albarà ${escapeM(a.docnum)} a SAP">✖ Cancel·la</button>`
+            : "";
         const accio = a.cancelat
             ? `<span class="mag-albara-cancelat">cancel·lat</span>`
-            : `<a class="btn btn-ghost mag-albara-pdf" href="/albarans/${a.docentry}/pdf" target="_blank" rel="noopener"
-                  aria-label="Obre l'albarà ${escapeM(a.docnum)} en PDF per imprimir-lo">🖨 Albarà</a>`;
+            : `<span class="mag-albara-accions">${pdf}${cancel}</span>`;
         return `<li class="mag-albara${a.cancelat ? " is-cancelat" : ""}" style="--cb-color:${col.color}">
                     <span class="dot" aria-hidden="true"></span>
                     <span class="mag-albara-num">${escapeM(a.docnum)}</span>
@@ -377,6 +385,38 @@ async function carregaAlbarans() {
                     ${accio}
                 </li>`;
     }).join("");
+}
+
+// Cancel·la a SAP un albarà de l'SGA. Demana el motiu, que queda a
+// l'auditoria de l'app (a SAP la cancel·lació la signa l'usuari del SL).
+async function cancelaAlbara(btn) {
+    const docnum = btn.dataset.docnum;
+    const motiu = await window.mostrarInput({
+        titol: `Cancel·lar l'albarà ${docnum} a SAP`,
+        etiqueta: "Motiu de la cancel·lació (obligatori). Això no es pot desfer.",
+        placeholder: "Ex.: lot equivocat, s'ha de tornar a pistolejar",
+        btnOk: "Cancel·la l'albarà",
+        btnCancel: "No",
+        maxlength: 200,
+    });
+    if (motiu === null) return;
+    if (motiu.trim().length < 5) {
+        toast("error", "Cal escriure el motiu (mínim 5 caràcters).");
+        return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Cancel·lant…";
+    try {
+        await fetchJ(`/api/albarans/${encodeURIComponent(btn.dataset.docentry)}/cancelar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ motiu: motiu.trim() }),
+        });
+        toast("success", `Albarà ${docnum} cancel·lat a SAP`);
+    } catch (e) {
+        toast("error", e.message);
+    }
+    carregaAlbarans();
 }
 
 async function togglePreparat(artCodi, nouEstat) {
@@ -454,6 +494,10 @@ window.magatzemPrep = async function magatzemPrep(id) {
 
     // Botó refresca manual
     $m("#mag-refresca").addEventListener("click", refrescar);
+    $m("#mag-albarans-llista")?.addEventListener("click", (ev) => {
+        const btn = ev.target.closest('[data-act="cancel-alb"]');
+        if (btn && !btn.disabled) cancelaAlbara(btn);
+    });
 
     // Botó "Desfés preparats" — només visible quan n'hi ha algun
     $m("#mag-desfes")?.addEventListener("click", desferPreparats);

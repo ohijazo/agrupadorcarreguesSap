@@ -1010,7 +1010,11 @@
 .mag-albara-num { font-weight: 700; font-variant-numeric: tabular-nums; }
 .mag-albara-cli { font-weight: 500; }
 .mag-albara-meta { color: #4a5568; font-size: .9rem; }
-.mag-albara-pdf { margin-left: auto; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+.mag-albara-accions { margin-left: auto; display: inline-flex; gap: .4rem; flex-wrap: wrap; }
+.mag-albara-pdf,
+.mag-albara-cancel { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+.mag-albara-cancel { color: #9b2c2c; }
+.mag-albara-cancel:hover:not(:disabled) { background: #fff5f5; border-color: #feb2b2; }
 .mag-albara.is-cancelat { opacity: .6; }
 .mag-albara-cancelat {
     margin-left: auto;
@@ -1020,5 +1024,7 @@
     letter-spacing: .03em;
 }
 @media (max-width: 640px) {
-    .mag-albara-pdf { margin-left: 0; width: 100%; justify-content: center; }
+    .mag-albara-accions { margin-left: 0; width: 100%; }
+    .mag-albara-pdf,
+    .mag-albara-cancel { flex: 1; justify-content: center; }
 }

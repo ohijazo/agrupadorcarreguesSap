@@ -153,6 +153,12 @@ Vanilla JS sense framework. Tres "modes":
   - El PDF el genera `serveis/crystal-pdf`, un servei Windows (C#) al servidor de SAP, amb el **mateix Crystal** que imprimeix SAP: llegeix el layout per defecte (`RTYP.DEFLT_REP` → `RDOC.Template`) a cada petició i li passa `DocKey@`. Crystal no funciona a Linux, i el Service Layer sobre SQL Server no exporta PDF.
   - L'app només fa de proxy (`/albarans/<docentry>/pdf`) amb un token compartit. No desa cap PDF. Sense `CRYSTAL_PDF_URL` la secció no surt.
   - El servei entra a SQL amb el seu compte de Windows (`NT SERVICE\CrystalPdf`, només lectura) i no té cap contrasenya en fitxers.
+- **Cancel·lar albarans de l'SGA (mateixa llista)**: és la **primera escriptura a SAP** de l'app.
+  - Botó "✖ Cancel·la" als albarans oberts fets per l'SGA (`ALBARANS_SGA_USUARIS`). Demana un motiu obligatori.
+  - Fa `POST DeliveryNotes(N)/Cancel` pel Service Layer (`dades/sl/escriptura_albarans.py`), sigui quin sigui el backend de lectura. Abans torna a llegir l'albarà de SAP i el rebutja si ja està cancel·lat, no és de l'SGA o té línies tancades (facturat o amb devolució).
+  - Si el POST dona error o timeout, torna a llegir l'estat: si SAP el mostra cancel·lat, és un èxit.
+  - A SAP la cancel·lació la signa l'usuari del Service Layer. Qui ho ha fet i per què només queda a l'auditoria de l'app.
+  - Apagat per defecte (`CANCELAR_ALBARANS`).
 
 - **Administració (`/admin/usuaris`, `static/js/admin_usuaris.js`)** — només rol `admin`:
   - Taula d'usuaris amb 3 accions per fila (editar nom/rol/actiu, canvi de contrasenya, desactivar/activar).
@@ -174,6 +180,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
 | `GET` | `/api/albarans?carregues=87,98` | tots auth | màxim 50 càrregues |
 | `GET` | `/albarans/<docentry>/pdf` | tots auth | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
+| `POST` | `/api/albarans/<docentry>/cancelar` | tots auth | CSRF; `{"motiu"}` obligatori; només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

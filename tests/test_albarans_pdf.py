@@ -142,7 +142,8 @@ def test_api_albarans(client, monkeypatch):
                         lambda ids: rebut.append(ids) or [{"docentry": 148}])
     r = c.get("/api/albarans?carregues=98, 87")
     assert r.status_code == 200
-    assert r.get_json() == {"albarans": [{"docentry": 148}], "pdf": True}
+    assert r.get_json() == {"albarans": [{"docentry": 148, "cancelable": False}],
+                            "pdf": True, "cancelar": False}
     assert rebut == [[98, 87]]
 
 

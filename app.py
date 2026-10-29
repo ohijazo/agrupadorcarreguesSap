@@ -60,6 +60,16 @@ from dades import backend as backend_dades  # noqa: E402
 # per linia, ~19 KB per comanda). Import explicit perque l'excepcio es vegi
 # al codi i no quedi amagada a la configuracio.
 from dades.sql.carregues import llistar_carregues as llistar_carregues_sql  # noqa: E402
+# Cancel·lar albarans escriu pel Service Layer i necessita l'app germana. Sense
+# ella (CI, desenvolupament nomes amb SQL) la funcio queda no disponible.
+try:
+    from dades.sl import escriptura_albarans  # noqa: E402
+    from sap_service_layer import SLError  # noqa: E402
+except ImportError:
+    escriptura_albarans = None  # type: ignore[assignment]
+
+    class SLError(Exception):  # type: ignore[no-redef]
+        pass
 from valida import (  # noqa: E402
     valida_codi, valida_int, valida_llista_carregues, valida_rang_dates,
 )
@@ -142,6 +152,7 @@ def _inject_static_helper():
 def _inject_auth_context():
     return {
         "pdf_albarans": bool(_crystal_pdf_url()),
+        "cancelar_albarans": _cancelar_albarans_actiu(),
         "auth_enabled": auth.auth_enabled(),
         "current_user": {
             "username": session.get("user_username"),
@@ -207,7 +218,7 @@ def secure_headers(resp):
 # fa qualsevol GET. El frontend la llegeix i la inclou a les peticions.
 CSRF_COOKIE_NAME = "csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
-_CSRF_PROTECTED_PREFIXES = ("/api/agrupacions", "/api/admin")
+_CSRF_PROTECTED_PREFIXES = ("/api/agrupacions", "/api/admin", "/api/albarans")
 _CSRF_EXEMPT_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -653,6 +664,23 @@ def _crystal_pdf_url() -> str:
     return os.environ.get("CRYSTAL_PDF_URL", "").strip().rstrip("/")
 
 
+# Cancel·lar albarans: primera escriptura a SAP. Apagat per defecte; nomes
+# s'encen a TEST fins que SEIDOR confirmi que l'addon SGA ho suporta.
+def _cancelar_albarans_actiu() -> bool:
+    return os.environ.get("CANCELAR_ALBARANS", "").strip().lower() in ("true", "1", "si", "sí")
+
+
+def _usuaris_sga() -> set[int]:
+    """USERID de SAP dels usuaris de l'SGA (els albarans del magatzem)."""
+    crus = os.environ.get("ALBARANS_SGA_USUARIS", "22,23")
+    return {int(x) for x in crus.replace(" ", "").split(",") if x.isdigit()}
+
+
+# Una cancel·lacio alhora per proces: la comprovacio d'estat i el POST han
+# d'anar junts perque un doble clic no faci dues crides a SAP.
+_cancel_lock = Lock()
+
+
 @app.route("/api/albarans")
 @auth.requires_rol("admin", "oficina", "magatzem")
 def api_albarans():
@@ -662,10 +690,14 @@ def api_albarans():
     if not crues or len(crues) > 50 or not all(x.isdigit() for x in crues):
         return _err_validacio("'carregues' ha de ser una llista de fins a 50 números separats per comes.")
     try:
-        return jsonify({
-            "albarans": llistar_albarans_carregues([int(x) for x in crues]),
-            "pdf": bool(_crystal_pdf_url()),
-        })
+        albarans = llistar_albarans_carregues([int(x) for x in crues])
+        cancelar = _cancelar_albarans_actiu()
+        sga = _usuaris_sga()
+        for a in albarans:
+            # Orientatiu per pintar el boto; la comprovacio de debo es fa en
+            # cancel·lar, amb l'estat fresc de SAP.
+            a["cancelable"] = cancelar and a["obert"] and not a["cancelat"] and a["usuari"] in sga
+        return jsonify({"albarans": albarans, "pdf": bool(_crystal_pdf_url()), "cancelar": cancelar})
     except backend_dades.ERRORS_DADES:
         log.exception("DB error a albarans")
         return _err_db()
@@ -712,6 +744,55 @@ def albara_pdf(doc_entry: int):
     resp.headers["Content-Disposition"] = f'inline; filename="Albara_{num}.pdf"'
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@app.route("/api/albarans/<int:doc_entry>/cancelar", methods=["POST"])
+@auth.requires_rol("admin", "oficina", "magatzem")
+def cancelar_albara(doc_entry: int):
+    """Cancel·la a SAP un albara fet per l'SGA. Cos: `{"motiu": "..."}`.
+
+    El motiu nomes queda a l'auditoria de l'app: a SAP la cancel·lacio la
+    signa l'usuari del Service Layer, aixi que l'auditoria es l'unic lloc que
+    diu qui ho ha fet i per que."""
+    if not _cancelar_albarans_actiu():
+        return jsonify({"error": "La cancel·lació d'albarans no està activada."}), 404
+    if escriptura_albarans is None:
+        return jsonify({"error": "La cancel·lació d'albarans no està disponible en aquest servidor."}), 503
+    motiu = " ".join(str((request.get_json(silent=True) or {}).get("motiu") or "").split())
+    if not 5 <= len(motiu) <= 200:
+        return _err_validacio("Cal indicar el motiu de la cancel·lació (entre 5 i 200 caràcters).")
+    if not _rate_limit(f"cancel_alb:{session.get('user_id') or request.remote_addr}", max_req=10, window_sec=60):
+        return jsonify({"error": "Massa cancel·lacions seguides; espera un minut."}), 429
+
+    with _cancel_lock:
+        try:
+            estat = escriptura_albarans.estat_albara(doc_entry)
+        except (SLError, requests.RequestException):
+            log.exception("SL no respon llegint l'albara %s", doc_entry)
+            return jsonify({"error": "SAP no respon. Torna-ho a provar d'aquí a una estona."}), 503
+        if estat is None:
+            return jsonify({"error": "Aquest albarà no existeix a SAP."}), 404
+        motiu_no = escriptura_albarans.motiu_no_cancelable(estat, _usuaris_sga())
+        if motiu_no:
+            return jsonify({"error": motiu_no}), 409
+
+        detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu}
+        try:
+            escriptura_albarans.cancelar_albara(doc_entry)
+        except SLError as e:
+            msg_sap = escriptura_albarans.missatge_sap(e)
+            log.error("SAP no ha cancel·lat l'albara %s (%s): %s", doc_entry,
+                      getattr(e, "status_code", None), e)
+            audit.log("cancelar_albara_error", target=str(estat["docnum"]),
+                      detall={**detall, "error": msg_sap or str(e)[:300]})
+            status = getattr(e, "status_code", None)
+            if status and 400 <= status < 500 and msg_sap:
+                return jsonify({"error": f"SAP no ha deixat cancel·lar l'albarà: {msg_sap}"}), 409
+            return jsonify({"error": "No s'ha pogut cancel·lar l'albarà a SAP. Avisa administració."}), 503
+
+    log.info("Albara %s (DocEntry %s) cancel·lat", estat["docnum"], doc_entry)
+    audit.log("cancelar_albara", target=str(estat["docnum"]), detall=detall)
+    return jsonify({"ok": True, "docnum": estat["docnum"]})
 
 
 @app.route("/api/transportistes")

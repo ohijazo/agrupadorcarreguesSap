@@ -259,3 +259,39 @@ CRYSTAL_PDF_TOKEN=<el mateix Token del crystal-pdf.exe.config>
 
 Després cal reiniciar l'app. Si `CRYSTAL_PDF_URL` és buit, la funció queda apagada i a
 la preparació no surt la secció "Albarans de SAP".
+
+## 10. Cancel·lar albarans de l'SGA
+
+És la primera funció que **escriu a SAP**: fa `POST DeliveryNotes(N)/Cancel` pel
+Service Layer, amb l'usuari de `SAP_SL_USER`. Només es poden cancel·lar albarans
+oberts creats per l'SGA (`ALBARANS_SGA_USUARIS`, per defecte `22,23` = SGA1/SGA2),
+sense línies facturades ni retornades. El motiu és obligatori i queda a
+l'auditoria (`cancelar_albara`).
+
+**Està apagat per defecte.** Fins que SEIDOR confirmi què fa l'addon SGA amb
+`@SEIOPIC` en cancel·lar, només s'encén a TEST:
+
+```bash
+CANCELAR_ALBARANS=true
+ALBARANS_SGA_USUARIS=22,23
+```
+
+Prova a TEST (des d'un PC amb el `.env` apuntant a `DB_FARIN_TEST`):
+
+```bash
+python scripts/estat_albara_sap.py 148 > abans.txt
+# cancel·lar l'albarà 148 des de /magatzem/<agrupació amb la càrrega 98>
+python scripts/estat_albara_sap.py 148 > despres.txt
+```
+
+Cal comprovar-hi:
+- l'albarà passa a `CANCELED = Y` i apareix el document de cancel·lació;
+- les línies de la comanda tornen a estar obertes (`RDR1.LineStatus = O`);
+- `@SEIESTATSCOM` torna la comanda a `CONFIRMADA`;
+- què passa amb les files de `@SEIOPIC` que apuntaven a l'albarà: si es queden
+  amb `U_TargetEntry` = albarà cancel·lat, la mercaderia no tornarà a sortir com a
+  pendent de pistolejar fins que l'SGA la torni a llegir. Això és el que cal
+  validar amb SEIDOR.
+
+L'usuari del Service Layer ha de tenir permís a SAP per cancel·lar albarans; si
+no en té, l'app mostra l'error que torna SAP.
