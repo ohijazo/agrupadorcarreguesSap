@@ -1,7 +1,7 @@
 # Descoberta: pistolejat i albarans de magatzem (SAP B1, DB_FARIN_TEST)
 
 Resultat de `scripts/discover_udt_pistolejat.py` (només lectura), 28-10-2026.
-Pendent de validar amb el consultor SEIDOR abans d'implementar la Fase 1.
+Validat amb el consultor SEIDOR el 29-10-2026 (vegeu "Respostes de SEIDOR" al final).
 
 ## 1. El pistolejat: `@SEIOPIC` ("Artículos recogidos")
 
@@ -62,3 +62,37 @@ Serveix per al dashboard: l'últim estat de cada comanda diu si està pendent de
    - Ho fa el `TransactionNotification` (i per tant també funcionaria si cancel·lem pel Service Layer)?
 3. Està bé cancel·lar amb `POST DeliveryNotes(n)/Cancel` des del Service Layer, o l'SGA espera un altre circuit?
 4. L'addon genera alguna etiqueta de palet (`@SEICRETI` "Etiquetas" o un Crystal de B1Print) que hàgim de reutilitzar?
+
+## Respostes de SEIDOR (29-10-2026)
+
+**`@SEIOPIC`.** La lectura de dalt és correcta. Detalls que no sabíem:
+- `Code` és autoincremental. `Name` és només informatiu, amb el format
+  `ordre de càrrega # tipus base # DocEntry base # comptador`.
+- `U_BaseObject` pot ser `17` (comanda de venda, `RDR1`) o `1250000001` (sol·licitud
+  de trasllat, `WTQ1`). Per a les sol·licituds de trasllat, `U_WhsCode` és el magatzem
+  d'origen i `U_WhsCodeTo` el de destí. L'app només mira les comandes (`17`).
+- `U_ManagedBy` val `10000044` si l'article va per lots (`OBTN`), `10000045` si va
+  per números de sèrie (`OSRN`) i NULL si no va per cap dels dos. `U_MdAbsEntry` és
+  l'`AbsEntry` del lot o del número de sèrie.
+- `U_Quantity` són els sacs que entra l'usuari a l'SGA. `U_InvQty` és la quantitat
+  calculada.
+- `U_BinAbs` és la ubicació (`OBIN`). Ara no es fa servir: no hi ha magatzems amb
+  ubicacions.
+- `U_TargetType`/`U_TargetEntry` plens vol dir que s'ha premut "Crear" a l'SGA.
+  Aquestes línies ja no surten a "Detalle documento". Les que els tenen a NULL
+  són les pendents.
+
+**És un històric.** Les files només s'esborren quan l'usuari elimina línies a
+"Detalle documento" de l'SGA. Quan es crea l'albarà no s'esborren.
+
+**Si es cancel·la un albarà:**
+- l'SGA deixa tornar a preparar la comanda;
+- les files de l'albarà anterior es queden a la taula, apuntant-hi;
+- per saber si està cancel·lat cal mirar `ODLN.CANCELED = 'Y'`.
+
+Ho vam comprovar cancel·lant l'albarà 148 pel Service Layer des de l'app: es
+comporta igual que des del client SAP, i el TransactionNotification també torna
+la comanda a CONFIRMADA. Per tant:
+- **pendents de pistolejar:** el càlcul (només files amb `U_TargetEntry` NULL) és
+  correcte tal com està;
+- **cancel·lació des de l'app:** no ha de tocar `@SEIOPIC`.

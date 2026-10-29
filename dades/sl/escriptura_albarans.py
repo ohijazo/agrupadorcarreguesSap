@@ -4,8 +4,10 @@ Va sempre pel Service Layer, sigui quin sigui el backend de lectura: SAP no
 admet escriure per SQL. `POST DeliveryNotes(N)/Cancel` fa el mateix que
 "Cancel·lar" al client SAP: crea el document de cancel·lacio (CANCELED = 'C'),
 marca l'original com a cancel·lat (CANCELED = 'Y') i torna a obrir les linies
-de la comanda. Si l'addon SEIDOR te TransactionNotification, salta igual que
-des del client.
+de la comanda. El TransactionNotification de SEIDOR salta igual que des del
+client (torna la comanda a CONFIRMADA a `@SEIESTATSCOM`). Les files de
+`@SEIOPIC` de l'albara es queden com a historic apuntant-hi i l'SGA deixa
+tornar a preparar la comanda: no s'han de tocar (confirmat per SEIDOR).
 
 Les condicions de `motiu_no_cancelable` les comprova SAP de totes maneres; les
 mirem abans per donar un missatge clar en lloc de l'error cru de SAP. Una

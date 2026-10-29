@@ -664,8 +664,8 @@ def _crystal_pdf_url() -> str:
     return os.environ.get("CRYSTAL_PDF_URL", "").strip().rstrip("/")
 
 
-# Cancel·lar albarans: primera escriptura a SAP. Apagat per defecte; nomes
-# s'encen a TEST fins que SEIDOR confirmi que l'addon SGA ho suporta.
+# Cancel·lar albarans: primera escriptura a SAP. Apagat per defecte. Provat a
+# TEST i validat per SEIDOR el 29-10-2026 (docs/DESPLEGAMENT-SAP.md, apartat 10).
 def _cancelar_albarans_actiu() -> bool:
     return os.environ.get("CANCELAR_ALBARANS", "").strip().lower() in ("true", "1", "si", "sí")
 

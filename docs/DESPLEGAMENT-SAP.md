@@ -268,30 +268,33 @@ oberts creats per l'SGA (`ALBARANS_SGA_USUARIS`, per defecte `22,23` = SGA1/SGA2
 sense línies facturades ni retornades. El motiu és obligatori i queda a
 l'auditoria (`cancelar_albara`).
 
-**Està apagat per defecte.** Fins que SEIDOR confirmi què fa l'addon SGA amb
-`@SEIOPIC` en cancel·lar, només s'encén a TEST:
+**Està apagat per defecte.** Per encendre-ho, al `.env` del servidor i reiniciar:
 
 ```bash
 CANCELAR_ALBARANS=true
 ALBARANS_SGA_USUARIS=22,23
 ```
 
-Prova a TEST (des d'un PC amb el `.env` apuntant a `DB_FARIN_TEST`):
+**Provat a TEST el 29-10-2026** (albarà 148, cancel·lat des del servidor):
+- l'albarà passa a `CANCELED = Y` i SAP crea el document de cancel·lació (150);
+- les línies de la comanda tornen a estar obertes, amb la quantitat oberta sencera;
+- el TransactionNotification de SEIDOR torna la comanda a `CONFIRMADA`
+  (`@SEIESTATSCOM`), també quan es cancel·la pel Service Layer;
+- les files de `@SEIOPIC` es queden apuntant a l'albarà cancel·lat.
+
+**Validat per SEIDOR:** `@SEIOPIC` és un històric. Quan es cancel·la un albarà,
+les seves files s'hi queden i l'SGA deixa tornar a preparar la comanda. Per
+saber si un albarà està cancel·lat cal mirar `ODLN.CANCELED`. Per tant, l'app no
+ha de tocar `@SEIOPIC`, i la comanda torna a sortir sencera als pendents de
+pistolejar fins que l'SGA la torni a llegir.
+
+Per veure l'estat d'un albarà i de tot el que en depèn (només lectura):
 
 ```bash
-python scripts/estat_albara_sap.py 148 > abans.txt
-# cancel·lar l'albarà 148 des de /magatzem/<agrupació amb la càrrega 98>
-python scripts/estat_albara_sap.py 148 > despres.txt
+sudo /var/www/agrupacio-carregues-sap/venv/bin/python     /var/www/agrupacio-carregues-sap/scripts/estat_albara_sap.py <DocEntry>
 ```
 
-Cal comprovar-hi:
-- l'albarà passa a `CANCELED = Y` i apareix el document de cancel·lació;
-- les línies de la comanda tornen a estar obertes (`RDR1.LineStatus = O`);
-- `@SEIESTATSCOM` torna la comanda a `CONFIRMADA`;
-- què passa amb les files de `@SEIOPIC` que apuntaven a l'albarà: si es queden
-  amb `U_TargetEntry` = albarà cancel·lat, la mercaderia no tornarà a sortir com a
-  pendent de pistolejar fins que l'SGA la torni a llegir. Això és el que cal
-  validar amb SEIDOR.
-
-L'usuari del Service Layer ha de tenir permís a SAP per cancel·lar albarans; si
-no en té, l'app mostra l'error que torna SAP.
+**A SAP, la cancel·lació la signa l'usuari de `SAP_SL_USER`**, no la persona que
+prem el botó. Qui ho ha fet i per què queda a l'auditoria de l'app
+(`cancelar_albara`, amb el motiu). Aquest usuari ha de tenir permís a SAP per
+cancel·lar albarans; si no en té, l'app mostra l'error que torna SAP.
