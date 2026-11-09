@@ -152,6 +152,7 @@ Vanilla JS sense framework. Tres "modes":
   - `preparacio_sga.py` llegeix `obtenir_dades_pistolejat(carregues, incloure_tancades=True)` i calcula per producte amb `dades.pistolejat.progres_agrupacio`. Un producte és fet quan, a totes les línies de comanda de les seves càrregues, `kg_oberts − pistolejat ≤ 0`: tot pistolejat o ja amb albarà. Es compara en kg; els sacs només es mostren.
   - Els fets es desen a `productes_preparats` (`agrupacions_store.sincronitza_preparats`, `marcat_ip='SGA'`, sense usuari). Així el llistat de magatzem, `/control`, la planificació i `v_agrupacions_estat` funcionen igual que abans. Si es cancel·la un albarà, el producte se'n treu.
   - La sincronització es fa en dos llocs. La pantalla oberta crida `/api/agrupacions/<id>/pistolejat` cada 15 s. El timer `agrupacio-carregues-sap-pistolejat` (cada 2 min, `scripts/sincronitzar_pistolejat.py`) cobreix les agrupacions no tancades dels últims 30 dies amb una sola consulta a SAP.
+  - També es desa el % de kg pistolejats a `agrupacions.pct_pistolejat` (migració 007). La pàgina principal el mostra a l'estat de la càrrega ("en preparació · 1/3 · 35%") i la compta com a en preparació en quant és > 0.
   - Les agrupacions tancades a mà no es toquen.
 
 - **Gestió d'albarans (`/albarans`, `static/js/albarans.js`)** — només admin i oficina, entrada pròpia al menú d'usuari. Fins al novembre de 2026 era una secció dins la preparació; ara la preparació ja no en mostra res.
