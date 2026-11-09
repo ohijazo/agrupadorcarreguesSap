@@ -41,6 +41,7 @@ from dades import backend as _b  # noqa: E402
 from dades import pistolejat as _pistolejat  # noqa: E402
 from dades.sql import carregues as _sql  # noqa: E402
 from dades.sql import albarans as _sql_alb  # noqa: E402
+from dades.sql import etiquetes as _sql_etq  # noqa: E402
 from dades.sql import pistolejat as _sql_pist  # noqa: E402
 
 # Implementacio Service Layer: encara no existeix cap funcio migrada. A mesura
@@ -58,6 +59,10 @@ try:  # pragma: no cover
     from dades.sl import albarans as _sl_alb  # type: ignore
 except ImportError:  # pragma: no cover
     _sl_alb = None  # type: ignore
+try:  # pragma: no cover
+    from dades.sl import etiquetes as _sl_etq  # type: ignore
+except ImportError:  # pragma: no cover
+    _sl_etq = None  # type: ignore
 
 # Noms de les funcions de dades, per a /health i per al comptador de fallbacks.
 FUNCIONS = [
@@ -71,6 +76,7 @@ FUNCIONS = [
     "obtenir_dades_pistolejat",
     "llistar_albarans_carregues",
     "llistar_albarans_dates",
+    "obtenir_adreces_comandes",
 ]
 
 
@@ -128,6 +134,11 @@ def obtenir_dades_pistolejat(*args, **kwargs):
 def llistar_albarans_carregues(*args, **kwargs):
     return _b.despatxa("llistar_albarans_carregues", _sql_alb.llistar_albarans_carregues,
                        getattr(_sl_alb, "llistar_albarans_carregues", None), *args, **kwargs)
+
+
+def obtenir_adreces_comandes(*args, **kwargs):
+    return _b.despatxa("obtenir_adreces_comandes", _sql_etq.obtenir_adreces_comandes,
+                       getattr(_sl_etq, "obtenir_adreces_comandes", None), *args, **kwargs)
 
 
 def llistar_albarans_dates(*args, **kwargs):

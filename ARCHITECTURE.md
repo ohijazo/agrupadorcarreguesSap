@@ -162,6 +162,13 @@ Vanilla JS sense framework. Tres "modes":
   - Accions: **Preparació**, per a tothom. Per a admin i oficina també **Reimprimir** (`/?agrupacio=<id>`: la pàgina principal fa la cerca i després obre el resultat), **Finalitza / Reobrir** i **Elimina**.
   - "Pendents del dia" (`/magatzem/pendents`) és una altra cosa: totes les càrregues que surten, agrupades o no, amb l'etiqueta de la seva agrupació o "Sense agrupar".
 
+- **Etiquetes de palet (`/etiquetes`, `etiquetes.py`, `static/js/etiquetes.js`, `static/css/etiquetes.css`)**: substitueixen l'etiqueta de Word del magatzem. N'hi ha una per palet físic, en A5 apaïsat (dues per A4).
+  - Els palets surten del motor: `ResultatAgrupacio.palets`, un per embalatge no propi, amb la comanda i el total de sacs. No es desen amb l'agrupació.
+  - El client i l'adreça d'entrega surten de `obtenir_adreces_comandes` (SQL: RDR12; SL: `AddressExtension`; paritat).
+  - El destí es proposa amb la població d'entrega i el Nº client amb la posició del client dins la càrrega, perquè SAP no guarda l'ordre de descàrrega. Tots dos es poden editar a la pantalla, igual que el transport, però no es desen.
+  - Entrades: `POST /api/etiquetes {carregues}`, amb el botó "Etiquetes" de la pàgina principal (les càrregues passen per localStorage), i `GET /api/agrupacions/<id>/etiquetes` (targeta d'Agrupacions).
+  - Logo: si existeix `static/img/logo_coromina.png` es fa servir; si no, el nom en text.
+
 - **Gestió d'albarans (`/albarans`, `static/js/albarans.js`)** — només admin i oficina, entrada pròpia al menú d'usuari. Fins al novembre de 2026 era una secció dins la preparació; ara la preparació ja no en mostra res.
   - Llista els albarans (`ODLN`) amb càrrega creats per l'SGA (`ALBARANS_SGA_USUARIS`) en un rang de dates (avui, ahir, 7 dies, 30 dies o personalitzat, 31 dies com a màxim), amb cerca per client, albarà o càrrega. La cerca es fa al navegador.
   - Botó "📄 PDF" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_dates`, que passa pel commutador SQL/SL.

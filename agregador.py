@@ -13,7 +13,7 @@ from typing import Any, Iterable
 from consultes_carregues import obtenir_comandes_carrega, obtenir_descrip_articles
 from models_agrupacio import (
     AgrupacioProducte, CarregaPerProducte, CarregaResumen,
-    Incidencia, PaletDetall, ResultatAgrupacio, TipusPaletRecompte,
+    Incidencia, PaletDetall, PaletFisic, ResultatAgrupacio, TipusPaletRecompte,
     TipusPaletPerCarrega,
 )
 
@@ -163,11 +163,23 @@ def agrupar(carregues_sel: list[dict]) -> ResultatAgrupacio:
                     if not bucket_pt["descrip"]:
                         bucket_pt["descrip"] = tipus_descrip
 
+                palet = None
+                if not emb.es_embalatge_propi:
+                    palet = PaletFisic(
+                        carrega_id=c["carrega_id"],
+                        comanda=f"{a['sal_codigo']}/{a['cpa_albara']}",
+                        tipus_palet=tipus,
+                        tipus_palet_descrip=tipus_descrip,
+                        sacs=0,
+                    )
                 for cont in emb.contingut:
                     art = cont.art_codi
                     sacs = int(cont.sacs)
                     if sacs <= 0:
                         continue
+                    if palet is not None:
+                        palet.sacs += sacs
+                        palet.articles.append((art, info_articles.get(art, {}).get("descrip", cont.art_descrip), sacs))
                     info = info_articles.get(art, {})
                     descrip = info.get("descrip", cont.art_descrip)
                     tunitat = info.get("tunitat", "")
@@ -201,6 +213,8 @@ def agrupar(carregues_sel: list[dict]) -> ResultatAgrupacio:
                         comanda=f"{a['sal_codigo']}/{a['cpa_albara']}",
                         det_tipo=a.get("det_tipo", ""),
                     ))
+                if palet is not None and palet.sacs > 0:
+                    resultat.palets.append(palet)
 
     # Construir AgrupacioProducte finals
     for art_codi, bucket in sorted(acum.items()):

@@ -76,6 +76,18 @@ class TipusPaletRecompte:
 
 
 @dataclass
+class PaletFisic:
+    """Un palet físic sencer (un embalatge no propi del motor), per a
+    l'etiqueta de palet. Pot portar més d'un article."""
+    carrega_id: str
+    comanda: str              # "Series/DocNum"
+    tipus_palet: str
+    tipus_palet_descrip: str
+    sacs: int                 # total de sacs del palet
+    articles: list[tuple[str, str, int]] = field(default_factory=list)  # (art_codi, descrip, sacs)
+
+
+@dataclass
 class ResultatAgrupacio:
     carregues: list[CarregaResumen] = field(default_factory=list)
     productes: list[AgrupacioProducte] = field(default_factory=list)
@@ -84,3 +96,6 @@ class ResultatAgrupacio:
     total_sacs: int = 0
     total_kg: float = 0.0
     tipus_palets: list[TipusPaletRecompte] = field(default_factory=list)
+    # Palets físics un per un, en l'ordre de càrrega i comanda. Només per a
+    # les etiquetes de palet: `serialitzar` no els desa amb l'agrupació.
+    palets: list[PaletFisic] = field(default_factory=list)

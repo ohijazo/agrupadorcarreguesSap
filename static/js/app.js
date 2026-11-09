@@ -915,6 +915,8 @@ function actualitzarBotoAgrupar() {
     const btnDesel = $("#btn-desselecciona");
     if (cnt) cnt.textContent = n;
     if (btnDesel) btnDesel.hidden = n === 0;
+    const btnEtq = $("#btn-etiquetes");
+    if (btnEtq) btnEtq.disabled = n === 0;
 
     // Estimació ràpida de pes total seleccionat
     if (meta) {
@@ -1071,6 +1073,23 @@ function renderDetallCarrega(data) {
         </div>
         ${blocks}
     `;
+}
+
+// ============================================================
+// Etiquetes de palet de les càrregues seleccionades
+// ============================================================
+// Les càrregues passen a la pantalla /etiquetes per localStorage (no hi
+// caben a la URL) i s'obre en una pestanya nova per no perdre la selecció.
+function obrirEtiquetes() {
+    const carregues = state.carregues.filter(c => state.seleccio.has(c.carrega_id));
+    if (!carregues.length) return;
+    try {
+        localStorage.setItem("etiquetes-carregues", JSON.stringify({ ts: Date.now(), carregues }));
+    } catch (e) {
+        showToast("error", "No s'han pogut preparar les etiquetes", "El navegador no deixa desar dades temporals.");
+        return;
+    }
+    window.open("/etiquetes", "_blank");
 }
 
 // ============================================================
@@ -2412,6 +2431,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Botons selecció / agrupar
     $("#check-all").addEventListener("change", (e) => marcarTotes(e.target.checked));
     $("#btn-agrupar").addEventListener("click", agrupar);
+    $("#btn-etiquetes")?.addEventListener("click", obrirEtiquetes);
     $("#btn-desselecciona").addEventListener("click", () => marcarTotes(false));
     $("#btn-exportar-csv").addEventListener("click", exportarCsv);
     $("#btn-imprimir").addEventListener("click", imprimirInforme);

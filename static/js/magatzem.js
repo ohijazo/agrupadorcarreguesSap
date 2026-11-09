@@ -137,7 +137,8 @@ function textTemps(it) {
 
 function accionsLlista(it) {
     const id = encodeURIComponent(it.id);
-    let html = `<a class="btn btn-primary mag-agr-prep" href="/magatzem/${id}">Preparació</a>`;
+    let html = `<a class="btn btn-primary mag-agr-prep" href="/magatzem/${id}">Preparació</a>`
+        + `<a class="btn btn-ghost" href="/etiquetes?agrupacio=${id}" target="_blank" rel="noopener">🏷 Etiquetes</a>`;
     if (!esOficina()) return html;
     html += `<a class="btn btn-ghost" href="/?agrupacio=${id}" title="Obre el resultat a Agrupar càrregues per tornar-lo a imprimir">Reimprimir</a>`;
     if (it.estat === "tancada") {

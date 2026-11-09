@@ -76,6 +76,7 @@ from valida import (  # noqa: E402
 )
 import agrupacions_store  # noqa: E402
 import preparacio_sga  # noqa: E402
+import etiquetes as etiquetes_mod  # noqa: E402
 
 # --- Logging amb rotació -------------------------------------------------
 _log_handler = RotatingFileHandler(
@@ -1197,6 +1198,51 @@ def api_agrupar():
     except Exception:
         log.exception("agrupar")
         return _err_genèric()
+
+
+# --- Etiquetes de palet ----------------------------------------------------
+# Una per palet físic, amb el format que el magatzem feia amb Word (vegeu
+# etiquetes.py). Es poden treure de qualsevol selecció de càrregues (no cal
+# que estiguin agrupades) o d'una agrupació desada.
+@app.route("/etiquetes")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def etiquetes_pagina():
+    logo = os.path.exists(os.path.join(app.static_folder, "img", "logo_coromina.png"))
+    return render_template("etiquetes.html", logo=logo)
+
+
+def _respon_etiquetes(carregues: list[dict]):
+    try:
+        return jsonify(etiquetes_mod.etiquetes_de(agrupar(carregues)))
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error a etiquetes")
+        return _err_db()
+    except ModuleNotFoundError:
+        log.exception("App germana no disponible")
+        return _err_motor()
+    except Exception:
+        log.exception("etiquetes")
+        return _err_genèric()
+
+
+@app.route("/api/etiquetes", methods=["POST"])
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_etiquetes():
+    """Etiquetes de les càrregues seleccionades. Cos: `{"carregues": [...]}`
+    (els mateixos objectes que /api/agrupar). Només llegeix: no desa res."""
+    carregues, err = valida_llista_carregues((request.get_json(silent=True) or {}).get("carregues"))
+    if err:
+        return _err_validacio(err)
+    return _respon_etiquetes(carregues)
+
+
+@app.route("/api/agrupacions/<id_>/etiquetes")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_agrupacio_etiquetes(id_):
+    obj = agrupacions_store.obtenir(id_)
+    if obj is None:
+        return jsonify({"error": "Agrupació no trobada."}), 404
+    return _respon_etiquetes(obj.get("carregues") or [])
 
 
 @app.route("/api/pbi/carregues")

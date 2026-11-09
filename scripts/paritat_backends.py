@@ -32,9 +32,11 @@ import app  # noqa: F401,E402  — carrega .env i PREPARACIO_PATH
 
 from dades.sl import carregues as sl  # noqa: E402
 from dades.sl import albarans as sl_alb  # noqa: E402
+from dades.sl import etiquetes as sl_etq  # noqa: E402
 from dades.sl import pistolejat as sl_pist  # noqa: E402
 from dades.sql import carregues as sql  # noqa: E402
 from dades.sql import albarans as sql_alb  # noqa: E402
+from dades.sql import etiquetes as sql_etq  # noqa: E402
 from dades.sql import pistolejat as sql_pist  # noqa: E402
 
 RANG_AMPLI = ("2020-01-01", "2030-12-31")
@@ -160,11 +162,25 @@ def _casos_albarans_dates() -> list[dict]:
     ]
 
 
+def _casos_adreces() -> list[dict]:
+    """Les comandes de totes les carregues, unes quantes soles i casos limit."""
+    from dades.sql.carregues import connectar
+    conn = connectar()
+    try:
+        nums = [int(r.DocNum) for r in conn.execute(
+            "SELECT DocNum FROM ORDR WITH (NOLOCK) WHERE U_SEIOrdCargId IS NOT NULL").fetchall()]
+    finally:
+        conn.close()
+    return ([{"docnums": nums}, {"docnums": []}, {"docnums": [999999999]}]
+            + [{"docnums": [n]} for n in nums[:10]])
+
+
 # Funcions que no viuen a dades/{sql,sl}/carregues.py.
 MODULS = {
     "obtenir_dades_pistolejat": (sql_pist, sl_pist),
     "llistar_albarans_carregues": (sql_alb, sl_alb),
     "llistar_albarans_dates": (sql_alb, sl_alb),
+    "obtenir_adreces_comandes": (sql_etq, sl_etq),
 }
 
 
@@ -184,6 +200,7 @@ FUNCIONS = {
     "obtenir_dades_pistolejat": _casos_pistolejat,
     "llistar_albarans_carregues": _casos_albarans,
     "llistar_albarans_dates": _casos_albarans_dates,
+    "obtenir_adreces_comandes": _casos_adreces,
 }
 
 
