@@ -697,7 +697,7 @@ def api_albarans():
     if err:
         return _err_validacio(err)
     desde_d, fins_d = rang
-    if (fins_d - desde_d).days > 31:
+    if (fins_d - desde_d).days >= 31:   # tots dos dies inclosos
         return _err_validacio("El rang màxim és de 31 dies.")
     try:
         sga = _usuaris_sga()

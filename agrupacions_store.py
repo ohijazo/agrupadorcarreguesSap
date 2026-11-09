@@ -357,11 +357,19 @@ def sincronitza_preparats(id_: str, fets: set[str] | list[str],
     fets = set(fets)
     with db.get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT pct_pistolejat FROM agrupacions WHERE id = %s", (id_,))
+            # FOR UPDATE: si l'oficina la tanca a ma mentre consultavem SAP
+            # (pot trigar uns segons), aqui ho veiem i no la toquem.
+            cur.execute("SELECT pct_pistolejat, finalitzada_manual_at FROM agrupacions "
+                        "WHERE id = %s FOR UPDATE", (id_,))
             fila = cur.fetchone()
             if not fila:
                 return None
-            pct_ara = fila[0] if isinstance(fila, tuple) else fila["pct_pistolejat"]
+            if isinstance(fila, tuple):
+                pct_ara, tancada = fila
+            else:
+                pct_ara, tancada = fila["pct_pistolejat"], fila["finalitzada_manual_at"]
+            if tancada is not None:
+                return {"afegits": [], "trets": [], "percent_canviat": False}
             percent_canviat = percent is not None and pct_ara != int(percent)
             if percent_canviat:
                 cur.execute("UPDATE agrupacions SET pct_pistolejat = %s WHERE id = %s",

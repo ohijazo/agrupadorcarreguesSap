@@ -6,7 +6,7 @@
 const RANG_KEY = "alb-rang";
 const MAX_DIES = 31;
 
-const albState = { rang: "avui", albarans: [], pdf: false, carregant: false };
+const albState = { rang: "avui", albarans: [], pdf: false, peticio: 0 };
 
 function escA(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => (
@@ -128,23 +128,26 @@ function datesValides() {
     const fins = document.getElementById("alb-fins").value;
     if (!desde || !fins) return "Cal indicar les dues dates.";
     if (desde > fins) return "La data d'inici és posterior a la de final.";
-    const dies = (new Date(fins) - new Date(desde)) / 86_400_000;
+    // Tots dos dies inclosos: 31 dies = 30 de diferència.
+    const dies = (new Date(fins) - new Date(desde)) / 86_400_000 + 1;
     if (dies > MAX_DIES) return `El rang màxim és de ${MAX_DIES} dies.`;
     return null;
 }
 
 async function refrescar() {
-    if (albState.carregant) return;
     const errBox = document.getElementById("alb-error");
     const err = datesValides();
     if (err) { errBox.textContent = err; errBox.hidden = false; return; }
-    albState.carregant = true;
+    // Cada petició té un número: si mentrestant se n'ha fet una altra (canvi
+    // de rang, refresc després de cancel·lar), la resposta vella es descarta.
+    const num = ++albState.peticio;
     const qs = new URLSearchParams({
         desde: document.getElementById("alb-desde").value,
         fins: document.getElementById("alb-fins").value,
     });
     try {
         const j = await fetchJ(`/api/albarans?${qs}`);
+        if (num !== albState.peticio) return;
         albState.albarans = j.albarans || [];
         albState.pdf = !!j.pdf;
         pinta();
@@ -152,10 +155,9 @@ async function refrescar() {
         document.getElementById("alb-actualitzat").textContent =
             `${albState.albarans.length} albarans · actualitzat a les ${new Date().toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}`;
     } catch (e) {
+        if (num !== albState.peticio) return;
         errBox.textContent = `No s'han pogut carregar els albarans de SAP (${e.message}).`;
         errBox.hidden = false;
-    } finally {
-        albState.carregant = false;
     }
 }
 

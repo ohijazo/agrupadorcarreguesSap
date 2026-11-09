@@ -164,8 +164,9 @@ def test_api_albarans_valida(client, monkeypatch, qs):
 def test_api_albarans_31_dies_es_el_maxim(client, monkeypatch):
     c, app_module, _ = client
     monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda *a: [])
-    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-11-01").status_code == 200
-    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-11-02").status_code == 400
+    # Tots dos dies inclosos: de l'1 al 31 d'octubre son 31 dies.
+    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-10-31").status_code == 200
+    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-11-01").status_code == 400
 
 
 def test_preparacio_ja_no_ensenya_albarans(client, monkeypatch):

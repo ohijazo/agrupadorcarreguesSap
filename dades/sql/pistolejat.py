@@ -37,7 +37,10 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                        RTRIM(o.CardCode) AS cli_codi, RTRIM(o.CardName) AS cli_nom,
                        l.LineNum, RTRIM(l.ItemCode) AS art_codi,
                        RTRIM(l.Dscription) AS art_descrip, RTRIM(l.unitMsr) AS unitat,
-                       l.PackQty, l.InvQty, l.OpenInvQty
+                       l.PackQty, l.InvQty,
+                       -- Una linia tancada a ma (sense albara) conserva
+                       -- l'OpenInvQty: no queda res per preparar.
+                       CASE WHEN l.LineStatus = 'O' THEN l.OpenInvQty ELSE 0 END AS OpenInvQty
                 FROM   ORDR o WITH (NOLOCK)
                 JOIN   RDR1 l WITH (NOLOCK) ON l.DocEntry = o.DocEntry
                 WHERE  o.U_SEIOrdCargId IN ({ph})

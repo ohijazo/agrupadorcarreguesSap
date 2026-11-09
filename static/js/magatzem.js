@@ -158,7 +158,7 @@ let magState = {
     ocultarPrep: false,
     colorsCarrega: new Map(),
     pollTimer: null,
-    lastPct: null,           // % fet del darrer render (null = abans del primer render)
+    lastAcabada: null,       // si estava tota feta al darrer render (null = abans del primer)
 };
 
 // Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents de pistolejar").
@@ -176,8 +176,10 @@ function progresDe(artCodi) {
     return magState.progres?.productes?.[artCodi] || null;
 }
 
+// Els fets els decideix el servidor: inclou els "sense dades a SAP" (vegeu
+// dades/pistolejat.py:progres_agrupacio).
 function esFet(artCodi) {
-    return progresDe(artCodi)?.estat === "complet";
+    return (magState.progres?.fets || []).includes(artCodi);
 }
 
 // "10 de 40 sacs" o, si la línia no té sacs (granel), en kg.
@@ -208,11 +210,11 @@ function calculaProgres() {
     // Feedback en arribar a tot fet (toast + vibració). Només a la transició,
     // no a cada render ni si ja estava acabada en obrir la pantalla.
     const acabada = total > 0 && fets >= total;
-    const prev = magState.lastPct;
-    magState.lastPct = acabada ? 100 : pct;
+    const prev = magState.lastAcabada;
+    magState.lastAcabada = acabada;
     const wrap = $m(".mag-progres-box");
     if (wrap) wrap.classList.toggle("is-acabada", acabada);
-    if (acabada && prev !== null && prev < 100) {
+    if (acabada && prev === false) {
         toast("success", `Agrupació completada — ${total} productes pistolejats`);
         if (navigator.vibrate) {
             try { navigator.vibrate([200, 80, 200]); } catch {}
@@ -247,7 +249,7 @@ function renderArticles() {
 
     for (const p of prods) {
         const pr = progresDe(p.art_codi);
-        const isFet = pr?.estat === "complet";
+        const isFet = esFet(p.art_codi);
         if (magState.ocultarPrep && isFet) continue;
 
         const pcOrdenats = (p.per_carrega || []).slice()
@@ -320,12 +322,10 @@ async function refrescar({ fromPolling = false } = {}) {
     const id = encodeURIComponent(magState.id);
     const errBox = $m("#mag-pist-error");
     try {
-        // L'agrupació (estructura) i el pistolejat (SAP) en paral·lel.
-        const [obj, progres] = await Promise.all([
-            fetchJ(`/api/agrupacions/${id}`),
-            fetchJ(`/api/agrupacions/${id}/pistolejat`).catch(e => ({ _error: e })),
-        ]);
-        magState.obj = obj;
+        // Primer el pistolejat (que de pas desa els fets) i després
+        // l'agrupació, perquè l'hora "✓ SGA · hh:mm" ja vingui actualitzada.
+        const progres = await fetchJ(`/api/agrupacions/${id}/pistolejat`).catch(e => ({ _error: e }));
+        magState.obj = await fetchJ(`/api/agrupacions/${id}`);
         if (progres._error) {
             // Es manté l'últim pistolejat bo a la pantalla: és millor que buidar-la.
             if (errBox) {

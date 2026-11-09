@@ -43,7 +43,10 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "unitat": (l.get("MeasureUnit") or "").strip(),
                     "sacs": float(l.get("PackageQuantity") or 0),
                     "kg": float(l.get("InventoryQuantity") or 0),
-                    "kg_oberts": float(l.get("RemainingOpenInventoryQuantity") or 0),
+                    # Una linia tancada a ma (sense albara) conserva la
+                    # quantitat oberta: no queda res per preparar.
+                    "kg_oberts": float(l.get("RemainingOpenInventoryQuantity") or 0)
+                                 if l.get("LineStatus") == "bost_Open" else 0.0,
                 }
                 for l in sorted(o.get("DocumentLines") or [], key=lambda x: x.get("LineNum") or 0)
                 if incloure_tancades or l.get("LineStatus") == "bost_Open"

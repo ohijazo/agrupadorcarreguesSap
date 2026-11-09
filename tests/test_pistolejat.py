@@ -227,11 +227,29 @@ def test_progres_article_d_una_altra_carrega_no_compta():
     assert r["fets"] == ["33851"]
 
 
-def test_progres_producte_sense_dades_no_es_fet():
+def test_progres_producte_sense_dades_compta_com_a_fet():
+    # Comanda cancel·lada o moguda: no queda res per carregar. Si no comptes
+    # com a fet, l'agrupacio no s'acabaria mai sola.
     r = calc.progres_agrupacio(_resultat(("33851", [87]), ("99999", [87])),
                                _dades([_linia(0, kg_oberts=0)]))
     assert r["productes"]["99999"]["estat"] == "sense_dades"
-    assert r["fets"] == ["33851"] and r["n_productes"] == 2
+    assert r["fets"] == ["33851", "99999"] and r["n_productes"] == 2
+    assert r["percent"] == 100
+
+
+def test_progres_carrega_sense_dades_no_bloqueja_el_producte():
+    # La 98 ja no te la comanda; la 87 esta entregada: el producte es fet.
+    r = calc.progres_agrupacio(_resultat(("33851", [87, 98])), _dades([_linia(0, kg_oberts=0)]))
+    p = r["productes"]["33851"]
+    assert p["per_carrega"]["SAP/1/98"]["estat"] == "sense_dades"
+    assert r["fets"] == ["33851"]
+
+
+def test_progres_no_diu_100_si_falta_algun_producte():
+    # 99,9% dels kg fets pero un producte petit encara pendent.
+    linies = [_linia(0, kg=100000, kg_oberts=0), _linia(1, kg=50, kg_oberts=50, art="01010")]
+    r = calc.progres_agrupacio(_resultat(("33851", [87]), ("01010", [87])), _dades(linies))
+    assert r["fets"] == ["33851"] and r["percent"] == 99
 
 
 def test_progres_granel_sense_sacs():

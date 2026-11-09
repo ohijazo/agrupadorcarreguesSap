@@ -237,7 +237,12 @@ def progres_agrupacio(resultat: dict, dades: dict) -> dict:
     carregues, el que falta (`kg_oberts - pistolejat`) es zero: o s'ha
     pistolejat tot o ja hi ha albara. Es compara en kg; els sacs de
     l'agrupacio son els del motor d'embalatges i nomes es mostren.
-    Un producte sense cap linia a SAP surt `sense_dades` i no compta com a fet.
+
+    Un producte (o una carrega d'un producte) sense cap linia a SAP surt
+    `sense_dades` i COMPTA com a fet: l'agrupacio es va fer a partir de les
+    comandes, aixi que si ja no n'hi ha cap (comanda cancel·lada o moguda
+    d'ordre de carrega) no queda res per carregar. Si no, l'agrupacio no
+    s'acabaria mai sola.
     """
     pist = _suma_pistolejats(dades)
 
@@ -264,13 +269,20 @@ def progres_agrupacio(resultat: dict, dades: dict) -> dict:
                 total["sense_sacs"] = total["sense_sacs"] or acc["sense_sacs"]
         productes[art] = {**_tanca(total), "per_carrega": per_carrega}
 
-    fets = sorted(a for a, v in productes.items() if v["estat"] == ESTAT_COMPLET)
+    fets = sorted(a for a, v in productes.items()
+                  if v["estat"] in (ESTAT_COMPLET, ESTAT_SENSE_DADES))
     kg_total = sum(v["kg_total"] for v in productes.values())
     kg_fets = sum(v["kg_fets"] for v in productes.values())
+    percent = round(100 * kg_fets / kg_total) if kg_total > _EPSILON else 0
+    if len(fets) < len(productes):
+        # L'arrodoniment no pot dir 100% si encara falta algun producte.
+        percent = min(percent, 99)
+    elif productes:
+        percent = 100
     return {
         "productes": productes,
         "fets": fets,
         "n_fets": len(fets),
         "n_productes": len(productes),
-        "percent": round(100 * kg_fets / kg_total) if kg_total > _EPSILON else 0,
+        "percent": percent,
     }
