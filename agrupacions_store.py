@@ -156,7 +156,7 @@ def llistar() -> list[dict]:
                (SELECT COUNT(*) FROM productes_preparats p
                 WHERE p.agrupacio_id = a.id) AS n_preparats,
                a.created_by_id, u.nom AS created_by_nom,
-               a.finalitzada_manual_at
+               a.finalitzada_manual_at, a.pct_pistolejat
         FROM agrupacions a
         LEFT JOIN usuaris u ON u.id = a.created_by_id
         ORDER BY a.ts DESC
@@ -175,6 +175,7 @@ def llistar() -> list[dict]:
             "created_by_id": r["created_by_id"],
             "created_by_nom": r["created_by_nom"],
             "finalitzada_manual_at": _format_ts(r["finalitzada_manual_at"]) if r["finalitzada_manual_at"] else None,
+            "pct_pistolejat": r["pct_pistolejat"],
         })
     return out
 

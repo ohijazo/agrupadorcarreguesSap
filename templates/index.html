@@ -13,8 +13,8 @@
 <header class="app-header">
     <div class="container header-row">
         <div>
-            <h1>Agrupació de càrregues <span style="font-size:0.5em;background:#0d6efd;color:#fff;padding:2px 8px;border-radius:4px;vertical-align:middle;">SAP</span></h1>
-            <p class="subtitle">Sumatori d'embalatges de múltiples càrregues per producte — dades SAP B1</p>
+            <h1>Agrupació de càrregues <span class="badge-variant">SAP</span></h1>
+            <p class="subtitle">Tria les càrregues, agrupa-les i desa o imprimeix el full de preparació</p>
         </div>
         <div class="header-help">
             <a href="/calendari" class="btn btn-icon" title="Calendari mensual" aria-label="Calendari" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">📅</a>
@@ -187,13 +187,13 @@
                 <div class="print-only print-footer" id="print-meta"></div>
                 <div id="kpis" class="kpis"></div>
 
-                <h3 class="section-title">Palets físics per tipus</h3>
+                <h2 class="section-title">Palets físics per tipus</h2>
                 <ul id="palets-per-tipus" class="palets-tipus-grid"></ul>
 
-                <h3 class="section-title">Càrregues incloses</h3>
+                <h2 class="section-title">Càrregues incloses</h2>
                 <div id="carregues-incloses" class="chips"></div>
 
-                <h3 class="section-title">Productes</h3>
+                <h2 class="section-title">Productes</h2>
                 <div class="table-wrap">
                     <table class="data-table sortable" id="taula-productes">
                         <thead>
@@ -213,7 +213,7 @@
                 <p class="llegenda-palets">Palets: <strong>[2×32]</strong> = 2 palets de 32 sacs · <strong>AM</strong> americà · <strong>EU</strong> europeu de fusta · <strong>EU·PL</strong> europeu de plàstic · <strong>PL</strong> plàstic · <strong>BASE</strong> base.</p>
 
                 <div id="incidencies" hidden>
-                    <h3 class="section-title">Incidències <span id="count-incidencies" class="muted"></span></h3>
+                    <h2 class="section-title">Incidències <span id="count-incidencies" class="muted"></span></h2>
                     <ul id="llista-incidencies" class="incidents"></ul>
                 </div>
             </div>

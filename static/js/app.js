@@ -23,25 +23,28 @@ function codiCarregaHTML(carregaId) {
 
 const STORAGE_KEY = "agrupacioCarregues.prefs.v1";
 
-// Paleta de 16 colors maximalment diferenciats (estil Tableau 10 + Okabe-Ito + addicionals).
-// Ordenats perquè els primers (els més comuns) siguin els més contrastats entre si.
+// Paleta de 16 colors per identificar càrregues (estil Tableau 10 + addicionals).
+// Els primers són els més contrastats entre si i NO fan servir vermell,
+// taronja ni verd: són els colors d'estat (pendent / a mitges / fet) i una
+// càrrega verda al costat d'un "fet" verd es confonia. Aquests van al final.
+// La mateixa paleta i el mateix ordre que PALETA_MAG (magatzem.js).
 const PALETA = [
     { color: "#1f77b4", bg: "#e8f0f7" },  // 1  blau
-    { color: "#ff7f0e", bg: "#fff0db" },  // 2  taronja
-    { color: "#2ca02c", bg: "#e8f5e6" },  // 3  verd
-    { color: "#d62728", bg: "#fce6e6" },  // 4  vermell
-    { color: "#9467bd", bg: "#f1ebf7" },  // 5  lila
-    { color: "#17becf", bg: "#e0f5f7" },  // 6  cian
-    { color: "#e377c2", bg: "#fbe6f3" },  // 7  rosa
-    { color: "#8c564b", bg: "#efe1de" },  // 8  marró
-    { color: "#bcbd22", bg: "#f6f6d8" },  // 9  oliva-lima
-    { color: "#000000", bg: "#eeeeee" },  // 10 negre
-    { color: "#7f7f7f", bg: "#f0f0f0" },  // 11 gris
-    { color: "#ff1493", bg: "#ffe2ee" },  // 12 magenta intens
-    { color: "#daa520", bg: "#fbf0d4" },  // 13 or
-    { color: "#4b0082", bg: "#ece0f0" },  // 14 indigo
-    { color: "#00875a", bg: "#d8f0e6" },  // 15 verd-blau bandera
-    { color: "#a52a2a", bg: "#f4dada" },  // 16 borgonya
+    { color: "#9467bd", bg: "#f1ebf7" },  // 2  lila
+    { color: "#17becf", bg: "#e0f5f7" },  // 3  cian
+    { color: "#e377c2", bg: "#fbe6f3" },  // 4  rosa
+    { color: "#8c564b", bg: "#efe1de" },  // 5  marró
+    { color: "#000000", bg: "#eeeeee" },  // 6  negre
+    { color: "#4b0082", bg: "#ece0f0" },  // 7  indigo
+    { color: "#bcbd22", bg: "#f6f6d8" },  // 8  oliva-lima
+    { color: "#7f7f7f", bg: "#f0f0f0" },  // 9  gris
+    { color: "#ff1493", bg: "#ffe2ee" },  // 10 magenta intens
+    { color: "#a52a2a", bg: "#f4dada" },  // 11 borgonya
+    { color: "#daa520", bg: "#fbf0d4" },  // 12 or
+    { color: "#ff7f0e", bg: "#fff0db" },  // 13 taronja
+    { color: "#2ca02c", bg: "#e8f5e6" },  // 14 verd
+    { color: "#d62728", bg: "#fce6e6" },  // 15 vermell
+    { color: "#00875a", bg: "#d8f0e6" },  // 16 verd-blau bandera
 ];
 
 function colorPerCarrega(carregaId, idx) {
@@ -671,14 +674,16 @@ function badgeAgrupacioHTML(estat) {
         const nt = estat.info.n_productes || 0;
         // % de kg pistolejats per l'SGA (preparacio_sga.py); null si encara no s'ha sincronitzat.
         const pct = estat.info.pct_pistolejat;
-        const parts = [nt > 0 ? `${np}/${nt}` : "", pct != null ? `${pct}%` : ""].filter(Boolean);
-        txt = parts.length ? `◐ Preparant · ${parts.join(" · ")}` : "◐ Preparant";
+        // Mateix llenguatge a totes les pantalles: primer el % pistolejat,
+        // després els productes fets.
+        const parts = [pct != null ? `${pct}%` : "", nt > 0 ? `${np}/${nt} fets` : ""].filter(Boolean);
+        txt = parts.length ? `◐ ${parts.join(" · ")}` : "◐ Preparant";
     } else {
         cls = "badge-grouped";
         txt = "Ja agrupada";
     }
     const tip = `Agrupació "${estat.info.nom}" · ${fmtData(estat.info.ts) || ""}` +
-        (estat.tipus === "en_preparacio" ? " · productes fets / total · % de kg pistolejats" : "") +
+        (estat.tipus === "en_preparacio" ? " · % de kg pistolejats · productes fets / total" : "") +
         " · Toca per obrir-la";
     return ` <button type="button" class="${cls}" title="${escapeHtml(tip)}" data-act="obrir-agrupacio" data-id="${escapeHtml(estat.info.id)}">${txt}</button>`;
 }

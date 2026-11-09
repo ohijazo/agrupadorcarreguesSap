@@ -3,24 +3,35 @@
 const $m = (sel, r = document) => r.querySelector(sel);
 const $mAll = (sel, r = document) => Array.from(r.querySelectorAll(sel));
 const fmtN = new Intl.NumberFormat("ca-ES");
-const fmtKgN = new Intl.NumberFormat("ca-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Kg sense decimals, com a la pàgina principal: ningú al magatzem necessita els cèntims.
+const fmtKgN = new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 0 });
 
 // Mateixa paleta que l'app principal perquè els colors coincideixin
+// Mateixa paleta i ordre que PALETA (app.js): vermell, taronja i verd al
+// final perquè no es confonguin amb els colors d'estat.
 const PALETA_MAG = [
-    { color: "#1f77b4", bg: "#e8f0f7" }, { color: "#ff7f0e", bg: "#fff0db" },
-    { color: "#2ca02c", bg: "#e8f5e6" }, { color: "#d62728", bg: "#fce6e6" },
-    { color: "#9467bd", bg: "#f1ebf7" }, { color: "#17becf", bg: "#e0f5f7" },
-    { color: "#e377c2", bg: "#fbe6f3" }, { color: "#8c564b", bg: "#efe1de" },
-    { color: "#bcbd22", bg: "#f6f6d8" }, { color: "#000000", bg: "#eeeeee" },
+    { color: "#1f77b4", bg: "#e8f0f7" }, { color: "#9467bd", bg: "#f1ebf7" },
+    { color: "#17becf", bg: "#e0f5f7" }, { color: "#e377c2", bg: "#fbe6f3" },
+    { color: "#8c564b", bg: "#efe1de" }, { color: "#000000", bg: "#eeeeee" },
+    { color: "#4b0082", bg: "#ece0f0" }, { color: "#bcbd22", bg: "#f6f6d8" },
     { color: "#7f7f7f", bg: "#f0f0f0" }, { color: "#ff1493", bg: "#ffe2ee" },
-    { color: "#daa520", bg: "#fbf0d4" }, { color: "#4b0082", bg: "#ece0f0" },
-    { color: "#00875a", bg: "#d8f0e6" }, { color: "#a52a2a", bg: "#f4dada" },
+    { color: "#a52a2a", bg: "#f4dada" }, { color: "#daa520", bg: "#fbf0d4" },
+    { color: "#ff7f0e", bg: "#fff0db" }, { color: "#2ca02c", bg: "#e8f5e6" },
+    { color: "#d62728", bg: "#fce6e6" }, { color: "#00875a", bg: "#d8f0e6" },
 ];
 
 function escapeM(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => ({
         "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;",
     }[c]));
+}
+
+// El mateix llenguatge de progrés a totes les pantalles: primer el % de kg
+// pistolejats per l'SGA, després els productes fets. `pct` és null si
+// l'agrupació encara no s'ha sincronitzat mai amb el pistolejat.
+function textProgres(pct, fets, total) {
+    const prod = `${fets} de ${total} productes fets`;
+    return pct == null ? prod : `${pct}% pistolejat · ${prod}`;
 }
 
 function fmtHoraCurta(iso) {
@@ -77,7 +88,6 @@ function _pintaLlistaItems(items) {
     ul.innerHTML = "";
     for (const it of items) {
         const li = document.createElement("li");
-        const pendents = (it.n_productes || 0) - (it.n_preparats || 0);
         const tancada = _isTancada(it);
         const acabada = !tancada && _isAcabada(it);
         const finalitzada = tancada || acabada;
@@ -96,7 +106,7 @@ function _pintaLlistaItems(items) {
                 <div class="meta">
                     ${escapeM(fmtData(it.ts))} ${creador} · ${it.n_carregues} càrregues · ${it.n_productes} productes · ${fmtN.format(it.total_palets_fisics)} palets
                 </div>
-                <div class="meta progres">${it.n_preparats || 0} preparats / ${pendents} pendents</div>
+                <div class="meta progres">${textProgres(it.pct_pistolejat, it.n_preparats || 0, it.n_productes || 0)}</div>
             </a>`;
         ul.appendChild(li);
     }
@@ -194,9 +204,12 @@ function textPistolejat(pr) {
 function calculaProgres() {
     const total = (magState.obj?.resultat?.productes || []).length;
     const fets = magState.progres ? magState.progres.n_fets : 0;
-    $m("#mag-prep-count").textContent = fets;
-    $m("#mag-total").textContent = total;
     const pct = magState.progres ? magState.progres.percent : 0;
+    // El número gran és el % pistolejat (el que omple la barra); a sota, els
+    // productes fets. Abans "0 / 3 fets" sobre una barra al 35% es contradeien.
+    $m("#mag-progres-pct").textContent = magState.progres ? `${pct}%` : "—";
+    $m("#mag-progres-sub").textContent = magState.progres
+        ? textProgres(null, fets, total) : "";
     const fill = $m("#mag-progres-fill");
     if (fill) fill.style.width = `${pct}%`;
     const resum = magState.obj?.resultat;
@@ -205,7 +218,12 @@ function calculaProgres() {
             `${resum.carregues?.length || 0} càrregues · ${fmtN.format(resum.total_sacs || 0)} sacs · ${fmtN.format(resum.total_palets_fisics || 0)} palets`;
     }
     const creadorEl = $m("#mag-creador-nom");
-    if (creadorEl) creadorEl.textContent = magState.obj?.created_by_nom || "—";
+    if (creadorEl) {
+        // Sense nom (agrupacions d'abans de l'auth) no diem "Creada per —".
+        creadorEl.textContent = magState.obj?.created_by_nom || "";
+        const p = creadorEl.closest(".mag-creador");
+        if (p) p.hidden = !magState.obj?.created_by_nom;
+    }
 
     // Feedback en arribar a tot fet (toast + vibració). Només a la transició,
     // no a cada render ni si ja estava acabada en obrir la pantalla.

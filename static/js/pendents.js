@@ -113,7 +113,10 @@ function pintaResum(totals) {
     const text = document.getElementById("pend-resum-text");
     const fill = document.getElementById("pend-resum-fill");
     const box = document.getElementById("pend-resum-box");
-    text.textContent = totals.n_linies ? `${totals.n_pendents} línies · ${totals.percent}%` : "—";
+    // Com a la preparació: el % pistolejat en gran i, a sota, el que falta.
+    text.textContent = totals.n_linies ? `${totals.percent}%` : "—";
+    document.getElementById("pend-resum-sub").textContent = totals.n_linies
+        ? `pistolejat · ${totals.n_pendents} línies per fer` : "";
     fill.style.width = `${totals.percent}%`;
     box.classList.toggle("is-acabada", totals.n_linies > 0 && totals.n_pendents === 0);
 }

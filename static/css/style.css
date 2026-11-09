@@ -35,6 +35,19 @@
 /* L'atribut `hidden` sempre amaga, encara que la classe posi `display`
    (p. ex. `.btn { display: inline-flex }` feia visible un botó amagat). */
 [hidden] { display: none !important; }
+/* Distingeix aquesta app de la variant Kais, que funciona en paral·lel. */
+.badge-variant {
+    display: inline-block;
+    margin-left: .35rem;
+    padding: .1rem .5rem;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: #fff;
+    background: #0d6efd;
+    border-radius: 4px;
+    vertical-align: middle;
+}
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -175,7 +188,7 @@ body {
     padding: .15rem .55rem;
     border-radius: 999px;
 }
-.user-menu-rol-admin    { background: #b7791f; }
+.user-menu-rol-admin    { background: #b45309; }
 .user-menu-rol-oficina  { background: var(--primary); }
 .user-menu-rol-magatzem { background: #2f855a; }
 

@@ -13,6 +13,9 @@
 <header class="mag-header">
     <div class="container mag-header-row">
         <div>
+            {% if not current_user or current_user.rol in ('admin', 'oficina') %}
+            <a href="/" class="mag-back">← Agrupació de càrregues</a>
+            {% endif %}
             <h1>📦 Preparació de càrregues</h1>
             <p class="mag-subtitle">Tria una agrupació desada per començar</p>
         </div>
@@ -33,7 +36,8 @@
     </div>
     <ul id="mag-llista" class="mag-llista"></ul>
     <p id="mag-buit" class="mag-empty" hidden>
-        Cap agrupació desada. Vés a l'app principal per crear-ne una.
+        Cap agrupació desada.
+        {% if not current_user or current_user.rol in ('admin', 'oficina') %}<a href="/">Fes-ne una a l'Agrupació de càrregues</a>.{% else %}L'oficina n'ha de desar una primer.{% endif %}
     </p>
     <p id="mag-totes-acabades" class="mag-empty" hidden>
         🎉 Totes les agrupacions desades estan finalitzades. Activa "Mostra també les finalitzades" per veure-les.

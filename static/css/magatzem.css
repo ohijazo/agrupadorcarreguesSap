@@ -65,6 +65,13 @@
     transition: width .25s ease;
 }
 /* Estat 100% — feedback visual unequívoc quan tots els productes són preparats */
+.mag-progres-sub {
+    margin-top: .3rem;
+    font-size: .9rem;
+    text-align: right;
+    color: rgba(255, 255, 255, .85);
+    font-variant-numeric: tabular-nums;
+}
 .mag-progres-box.is-acabada .mag-progres-text {
     color: #4ade80;
 }
@@ -145,7 +152,7 @@
     border-radius: 999px;
     vertical-align: middle;
 }
-.badge-acabada { background: #38a169; }
+.badge-acabada { background: #276749; }
 .badge-tancada { background: #c2410c; }
 
 /* Llista d'agrupacions desades */
@@ -316,7 +323,7 @@
     align-items: flex-end;
     gap: .5rem;
 }
-.pend-estat-sense_dades { background: #718096; }
+.pend-estat-sense_dades { background: #4a5568; }
 /* Quadrat per marcar a mà: només surt al paper (vegeu @media print) */
 .mag-prep-check { display: none; }
 .mag-pist { display: flex; flex-direction: column; gap: .1rem; max-width: 28rem; }
@@ -335,9 +342,9 @@
 @media (max-width: 600px) {
     .mag-carrega-row { flex-wrap: wrap; }
 }
-.mag-carrega-estat.is-parcial { background: #b7791f; }
-.mag-carrega-estat.is-complet { background: #38a169; }
-.mag-carrega-estat.is-sense_dades { background: #718096; }
+.mag-carrega-estat.is-parcial { background: #b45309; }
+.mag-carrega-estat.is-complet { background: #276749; }
+.mag-carrega-estat.is-sense_dades { background: #4a5568; }
 .mag-actualitzat { color: #5a6675; font-size: .92rem; }
 .mag-pist-info { margin: 1rem 0 .5rem; color: #5a6675; font-size: .95rem; }
 
@@ -690,14 +697,15 @@
 /* ===== Traçabilitat d'usuari ============================================ */
 
 /* Capçalera de magatzem_prep — línia "Creada per X" */
+/* Va sobre la capçalera blau fosc: text clar (el gris d'abans quedava a 2,4:1). */
 .mag-creador {
     margin: 2px 0 0 0;
     font-size: 0.85rem;
-    color: var(--text-muted, #6b7280);
+    color: rgba(255, 255, 255, .8);
 }
 .mag-creador #mag-creador-nom {
     font-weight: 600;
-    color: var(--text-secondary, #374151);
+    color: #fff;
 }
 
 /* Card de producte preparat — "✓ Operari · 14:32" sota les càrregues */
@@ -959,8 +967,8 @@
     white-space: nowrap;
 }
 .pend-estat-pendent { background: #c53030; }
-.pend-estat-parcial { background: #b7791f; }
-.pend-estat-complet { background: #38a169; }
+.pend-estat-parcial { background: #b45309; }
+.pend-estat-complet { background: #276749; }
 
 @media (max-width: 640px) {
     .pend-linia { grid-template-columns: 1fr auto; }
