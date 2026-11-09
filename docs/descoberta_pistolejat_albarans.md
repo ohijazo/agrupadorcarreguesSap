@@ -96,3 +96,13 @@ la comanda a CONFIRMADA. Per tant:
 - **pendents de pistolejar:** el càlcul (només files amb `U_TargetEntry` NULL) és
   correcte tal com està;
 - **cancel·lació des de l'app:** no ha de tocar `@SEIOPIC`.
+
+## Preparació d'agrupacions (novembre de 2026)
+
+El pistolejat substitueix el checklist manual de la preparació. Per poder donar
+per fet un producte que ja té albarà, `obtenir_dades_pistolejat` admet
+`incloure_tancades=True`: llegeix també les comandes i línies tancades (no les
+cancel·lades). Una línia amb albarà té `OpenInvQty = 0`, de manera que la
+mateixa fórmula (`OpenInvQty − pistolejat sense albarà`) la dona per completa.
+Si l'albarà es cancel·la, l'`OpenInvQty` torna a pujar i el producte torna a
+pendent. Vegeu `preparacio_sga.py` i `dades/pistolejat.py:progres_agrupacio`.

@@ -12,11 +12,13 @@ def _trossos(valors: list[int]):
         yield valors[n:n + _TROS]
 
 
-def obtenir_dades_pistolejat(carregues: list[int]) -> dict:
+def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False) -> dict:
     """Linies obertes de les comandes obertes d'aquestes carregues, les
     lectures de `@SEIOPIC` encara sense albara, i l'ultim estat de cada comanda.
 
-    `carregues` son DocEntry de `@SEI_ORDENCARGA`.
+    `carregues` son DocEntry de `@SEI_ORDENCARGA`. Amb `incloure_tancades`
+    tambe hi surten les comandes i linies tancades (no les cancel·lades): una
+    linia amb albara te `kg_oberts = 0` i per tant es dona per feta.
     """
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
@@ -39,8 +41,8 @@ def obtenir_dades_pistolejat(carregues: list[int]) -> dict:
                 FROM   ORDR o WITH (NOLOCK)
                 JOIN   RDR1 l WITH (NOLOCK) ON l.DocEntry = o.DocEntry
                 WHERE  o.U_SEIOrdCargId IN ({ph})
-                  AND  o.DocStatus = 'O' AND o.CANCELED = 'N'
-                  AND  l.LineStatus = 'O'
+                  AND  o.CANCELED = 'N'
+                  {"" if incloure_tancades else "AND o.DocStatus = 'O' AND l.LineStatus = 'O'"}
                 ORDER  BY o.DocEntry, l.LineNum
             """, *tros).fetchall()
             for r in rows:

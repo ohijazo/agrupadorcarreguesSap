@@ -74,6 +74,7 @@ from valida import (  # noqa: E402
     valida_codi, valida_int, valida_llista_carregues, valida_rang_dates,
 )
 import agrupacions_store  # noqa: E402
+import preparacio_sga  # noqa: E402
 
 # --- Logging amb rotació -------------------------------------------------
 _log_handler = RotatingFileHandler(
@@ -1051,36 +1052,23 @@ def api_agrupacions_version():
     return jsonify({"v": agrupacions_store.get_version()})
 
 
-@app.route("/api/agrupacions/<id_>/producte", methods=["PATCH"])
+@app.route("/api/agrupacions/<id_>/pistolejat")
 @auth.requires_rol("admin", "oficina", "magatzem")
-def api_agrupacions_producte(id_):
-    body = request.get_json(silent=True) or {}
-    art_codi, err = valida_codi(body.get("art_codi"), "art_codi", max_len=20)
-    if err:
-        return _err_validacio(err)
-    preparat = bool(body.get("preparat"))
-    obj = agrupacions_store.marca_producte(
-        id_, art_codi, preparat,
-        ip=request.remote_addr,
-        marcat_per_id=session.get("user_id"),
-    )
+def api_agrupacions_pistolejat(id_):
+    """Progres de la preparacio segons el pistolejat de l'SGA. Substitueix el
+    checklist manual: de pas, desa els productes fets a `productes_preparats`
+    (vegeu preparacio_sga.py)."""
+    obj = agrupacions_store.obtenir(id_)
     if obj is None:
         return jsonify({"error": "Agrupació no trobada."}), 404
-    log.info(
-        "audit marca agrupacio=%s art=%s preparat=%s ip=%s",
-        id_, art_codi, preparat, request.remote_addr,
-    )
-    return jsonify({"ok": True, "n_preparats": len(obj.get("productes_preparats") or [])})
-
-
-@app.route("/api/agrupacions/<id_>/reset-preparats", methods=["POST"])
-@auth.requires_rol("admin", "oficina", "magatzem")
-def api_agrupacions_reset_preparats(id_):
-    obj = agrupacions_store.reset_preparats(id_, ip=request.remote_addr)
-    if obj is None:
-        return jsonify({"error": "Agrupació no trobada."}), 404
-    log.info("reset preparats agrupacio=%s ip=%s", id_, request.remote_addr)
-    return jsonify({"ok": True, "n_preparats": 0})
+    try:
+        return jsonify(preparacio_sga.progres_i_sincronitza(obj))
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error a pistolejat de l'agrupacio %s", id_)
+        return _err_db()
+    except Exception:
+        log.exception("pistolejat de l'agrupacio %s", id_)
+        return _err_genèric()
 
 
 @app.route("/api/agrupacions/<id_>/finalitzar", methods=["POST"])

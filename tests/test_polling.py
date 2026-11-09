@@ -84,7 +84,8 @@ def test_version_augmenta_al_eliminar(client):
     assert v_after_del > v_after_save
 
 
-def test_version_augmenta_al_marcar_producte(client):
+def test_version_augmenta_quan_l_sga_marca_un_producte(client):
+    import agrupacions_store
     tok = _csrf_token(client)
     r = client.post(
         "/api/agrupacions",
@@ -93,19 +94,10 @@ def test_version_augmenta_al_marcar_producte(client):
     )
     id_ = r.get_json()["id"]
     v0 = client.get("/api/agrupacions/version").get_json()["v"]
-    # Marcar
-    client.patch(
-        f"/api/agrupacions/{id_}/producte",
-        json={"art_codi": "A", "preparat": True},
-        headers={"X-CSRF-Token": tok},
-    )
+    agrupacions_store.sincronitza_preparats(id_, {"A"})
     v1 = client.get("/api/agrupacions/version").get_json()["v"]
     assert v1 > v0
-    # Desmarcar també augmenta
-    client.patch(
-        f"/api/agrupacions/{id_}/producte",
-        json={"art_codi": "A", "preparat": False},
-        headers={"X-CSRF-Token": tok},
-    )
+    # Si torna a pendent (albara cancel·lat) tambe augmenta
+    agrupacions_store.sincronitza_preparats(id_, set())
     v2 = client.get("/api/agrupacions/version").get_json()["v"]
     assert v2 > v1

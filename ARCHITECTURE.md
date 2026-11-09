@@ -148,6 +148,12 @@ Vanilla JS sense framework. Tres "modes":
   - El càlcul és a `dades/pistolejat.py`, que és pur i no toca SAP. Les dades crues surten de `obtenir_dades_pistolejat`, que passa pel commutador SQL/SL igual que la resta. Vegeu `docs/descoberta_pistolejat_albarans.md`.
   - Polling cada 15 s amb la pestanya visible. Si SAP falla, es manté a la pantalla l'última llista bona.
 
+- **Preparació d'una agrupació (`/magatzem/<id>`)** — només lectura. Fins al novembre de 2026 era un checklist que l'operari marcava a mà; ara el progrés surt del pistolejat de l'SGA:
+  - `preparacio_sga.py` llegeix `obtenir_dades_pistolejat(carregues, incloure_tancades=True)` i calcula per producte amb `dades.pistolejat.progres_agrupacio`. Un producte és fet quan, a totes les línies de comanda de les seves càrregues, `kg_oberts − pistolejat ≤ 0`: tot pistolejat o ja amb albarà. Es compara en kg; els sacs només es mostren.
+  - Els fets es desen a `productes_preparats` (`agrupacions_store.sincronitza_preparats`, `marcat_ip='SGA'`, sense usuari). Així el llistat de magatzem, `/control`, la planificació i `v_agrupacions_estat` funcionen igual que abans. Si es cancel·la un albarà, el producte se'n treu.
+  - La sincronització es fa en dos llocs. La pantalla oberta crida `/api/agrupacions/<id>/pistolejat` cada 15 s. El timer `agrupacio-carregues-sap-pistolejat` (cada 2 min, `scripts/sincronitzar_pistolejat.py`) cobreix les agrupacions no tancades dels últims 30 dies amb una sola consulta a SAP.
+  - Les agrupacions tancades a mà no es toquen.
+
 - **Gestió d'albarans (`/albarans`, `static/js/albarans.js`)** — només admin i oficina, entrada pròpia al menú d'usuari. Fins al novembre de 2026 era una secció dins la preparació; ara la preparació ja no en mostra res.
   - Llista els albarans (`ODLN`) amb càrrega creats per l'SGA (`ALBARANS_SGA_USUARIS`) en un rang de dates (avui, ahir, 7 dies, 30 dies o personalitzat, 31 dies com a màxim), amb cerca per client, albarà o càrrega. La cerca es fa al navegador.
   - Botó "📄 PDF" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_dates`, que passa pel commutador SQL/SL.
@@ -179,6 +185,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/calendari` | tots auth | |
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
+| `GET` | `/api/agrupacions/<id>/pistolejat` | tots auth | progrés de la preparació segons el pistolejat de l'SGA; desa els fets a `productes_preparats` |
 | `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
 | `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |
 | `GET` | `/albarans/<docentry>/pdf` | admin, oficina | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |

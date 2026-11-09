@@ -305,12 +305,12 @@
             </tr>
             <tr>
                 <td><strong>Oficina</strong></td>
-                <td>Selecciona càrregues, fa agrupacions, les desa i les imprimeix. Calendari i checklist del magatzem en lectura.</td>
+                <td>Selecciona càrregues, fa agrupacions, les desa i les imprimeix. Calendari i preparació del magatzem en lectura.</td>
                 <td>Pàgina principal.</td>
             </tr>
             <tr>
                 <td><strong>Magatzem</strong></td>
-                <td>Obre una agrupació al tablet i marca productes com a "preparats" a mesura que els carrega. Pot desfer les seves marques. No pot crear ni eliminar agrupacions ni veure la cerca de càrregues.</td>
+                <td>Obre una agrupació al tablet i hi veu què queda per pistolejar. El progrés surt del pistolejat de l'SGA; no es marca a mà. No pot crear ni eliminar agrupacions ni veure la cerca de càrregues.</td>
                 <td>Directament a <code>/magatzem</code> (llista d'agrupacions pendents).</td>
             </tr>
         </tbody>
@@ -405,12 +405,12 @@
     <div class="help-info">
         <strong>Tres estats visuals d'agrupació:</strong>
         <ul style="margin:.4rem 0 0; padding-left:1.25rem;">
-            <li><strong style="color:var(--warning);">● Pic groc / fila groga</strong> — <em>Ja agrupada</em>. L'agrupació existeix però cap producte s'ha preparat encara al magatzem.</li>
-            <li><strong style="color:#d97706;">◐ Pic ambar / fila ambar</strong> — <em>Agrupada (en preparació · N/total)</em>. El magatzem ja ha començat a marcar productes com a preparats.</li>
-            <li><strong style="color:var(--success-strong);">✓ Pic verd / fila verda</strong> — <em>Agrupada (acabada)</em>. Tots els productes preparats; la feina al magatzem és feta.</li>
+            <li><strong style="color:var(--warning);">● Pic groc / fila groga</strong> — <em>Ja agrupada</em>. L'agrupació existeix però l'SGA encara no ha acabat cap producte.</li>
+            <li><strong style="color:#d97706;">◐ Pic ambar / fila ambar</strong> — <em>Agrupada (en preparació · N/total)</em>. L'SGA ja ha acabat de pistolejar alguns productes.</li>
+            <li><strong style="color:var(--success-strong);">✓ Pic verd / fila verda</strong> — <em>Agrupada (acabada)</em>. Tots els productes pistolejats o amb albarà; la feina al magatzem és feta.</li>
         </ul>
         <p style="margin:.5rem 0 0;">En tots tres casos la càrrega <strong>està bloquejada</strong> per no poder duplicar-la.</p>
-        <p style="margin:.3rem 0 0;">La llista <strong>s'actualitza automàticament cada 5 segons</strong> sense que hagis de refrescar — quan algú del magatzem marca un producte, ho veuràs reflectit immediatament.</p>
+        <p style="margin:.3rem 0 0;">La llista <strong>s'actualitza automàticament cada 5 segons</strong> sense que hagis de refrescar — quan l'SGA acaba un producte, ho veuràs reflectit en un parell de minuts.</p>
     </div>
 
     <h3>2.3 Seleccionar càrregues</h3>
@@ -476,13 +476,13 @@
 
     <div class="help-info">
         <strong>✓ Productes ja preparats:</strong> si obres una agrupació desada que el magatzem està preparant,
-        cada producte que ja s'ha marcat al checklist surt amb un <strong style="color:var(--success);">✓ verd</strong>
+        cada producte que l'SGA ja ha acabat surt amb un <strong style="color:var(--success);">✓ verd</strong>
         davant del codi i fons verd suau a la fila. Així pots veure d'un cop d'ull què queda per preparar.
     </div>
 
     <h3>Botons del modal</h3>
     <ul>
-        <li><strong>📋 Checklist preparació</strong> — visible només quan l'agrupació ja és desada. Obre la pantalla de magatzem amb el check per cada producte.</li>
+        <li><strong>📋 Checklist preparació</strong> — visible només quan l'agrupació ja és desada. Obre la pantalla de magatzem amb l'estat del pistolejat de cada producte.</li>
         <li><strong>🖨 Imprimir</strong> — genera un full A4 amb el layout del magatzem (per portar a la pista).</li>
         <li><strong>⭐ Desa</strong> — guarda l'agrupació amb un nom. Pots marcar-la com a plantilla recurrent.</li>
         <li><strong>Exportar CSV</strong> — fitxer descarregable per importar a Excel o un altre sistema.</li>
@@ -555,56 +555,34 @@
 
     <h3>7.2 Pantalla de preparació</h3>
     <p>
-        En obrir una agrupació, cada producte té una card gran amb un <strong>check 64×64</strong> a la dreta
-        que l'operari toca per marcar-lo com a preparat. La card es torna verda i passa al final de la llista.
+        En obrir una agrupació, cada producte té una card gran amb el seu estat. <strong>No cal marcar res:</strong>
+        el que està fet surt del <strong>pistolejat de l'SGA</strong> a SAP. Un producte està <em>fet</em> quan
+        tot el que demanen les comandes de les seves càrregues s'ha pistolejat o ja té l'albarà fet.
+        Aleshores la card es torna verda i passa al final de la llista.
     </p>
-
-    <div class="mag-mockup">
-        <div>
-            <span class="mag-mockup-title">PINSO POLLETS</span>
-            <span class="mag-mockup-codi">123450</span>
-            <div style="font-size:.78rem; color:var(--gray-700); margin-top:.35rem;">
-                ● Mascó 14 #1234 · 80 sacs · 2000 kg
-            </div>
-        </div>
-        <div style="text-align:right;">
-            <div class="mag-mockup-sacs">80 <span style="font-size:.75rem; font-weight:600; color:var(--gray-700);">sacs</span></div>
-            <div class="mag-mockup-check" style="margin-top:.5rem;">　</div>
-        </div>
-    </div>
-
-    <div class="mag-mockup is-prep">
-        <div>
-            <span class="mag-mockup-title" style="text-decoration:line-through;">FARINA T55</span>
-            <span class="mag-mockup-codi">120100</span>
-            <div style="font-size:.78rem; color:var(--gray-700); margin-top:.35rem;">
-                ● Escapa #2240 · 40 sacs · 1000 kg
-            </div>
-        </div>
-        <div style="text-align:right;">
-            <div class="mag-mockup-sacs" style="color:var(--success);">40 <span style="font-size:.75rem; font-weight:600; color:var(--gray-700);">sacs</span></div>
-            <div class="mag-mockup-check is-on" style="margin-top:.5rem;">✓</div>
-        </div>
-    </div>
-
-    <h3>7.3 Feedback tàctil</h3>
     <ul>
-        <li>En marcar o desmarcar un producte, la tablet <strong>vibra</strong> breument (60 ms al marcar, patró al desmarcar) per confirmar el toc.</li>
-        <li>Si vas amb guants, el botó és prou gran perquè es pugui premar amb un dit gruixut.</li>
+        <li><strong>Pendent</strong> (vermell) — encara no s'ha pistolejat res.</li>
+        <li><strong>A mitges</strong> (taronja) — s'ha pistolejat una part. Sota el producte surt "Pistolejat: X de Y sacs".</li>
+        <li><strong>Fet</strong> (verd) — tot pistolejat o amb albarà.</li>
+        <li><strong>Sense dades a SAP</strong> (gris) — el producte no apareix a cap comanda de les càrregues.</li>
     </ul>
-
-    <h3>7.4 Sincronització automàtica</h3>
     <p>
-        Cada 5 segons l'app comprova si una altra tablet ha actualitzat l'agrupació. Si tu acabes de tocar
-        un check, la sincronia es <strong>difereix 1,5 s</strong> per no interrompre la teva interacció.
+        Cada càrrega del producte porta el seu propi indicador (✓ o "X de Y sacs"). Si es cancel·la un albarà,
+        el producte torna a sortir pendent.
     </p>
 
-    <h3>7.5 Botons de la toolbar</h3>
+    <h3>7.3 Actualització automàtica</h3>
+    <p>
+        La pantalla consulta SAP cada 15 segons mentre està oberta. Encara que ningú no la tingui oberta,
+        el servidor actualitza cada 2 minuts el llistat del magatzem i el Control d'agrupacions.
+        Si SAP no respon, es manté l'última dada bona i surt un avís.
+    </p>
+
+    <h3>7.4 Botons de la toolbar</h3>
     <ul>
-        <li><strong>Amaga els preparats</strong> — deixa només els pendents per veure ràpid què queda.</li>
-        <li><strong>↶ Desfés preparats</strong> — visible només si hi ha algun productes marcat. Desmarca <em>tots</em> els productes (amb confirmació).</li>
+        <li><strong>Amaga els fets</strong> — deixa només els pendents per veure ràpid què queda.</li>
         <li><strong>🖨 Imprimir</strong> — imprimeix la llista amb quadrats per marcar a mà al paper.</li>
-        <li><strong>↻ Refresca</strong> — sincronia immediata.</li>
+        <li><strong>↻ Refresca</strong> — torna a consultar SAP ara mateix.</li>
     </ul>
 
     <!-- 8. Impressió -->
@@ -658,13 +636,13 @@
             </tr>
             <tr>
                 <td><strong>Productes preparats</strong></td>
-                <td>Articles que l'operari ha marcat com a "ja carregats al palet" al magatzem. Persistents al servidor.</td>
+                <td>Articles que l'SGA ja ha pistolejat del tot o que ja tenen albarà. Els desa el servidor automàticament.</td>
             </tr>
             <tr>
                 <td><strong>Estats d'una agrupació</strong></td>
                 <td>
                     <em>Ja agrupada</em> (groc): cap producte preparat encara.<br>
-                    <em>En preparació</em> (ambar, N/total): el magatzem ja ha marcat alguns productes.<br>
+                    <em>En preparació</em> (ambar, N/total): l'SGA ja ha acabat alguns productes.<br>
                     <em>Acabada</em> (verd): tots els productes preparats.
                 </td>
             </tr>
@@ -673,7 +651,7 @@
                 <td>
                     <em>Admin</em>: tot + gestió d'usuaris (<code>/admin/usuaris</code>).<br>
                     <em>Oficina</em>: cerca, agrupar, desar, eliminar.<br>
-                    <em>Magatzem</em>: només checklist a <code>/magatzem</code>.
+                    <em>Magatzem</em>: només la preparació a <code>/magatzem</code>.
                 </td>
             </tr>
             <tr>

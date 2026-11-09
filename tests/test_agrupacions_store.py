@@ -63,8 +63,7 @@ def test_index_indica_carrega_en_agrupacio_activa(store_tmp):
 
 def test_index_marca_finalitzada_quan_tots_preparats(store_tmp):
     info = agrupacions_store.guardar("Acabada", [_carrega("2026/01/0000999")], _resultat(("A", "B")))
-    agrupacions_store.marca_producte(info["id"], "A", True)
-    agrupacions_store.marca_producte(info["id"], "B", True)
+    agrupacions_store.sincronitza_preparats(info["id"], {"A", "B"})
     idx = agrupacions_store.index_carregues_agrupades()
     entries = idx["2026/01/0000999"]
     assert entries[0]["finalitzada"] is True
@@ -73,7 +72,7 @@ def test_index_marca_finalitzada_quan_tots_preparats(store_tmp):
 def test_index_diferencia_activa_de_finalitzada(store_tmp):
     a = agrupacions_store.guardar("Activa", [_carrega("2026/01/0000001")], _resultat(("X",)))
     b = agrupacions_store.guardar("Acabada", [_carrega("2026/01/0000002")], _resultat(("Y",)))
-    agrupacions_store.marca_producte(b["id"], "Y", True)
+    agrupacions_store.sincronitza_preparats(b["id"], {"Y"})
     idx = agrupacions_store.index_carregues_agrupades()
     assert idx["2026/01/0000001"][0]["finalitzada"] is False
     assert idx["2026/01/0000002"][0]["finalitzada"] is True
@@ -94,83 +93,60 @@ def test_index_es_recalcula_despres_eliminar(store_tmp):
     assert "2026/01/0000007" not in agrupacions_store.index_carregues_agrupades()
 
 
-# --- reset_preparats ------------------------------------------------------
+# --- sincronitza_preparats (pistolejat de l'SGA) ---------------------------
 
-def test_reset_preparats_desfas_tot(store_tmp):
+def test_sincronitza_afegeix_i_treu(store_tmp):
     info = agrupacions_store.guardar("X", [_carrega()], _resultat(("A", "B", "C")))
-    agrupacions_store.marca_producte(info["id"], "A", True)
-    agrupacions_store.marca_producte(info["id"], "B", True)
-    obj = agrupacions_store.reset_preparats(info["id"])
-    assert obj is not None
-    assert obj["productes_preparats"] == []
-    obj2 = agrupacions_store.obtenir(info["id"])
-    assert obj2["productes_preparats"] == []
+    r = agrupacions_store.sincronitza_preparats(info["id"], {"A", "B"})
+    assert r == {"afegits": ["A", "B"], "trets": []}
+    obj = agrupacions_store.obtenir(info["id"])
+    assert obj["productes_preparats"] == ["A", "B"]
+    # Sense usuari: ho ha fet l'SGA.
+    assert obj["preparats_detall"]["A"]["per_id"] is None
+
+    # Albara cancel·lat: B torna a estar pendent.
+    r = agrupacions_store.sincronitza_preparats(info["id"], {"A", "C"})
+    assert r == {"afegits": ["C"], "trets": ["B"]}
+    assert agrupacions_store.obtenir(info["id"])["productes_preparats"] == ["A", "C"]
 
 
-def test_reset_preparats_id_inexistent(store_tmp):
-    assert agrupacions_store.reset_preparats("a" * 32) is None
+def test_sincronitza_sense_canvis_no_toca_la_versio(store_tmp):
+    info = agrupacions_store.guardar("X", [_carrega()], _resultat(("A",)))
+    agrupacions_store.sincronitza_preparats(info["id"], {"A"})
+    v = agrupacions_store.get_version()
+    assert agrupacions_store.sincronitza_preparats(info["id"], {"A"}) == {"afegits": [], "trets": []}
+    assert agrupacions_store.get_version() == v
 
 
-# --- Concurrència (file lock) -------------------------------------------
-
-def test_marca_producte_concurrent_no_perd_dades(store_tmp):
-    """Dos threads marquen articles DIFERENTS de la mateixa agrupació alhora.
-
-    Sense lock es perd una marcada (lost update). Amb portalocker tots dos
-    han de quedar al productes_preparats final.
-    """
-    import threading
-    info = agrupacions_store.guardar("X", [_carrega()], _resultat(("A", "B", "C", "D")))
-    id_ = info["id"]
-    barrier = threading.Barrier(2)
-
-    def marca(art):
-        barrier.wait()
-        agrupacions_store.marca_producte(id_, art, True)
-
-    t1 = threading.Thread(target=marca, args=("A",))
-    t2 = threading.Thread(target=marca, args=("B",))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
-
-    obj = agrupacions_store.obtenir(id_)
-    assert set(obj["productes_preparats"]) == {"A", "B"}
+def test_sincronitza_id_inexistent_o_invalid(store_tmp):
+    assert agrupacions_store.sincronitza_preparats("a" * 32, {"A"}) is None
+    assert agrupacions_store.sincronitza_preparats("../etc/passwd", {"A"}) is None
 
 
-def test_reset_no_corromp_si_concurrent_amb_marca(store_tmp):
-    """Reset + marca simultàniament: el fitxer final ha de quedar consistent
-    (no JSON corrupte). L'ordre pot variar però l'objecte ha de ser vàlid.
-    """
+def test_sincronitza_concurrent_queda_consistent(store_tmp):
+    """Pantalla i timer sincronitzen alhora: no peta i queda un dels dos estats."""
     import threading
     info = agrupacions_store.guardar("Y", [_carrega()], _resultat(("A", "B")))
     id_ = info["id"]
-    agrupacions_store.marca_producte(id_, "A", True)
     barrier = threading.Barrier(2)
 
-    def reset():
+    def sincro(fets):
         barrier.wait()
-        agrupacions_store.reset_preparats(id_)
+        agrupacions_store.sincronitza_preparats(id_, fets)
 
-    def marca():
-        barrier.wait()
-        agrupacions_store.marca_producte(id_, "B", True)
-
-    t1 = threading.Thread(target=reset)
-    t2 = threading.Thread(target=marca)
+    t1 = threading.Thread(target=sincro, args=({"A"},))
+    t2 = threading.Thread(target=sincro, args=({"A", "B"},))
     t1.start(); t2.start()
     t1.join(); t2.join()
-
-    obj = agrupacions_store.obtenir(id_)
-    assert obj is not None
-    assert isinstance(obj.get("productes_preparats"), list)
-    # Sigui quin sigui l'ordre, el set és subset de {A, B}
-    assert set(obj["productes_preparats"]).issubset({"A", "B"})
+    assert set(agrupacions_store.obtenir(id_)["productes_preparats"]) in ({"A"}, {"A", "B"})
 
 
-def test_id_invalid_a_modificar_no_peta(store_tmp):
-    """Un id que no compleix el regex ha de retornar None, no llançar."""
-    assert agrupacions_store.marca_producte("../etc/passwd", "A", True) is None
-    assert agrupacions_store.reset_preparats("../etc/passwd") is None
+def test_llistar_per_sincronitzar_salta_tancades_i_plantilles(store_tmp):
+    viva = agrupacions_store.guardar("Viva", [_carrega("2026/01/0000001")], _resultat(("A",)))
+    tancada = agrupacions_store.guardar("Tancada", [_carrega("2026/01/0000002")], _resultat(("A",)))
+    agrupacions_store.marcar_finalitzada(tancada["id"])
+    ids = {o["id"] for o in agrupacions_store.llistar_per_sincronitzar(30)}
+    assert viva["id"] in ids and tancada["id"] not in ids
 
 
 # --- Plantilles ---------------------------------------------------------
@@ -240,15 +216,15 @@ def test_version_creix_amb_cada_escriptura(store_tmp):
     v1 = agrupacions_store.get_version()
     assert v1 > v0
 
-    agrupacions_store.marca_producte(info["id"], "A", True)
+    agrupacions_store.sincronitza_preparats(info["id"], {"A"})
     v2 = agrupacions_store.get_version()
     assert v2 > v1
 
-    agrupacions_store.marca_producte(info["id"], "A", False)
+    agrupacions_store.sincronitza_preparats(info["id"], set())
     v3 = agrupacions_store.get_version()
     assert v3 > v2
 
-    agrupacions_store.reset_preparats(info["id"])
+    agrupacions_store.marcar_finalitzada(info["id"])
     v4 = agrupacions_store.get_version()
     assert v4 > v3
 

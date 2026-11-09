@@ -18,7 +18,7 @@ PISTOLEJATS = "U_SEIOPIC"
 ESTATS = "U_SEIESTATSCOM"
 
 
-def obtenir_dades_pistolejat(carregues: list[int]) -> dict:
+def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False) -> dict:
     """Vegeu la versio SQL. Una crida per tros de 40 carregues a `Orders`, i
     una per tros de 40 comandes a cadascuna de les dues UDT."""
     ids = sorted({int(c) for c in carregues or []})
@@ -32,7 +32,7 @@ def obtenir_dades_pistolejat(carregues: list[int]) -> dict:
             COMANDES,
             select="DocEntry,DocNum,CardCode,CardName,U_SEIOrdCargId,DocumentLines",
             filtre=od.i(od.qualsevol_num("U_SEIOrdCargId", tros),
-                        "DocumentStatus eq 'bost_Open'",
+                        "" if incloure_tancades else "DocumentStatus eq 'bost_Open'",
                         "Cancelled eq 'tNO'"),
         ):
             linies = [
@@ -46,9 +46,9 @@ def obtenir_dades_pistolejat(carregues: list[int]) -> dict:
                     "kg_oberts": float(l.get("RemainingOpenInventoryQuantity") or 0),
                 }
                 for l in sorted(o.get("DocumentLines") or [], key=lambda x: x.get("LineNum") or 0)
-                if l.get("LineStatus") == "bost_Open"
+                if incloure_tancades or l.get("LineStatus") == "bost_Open"
             ]
-            if not linies:   # el JOIN del SQL tampoc no torna comandes sense linies obertes
+            if not linies:   # el JOIN del SQL tampoc no torna comandes sense linies
                 continue
             comandes[int(o["DocEntry"])] = {
                 "docentry": int(o["DocEntry"]),

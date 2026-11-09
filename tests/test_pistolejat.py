@@ -159,3 +159,81 @@ def test_pagina_no_la_tapa_la_ruta_d_agrupacio(client, monkeypatch):
     r = c.get("/magatzem/pendents")
     assert r.status_code == 200
     assert b"Pendents de pistolejar" in r.data
+
+
+# --- Progres d'una agrupacio (substitueix el checklist manual) -------------
+def _resultat(*productes):
+    """`productes`: (art_codi, [docentry de carrega, ...])."""
+    return {"productes": [
+        {"art_codi": art, "per_carrega": [{"carrega_id": f"SAP/1/{c}"} for c in cars]}
+        for art, cars in productes]}
+
+
+def _dues_comandes(l87, l98, pist=()):
+    return {
+        "comandes": [
+            {"docentry": 279, "docnum": 1, "carrega": 87, "cli_codi": "C1", "cli_nom": "", "linies": l87},
+            {"docentry": 330, "docnum": 2, "carrega": 98, "cli_codi": "C2", "cli_nom": "", "linies": l98},
+        ],
+        "pistolejats": list(pist),
+        "estats": {},
+    }
+
+
+def test_progres_res_pistolejat_es_pendent():
+    r = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0)]))
+    p = r["productes"]["33851"]
+    assert p["estat"] == "pendent" and p["kg_fets"] == 0 and p["sacs_total"] == 40
+    assert r["fets"] == [] and r["n_productes"] == 1 and r["percent"] == 0
+
+
+def test_progres_parcial_i_complet_pel_pistolejat():
+    res = _resultat(("33851", [87]))
+    p = calc.progres_agrupacio(res, _dades([_linia(0)], [{"comanda": 279, "linia": 0, "sacs": 10, "kg": 250}]))
+    assert p["productes"]["33851"]["estat"] == "parcial"
+    assert p["productes"]["33851"]["sacs_fets"] == 10 and p["percent"] == 25
+    p = calc.progres_agrupacio(res, _dades([_linia(0)], [{"comanda": 279, "linia": 0, "sacs": 40, "kg": 1000}]))
+    assert p["fets"] == ["33851"] and p["percent"] == 100
+
+
+def test_progres_linia_amb_albara_es_feta():
+    # Linia tancada: l'albara ja ha descomptat l'OpenInvQty i la lectura ja
+    # no compta (te TargetEntry), aixi que no arriba com a pistolejat.
+    r = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0, kg_oberts=0)]))
+    assert r["productes"]["33851"]["estat"] == "complet" and r["fets"] == ["33851"]
+
+
+def test_progres_albara_cancel_lat_torna_a_pendent():
+    # Albara cancel·lat: la linia es reobre sencera i la lectura apunta a
+    # l'albara cancel·lat (tampoc no arriba). Ha de tornar a sortir pendent.
+    r = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0)]))
+    assert r["productes"]["33851"]["estat"] == "pendent"
+
+
+def test_progres_mateix_article_a_dues_carregues():
+    res = _resultat(("33851", [87, 98]))
+    r = calc.progres_agrupacio(res, _dues_comandes([_linia(0, kg_oberts=0)], [_linia(0)]))
+    p = r["productes"]["33851"]
+    assert p["estat"] == "parcial" and p["kg_total"] == 2000 and p["kg_fets"] == 1000
+    assert p["per_carrega"]["SAP/1/87"]["estat"] == "complet"
+    assert p["per_carrega"]["SAP/1/98"]["estat"] == "pendent"
+    assert r["fets"] == []
+
+
+def test_progres_article_d_una_altra_carrega_no_compta():
+    # L'article 33851 de la carrega 98 no es d'aquest producte (nomes a la 87).
+    r = calc.progres_agrupacio(_resultat(("33851", [87])),
+                               _dues_comandes([_linia(0, kg_oberts=0)], [_linia(0)]))
+    assert r["fets"] == ["33851"]
+
+
+def test_progres_producte_sense_dades_no_es_fet():
+    r = calc.progres_agrupacio(_resultat(("33851", [87]), ("99999", [87])),
+                               _dades([_linia(0, kg_oberts=0)]))
+    assert r["productes"]["99999"]["estat"] == "sense_dades"
+    assert r["fets"] == ["33851"] and r["n_productes"] == 2
+
+
+def test_progres_granel_sense_sacs():
+    r = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0, sacs=0)]))
+    assert r["productes"]["33851"]["sacs_total"] is None

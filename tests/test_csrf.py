@@ -58,11 +58,6 @@ def test_delete_agrupacio_sense_csrf(client):
     assert r.status_code == 403
 
 
-def test_patch_producte_sense_csrf(client):
-    r = client.patch("/api/agrupacions/abc12345/producte", json={"art_codi": "X", "preparat": True})
-    assert r.status_code == 403
-
-
 # --- Endpoints protegits amb token vàlid → no 403 ------------------------
 def _csrf_token_from(client):
     """Helper: obté el valor de la cookie csrf_token. Compatible amb les

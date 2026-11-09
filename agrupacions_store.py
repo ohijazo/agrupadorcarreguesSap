@@ -7,8 +7,8 @@ endpoints Flask no hagin de canviar:
   llistar() -> list[dict]
   obtenir(id_) -> dict | None
   eliminar(id_) -> bool
-  marca_producte(id_, art_codi, preparat, ip=None) -> dict | None
-  reset_preparats(id_, ip=None) -> dict | None
+  sincronitza_preparats(id_, fets) -> dict | None   (els fets venen del pistolejat de l'SGA)
+  llistar_per_sincronitzar(dies=30) -> list[dict]
   index_carregues_agrupades() -> dict[carrega_id, list[{id, nom, ts, finalitzada}]]
   llistar_plantilles() -> list[dict]
 
@@ -274,7 +274,7 @@ def obtenir(id_: str) -> dict | None:
         return None
     sql = """
         SELECT a.id, a.nom, a.ts, a.plantilla, a.carregues, a.resultat,
-               a.plantilla_meta,
+               a.plantilla_meta, a.finalitzada_manual_at,
                a.created_by_id, u.nom AS created_by_nom,
                (SELECT array_agg(p.art_codi ORDER BY p.art_codi)
                 FROM productes_preparats p
@@ -315,6 +315,7 @@ def obtenir(id_: str) -> dict | None:
         "preparats_detall": preparats_detall,
         "created_by_id": r["created_by_id"],
         "created_by_nom": r["created_by_nom"],
+        "finalitzada_manual_at": _format_ts(r["finalitzada_manual_at"]) if r["finalitzada_manual_at"] else None,
     }
 
 
@@ -336,55 +337,69 @@ def eliminar(id_: str) -> bool:
 # ---------------------------------------------------------------------------
 # Productes preparats (magatzem)
 # ---------------------------------------------------------------------------
-def marca_producte(id_: str, art_codi: str, preparat: bool, ip: str | None = None,
-                   marcat_per_id: int | None = None) -> dict | None:
+def sincronitza_preparats(id_: str, fets: set[str] | list[str]) -> dict | None:
+    """Deixa `productes_preparats` igual que `fets`: els productes que el
+    pistolejat de l'SGA dona per fets (vegeu `dades.pistolejat.progres_agrupacio`).
+
+    Substitueix el checklist manual: afegeix els que falten (`marcat_ip='SGA'`,
+    sense usuari) i treu els que ja no estan fets (p. ex. un albara cancel·lat),
+    tambe les marques manuals antigues. Nomes toca la versio i l'auditoria si
+    hi ha canvis, perque es crida a cada refresc de la pantalla i des del timer.
+    Retorna {"afegits", "trets"} o None si l'agrupacio no existeix.
+    """
     try:
         _valida_id(id_)
     except ValueError:
         return None
+    fets = set(fets)
     with db.get_conn() as conn:
         with conn.cursor() as cur:
-            # Comprovem que l'agrupació existeix abans de tocar res
             cur.execute("SELECT 1 FROM agrupacions WHERE id = %s", (id_,))
             if not cur.fetchone():
                 return None
-            if preparat:
+            cur.execute("SELECT art_codi FROM productes_preparats WHERE agrupacio_id = %s", (id_,))
+            ara = {r[0] if isinstance(r, tuple) else r["art_codi"] for r in cur.fetchall()}
+            afegits = sorted(fets - ara)
+            trets = sorted(ara - fets)
+            for art in afegits:
                 cur.execute(
                     """
                     INSERT INTO productes_preparats (agrupacio_id, art_codi, marcat_ip, marcat_per_id)
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, 'SGA', NULL)
                     ON CONFLICT (agrupacio_id, art_codi) DO NOTHING
                     """,
-                    (id_, art_codi, ip, marcat_per_id),
+                    (id_, art),
                 )
-            else:
+            if trets:
                 cur.execute(
-                    "DELETE FROM productes_preparats WHERE agrupacio_id = %s AND art_codi = %s",
-                    (id_, art_codi),
+                    "DELETE FROM productes_preparats WHERE agrupacio_id = %s AND art_codi = ANY(%s)",
+                    (id_, trets),
                 )
-            _bump_version(cur)
-    audit.log(
-        "producte_marcat" if preparat else "producte_desmarcat",
-        target=id_,
-        detall={"art_codi": art_codi},
-    )
-    return obtenir(id_)
+            if afegits or trets:
+                _bump_version(cur)
+    if afegits:
+        audit.log("producte_fet_sga", target=id_, detall={"art_codis": afegits})
+    if trets:
+        audit.log("producte_desfet_sga", target=id_, detall={"art_codis": trets})
+    return {"afegits": afegits, "trets": trets}
 
 
-def reset_preparats(id_: str, ip: str | None = None) -> dict | None:
-    try:
-        _valida_id(id_)
-    except ValueError:
-        return None
-    with db.get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM agrupacions WHERE id = %s", (id_,))
-            if not cur.fetchone():
-                return None
-            cur.execute("DELETE FROM productes_preparats WHERE agrupacio_id = %s", (id_,))
-            _bump_version(cur)
-    audit.log("preparats_reset", target=id_)
-    return obtenir(id_)
+def llistar_per_sincronitzar(dies: int = 30) -> list[dict]:
+    """Agrupacions que el timer del pistolejat ha de mantenir al dia: no
+    plantilles, no tancades a ma i creades fa menys de `dies` dies. Hi entren
+    tambe les que ja surten acabades: un albara cancel·lat les pot reobrir, i
+    les marques manuals d'abans s'han de substituir. Retorna {id, carregues, resultat}."""
+    sql = """
+        SELECT a.id, a.carregues, a.resultat
+        FROM agrupacions a
+        WHERE a.plantilla = FALSE
+          AND a.finalitzada_manual_at IS NULL
+          AND a.ts >= NOW() - make_interval(days => %s)
+        ORDER BY a.ts DESC
+    """
+    return [{"id": _id_to_hex(r["id"]), "carregues": r["carregues"] or [],
+             "resultat": r["resultat"] or {}}
+            for r in db.fetch_all(sql, (int(dies),))]
 
 
 def reobrir(id_: str, user_id: int | None = None,

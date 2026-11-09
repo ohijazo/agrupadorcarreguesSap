@@ -102,44 +102,65 @@ def test_eliminar_inexistent(client):
     assert r.status_code == 404
 
 
-# --- /api/agrupacions/<id>/producte -------------------------------------
-def test_marcar_producte(client):
-    r = client.post("/api/agrupacions", json={
-        "nom": "X", "carregues": [_carrega()], "resultat": _resultat(("A", "B")),
-    })
-    id_ = r.get_json()["id"]
-    r = client.patch(f"/api/agrupacions/{id_}/producte",
-                     json={"art_codi": "A", "preparat": True})
+# --- /api/agrupacions/<id>/pistolejat (substitueix el checklist manual) --
+def _dades_sga(linies):
+    """`linies`: [(art_codi, kg_oberts)] d'una comanda de la carrega 1."""
+    return {
+        "comandes": [{"docentry": 500, "docnum": 1, "carrega": 1, "cli_codi": "C", "cli_nom": "",
+                      "linies": [{"linia": i, "art_codi": art, "art_descrip": art, "unitat": "S25",
+                                  "sacs": 40, "kg": 1000, "kg_oberts": oberts}
+                                 for i, (art, oberts) in enumerate(linies)]}],
+        "pistolejats": [],
+        "estats": {},
+    }
+
+
+def test_pistolejat_desa_els_fets(client, monkeypatch):
+    import preparacio_sga
+    resultat = {
+        "productes": [{"art_codi": a, "art_descrip": a,
+                       "per_carrega": [{"carrega_id": "2026/01/0000001"}]} for a in ("A", "B")],
+        "total_palets_fisics": 1, "total_sacs": 5,
+    }
+    id_ = client.post("/api/agrupacions", json={
+        "nom": "X", "carregues": [_carrega()], "resultat": resultat}).get_json()["id"]
+    rebut = []
+    monkeypatch.setattr(preparacio_sga, "obtenir_dades_pistolejat",
+                        lambda ids, incloure_tancades=False: rebut.append((ids, incloure_tancades))
+                        or _dades_sga([("A", 0), ("B", 1000)]))
+    r = client.get(f"/api/agrupacions/{id_}/pistolejat")
     assert r.status_code == 200
-    assert r.get_json()["n_preparats"] == 1
+    j = r.get_json()
+    assert j["fets"] == ["A"] and j["n_productes"] == 2
+    assert j["productes"]["B"]["estat"] == "pendent"
+    assert rebut == [([1], True)]
+    assert client.get(f"/api/agrupacions/{id_}").get_json()["productes_preparats"] == ["A"]
 
 
-def test_desmarcar_producte(client):
-    r = client.post("/api/agrupacions", json={
-        "nom": "X", "carregues": [_carrega()], "resultat": _resultat(("A",)),
-    })
-    id_ = r.get_json()["id"]
-    client.patch(f"/api/agrupacions/{id_}/producte", json={"art_codi": "A", "preparat": True})
-    r = client.patch(f"/api/agrupacions/{id_}/producte", json={"art_codi": "A", "preparat": False})
-    assert r.status_code == 200
-    assert r.get_json()["n_preparats"] == 0
+def test_pistolejat_no_toca_una_agrupacio_tancada(client, monkeypatch):
+    import agrupacions_store
+    import preparacio_sga
+    resultat = {"productes": [{"art_codi": "A", "art_descrip": "A",
+                               "per_carrega": [{"carrega_id": "2026/01/0000001"}]}]}
+    id_ = client.post("/api/agrupacions", json={
+        "nom": "X", "carregues": [_carrega()], "resultat": resultat}).get_json()["id"]
+    agrupacions_store.marcar_finalitzada(id_)
+    monkeypatch.setattr(preparacio_sga, "obtenir_dades_pistolejat",
+                        lambda ids, incloure_tancades=False: _dades_sga([("A", 0)]))
+    assert client.get(f"/api/agrupacions/{id_}/pistolejat").get_json()["fets"] == ["A"]
+    assert client.get(f"/api/agrupacions/{id_}").get_json()["productes_preparats"] == []
 
 
-def test_reset_preparats(client):
-    r = client.post("/api/agrupacions", json={
-        "nom": "X", "carregues": [_carrega()], "resultat": _resultat(("A", "B", "C")),
-    })
-    id_ = r.get_json()["id"]
-    for art in ("A", "B"):
-        client.patch(f"/api/agrupacions/{id_}/producte", json={"art_codi": art, "preparat": True})
-    r = client.post(f"/api/agrupacions/{id_}/reset-preparats")
-    assert r.status_code == 200
-    assert r.get_json()["n_preparats"] == 0
+def test_pistolejat_inexistent(client):
+    assert client.get("/api/agrupacions/" + "c" * 32 + "/pistolejat").status_code == 404
 
 
-def test_reset_preparats_inexistent(client):
-    r = client.post("/api/agrupacions/" + "c" * 32 + "/reset-preparats")
-    assert r.status_code == 404
+def test_ja_no_es_pot_marcar_a_ma(client):
+    id_ = client.post("/api/agrupacions", json={
+        "nom": "X", "carregues": [_carrega()], "resultat": _resultat()}).get_json()["id"]
+    assert client.patch(f"/api/agrupacions/{id_}/producte",
+                        json={"art_codi": "A", "preparat": True}).status_code in (404, 405)
+    assert client.post(f"/api/agrupacions/{id_}/reset-preparats").status_code in (404, 405)
 
 
 # --- /api/agrupar (validació 409 duplicats) -----------------------------
@@ -171,7 +192,8 @@ def test_agrupar_finalitzada_tambe_bloqueja(client):
         "nom": "Acabada", "carregues": [_carrega("2026/01/0000888")], "resultat": _resultat(("A",)),
     })
     id_ = r.get_json()["id"]
-    client.patch(f"/api/agrupacions/{id_}/producte", json={"art_codi": "A", "preparat": True})
+    import agrupacions_store
+    agrupacions_store.sincronitza_preparats(id_, {"A"})
     # Ara és finalitzada però segueix bloquejant
     r = client.post("/api/agrupar", json={"carregues": [_carrega("2026/01/0000888")]})
     assert r.status_code == 409

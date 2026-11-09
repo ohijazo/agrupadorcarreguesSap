@@ -149,53 +149,52 @@ window.magatzemLlista = async function magatzemLlista() {
 };
 
 // ---- Vista PREPARACIÓ --------------------------------------------------
+// Només lectura: el que està fet ho diu el pistolejat de l'SGA
+// (/api/agrupacions/<id>/pistolejat), no l'operari. Vegeu preparacio_sga.py.
 let magState = {
     id: null,
     obj: null,
-    preparats: new Set(),
+    progres: null,           // resposta de /pistolejat (null fins a la primera)
     ocultarPrep: false,
     colorsCarrega: new Map(),
     pollTimer: null,
-    lastInteractionTs: 0,    // moment de l'últim tap (per no repintar enmig)
-    pendingRefresh: null,    // objecte rebut durant interacció (s'aplica després)
-    lastSig: null,           // signatura del darrer poll (n_preparats + finalitzada)
-    consecutiveNoChange: 0,  // polls consecutius sense canvis (backoff)
-    lastPct: null,           // % preparat del darrer render (null = abans del primer render)
+    lastPct: null,           // % fet del darrer render (null = abans del primer render)
 };
 
-const INTERACCIO_MS = 1200;  // marge per protegir tocs en curs del polling
+// Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents de pistolejar").
+const POLL_PREP_MS = 15_000;
 
-// Backoff polling: si N polls consecutius sense canvis, allarguem l'interval
-// per estalviar bateria/xarxa a la tablet. Reset immediat en qualsevol acció
-// local o canvi detectat des del servidor.
-function _calcPollDelay() {
-    const n = magState.consecutiveNoChange;
-    if (n < 2) return 5000;
-    if (n < 4) return 10000;
-    return 15000;
-}
-
-function _signaturaObj(obj) {
-    if (!obj) return "";
-    const np = (obj.productes_preparats || []).length;
-    const fm = obj.finalitzada_manual_at || "";
-    return `${np}|${fm}`;
-}
-
-function _resetPollBackoff() {
-    magState.consecutiveNoChange = 0;
-}
+const ETIQUETA_ESTAT_PREP = {
+    pendent: "Pendent", parcial: "A mitges", complet: "Fet", sense_dades: "Sense dades a SAP",
+};
 
 function colorPerCarregaIdx(i) {
     return PALETA_MAG[i % PALETA_MAG.length];
 }
 
+function progresDe(artCodi) {
+    return magState.progres?.productes?.[artCodi] || null;
+}
+
+function esFet(artCodi) {
+    return progresDe(artCodi)?.estat === "complet";
+}
+
+// "10 de 40 sacs" o, si la línia no té sacs (granel), en kg.
+function textPistolejat(pr) {
+    if (!pr || pr.estat === "sense_dades") return "";
+    if (pr.sacs_total != null) {
+        return `${fmtN.format(Math.round(pr.sacs_fets))} de ${fmtN.format(Math.round(pr.sacs_total))} sacs`;
+    }
+    return `${fmtKgN.format(pr.kg_fets)} de ${fmtKgN.format(pr.kg_total)} kg`;
+}
+
 function calculaProgres() {
     const total = (magState.obj?.resultat?.productes || []).length;
-    const prep = magState.preparats.size;
-    $m("#mag-prep-count").textContent = prep;
+    const fets = magState.progres ? magState.progres.n_fets : 0;
+    $m("#mag-prep-count").textContent = fets;
     $m("#mag-total").textContent = total;
-    const pct = total ? Math.round((prep / total) * 100) : 0;
+    const pct = magState.progres ? magState.progres.percent : 0;
     const fill = $m("#mag-progres-fill");
     if (fill) fill.style.width = `${pct}%`;
     const resum = magState.obj?.resultat;
@@ -205,18 +204,16 @@ function calculaProgres() {
     }
     const creadorEl = $m("#mag-creador-nom");
     if (creadorEl) creadorEl.textContent = magState.obj?.created_by_nom || "—";
-    const btnDesfes = $m("#mag-desfes");
-    if (btnDesfes) btnDesfes.hidden = prep === 0;
 
-    // Feedback unequívoc en arribar al 100% (toast + vibració distintiva +
-    // estat visual). Només es dispara a la transició <100 → 100 — no a cada
-    // render, ni si l'operari ja arriba a 100 des de polling inicial.
+    // Feedback en arribar a tot fet (toast + vibració). Només a la transició,
+    // no a cada render ni si ja estava acabada en obrir la pantalla.
+    const acabada = total > 0 && fets >= total;
     const prev = magState.lastPct;
-    magState.lastPct = pct;
+    magState.lastPct = acabada ? 100 : pct;
     const wrap = $m(".mag-progres-box");
-    if (wrap) wrap.classList.toggle("is-acabada", pct === 100 && total > 0);
-    if (pct === 100 && total > 0 && prev < 100 && prev !== null) {
-        toast("success", `Agrupació completada — ${total} productes preparats`);
+    if (wrap) wrap.classList.toggle("is-acabada", acabada);
+    if (acabada && prev !== null && prev < 100) {
+        toast("success", `Agrupació completada — ${total} productes pistolejats`);
         if (navigator.vibrate) {
             try { navigator.vibrate([200, 80, 200]); } catch {}
         }
@@ -233,10 +230,10 @@ function renderArticles() {
         return;
     }
     buit.hidden = true;
-    // Ordre: pendents primer (ordenats per total_sacs desc), preparats al final
+    // Ordre: pendents primer (ordenats per total_sacs desc), fets al final
     prods.sort((a, b) => {
-        const pa = magState.preparats.has(a.art_codi) ? 1 : 0;
-        const pb = magState.preparats.has(b.art_codi) ? 1 : 0;
+        const pa = esFet(a.art_codi) ? 1 : 0;
+        const pb = esFet(b.art_codi) ? 1 : 0;
         if (pa !== pb) return pa - pb;
         return (b.total_sacs || 0) - (a.total_sacs || 0);
     });
@@ -249,8 +246,9 @@ function renderArticles() {
     });
 
     for (const p of prods) {
-        const isPrep = magState.preparats.has(p.art_codi);
-        if (magState.ocultarPrep && isPrep) continue;
+        const pr = progresDe(p.art_codi);
+        const isFet = pr?.estat === "complet";
+        if (magState.ocultarPrep && isFet) continue;
 
         const pcOrdenats = (p.per_carrega || []).slice()
             .sort((a, b) => (ordreCar.get(a.carrega_id) ?? 999) - (ordreCar.get(b.carrega_id) ?? 999));
@@ -263,25 +261,38 @@ function renderArticles() {
             // Número curt: últim segment del carrega_id sense zeros inicials
             const numFinal = String(pc.carrega_id).split("/").pop() || "";
             const numCurt = numFinal.replace(/^0+/, "") || numFinal;
+            const prc = pr?.per_carrega?.[pc.carrega_id];
+            const estatCar = prc
+                ? `<span class="mag-carrega-estat is-${escapeM(prc.estat)}" title="${escapeM(ETIQUETA_ESTAT_PREP[prc.estat] || prc.estat)}">${prc.estat === "complet" ? "✓" : escapeM(textPistolejat(prc) || "—")}</span>`
+                : "";
             return `<span class="mag-carrega-row" style="--cb-color:${col.color};--cb-bg:${col.bg}">
                         <span class="dot" aria-hidden="true"></span>
                         <span class="nom">${escapeM(nomCar)}</span>
                         <span class="num">#${escapeM(numCurt)}</span>
                         <span class="detall">${escapeM(peces)} · ${fmtN.format(pc.total_sacs)} sacs</span>
+                        ${estatCar}
                     </span>`;
         }).join("");
 
-        let prepMetaHtml = "";
-        if (isPrep) {
-            const d = (magState.obj?.preparats_detall || {})[p.art_codi] || {};
-            const hora = fmtHoraCurta(d.ts);
-            const qui = d.per_nom || "";
-            const txt = [qui, hora].filter(Boolean).join(" · ");
-            if (txt) prepMetaHtml = `<div class="mag-prep-meta">✓ ${escapeM(txt)}</div>`;
+        let pistHtml = "";
+        if (pr && pr.estat !== "sense_dades") {
+            pistHtml = `<div class="mag-pist">
+                    <span class="mag-pist-text">Pistolejat: ${escapeM(textPistolejat(pr))}</span>
+                    <div class="pend-barra"><div class="pend-barra-fill" style="width:${pr.percent}%"></div></div>
+                </div>`;
         }
+        let prepMetaHtml = "";
+        if (isFet) {
+            const d = (magState.obj?.preparats_detall || {})[p.art_codi] || {};
+            const txt = [d.per_nom || "SGA", fmtHoraCurta(d.ts)].filter(Boolean).join(" · ");
+            prepMetaHtml = `<div class="mag-prep-meta">✓ ${escapeM(txt)}</div>`;
+        }
+        const estat = pr
+            ? `<span class="pend-estat pend-estat-${escapeM(pr.estat)}">${escapeM(ETIQUETA_ESTAT_PREP[pr.estat] || pr.estat)}</span>`
+            : "";
 
         const li = document.createElement("li");
-        li.className = "mag-card" + (isPrep ? " is-preparat" : "");
+        li.className = "mag-card" + (isFet ? " is-preparat" : "");
         li.dataset.artCodi = p.art_codi;
         li.innerHTML = `
             <div class="mag-art">
@@ -292,13 +303,13 @@ function renderArticles() {
                 </div>
                 <div class="mag-art-totals-sec">${fmtKgN.format(p.total_kg)} kg</div>
                 <div class="mag-art-carregues">${carregesHtml}</div>
+                ${pistHtml}
                 ${prepMetaHtml}
             </div>
-            <button type="button" class="mag-prep-check ${isPrep ? "is-on" : ""}"
-                    data-act="toggle"
-                    aria-label="${isPrep ? "Desmarca preparat" : "Marca com preparat"}">
-                ${isPrep ? "✓" : ""}
-            </button>
+            <div class="mag-estat-col">
+                ${estat}
+                <span class="mag-prep-check" aria-hidden="true"></span>
+            </div>
         `;
         ul.appendChild(li);
     }
@@ -306,86 +317,31 @@ function renderArticles() {
 }
 
 async function refrescar({ fromPolling = false } = {}) {
+    const id = encodeURIComponent(magState.id);
+    const errBox = $m("#mag-pist-error");
     try {
-        const obj = await fetchJ(`/api/agrupacions/${encodeURIComponent(magState.id)}`);
-        // Detecta canvis per a backoff polling (independentment del defer).
-        if (fromPolling) {
-            const sig = _signaturaObj(obj);
-            if (magState.lastSig === sig) {
-                magState.consecutiveNoChange += 1;
-            } else {
-                magState.consecutiveNoChange = 0;
-                magState.lastSig = sig;
+        // L'agrupació (estructura) i el pistolejat (SAP) en paral·lel.
+        const [obj, progres] = await Promise.all([
+            fetchJ(`/api/agrupacions/${id}`),
+            fetchJ(`/api/agrupacions/${id}/pistolejat`).catch(e => ({ _error: e })),
+        ]);
+        magState.obj = obj;
+        if (progres._error) {
+            // Es manté l'últim pistolejat bo a la pantalla: és millor que buidar-la.
+            if (errBox) {
+                errBox.textContent = `No s'ha pogut llegir el pistolejat de SAP (${progres._error.message}). Es tornarà a provar.`;
+                errBox.hidden = false;
             }
         } else {
-            magState.lastSig = _signaturaObj(obj);
+            magState.progres = progres;
+            if (errBox) errBox.hidden = true;
+            const act = $m("#mag-actualitzat");
+            if (act) act.textContent = `Actualitzat a les ${new Date().toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}`;
         }
-        const ara = Date.now();
-        if (fromPolling && ara - magState.lastInteractionTs < INTERACCIO_MS) {
-            // L'operari ha tocat fa molt poc: no repintem perquè no es perdi
-            // l'enfocament del tap. Guardem el resultat i l'aplicarem més tard.
-            magState.pendingRefresh = obj;
-            return;
-        }
-        magState.obj = obj;
-        magState.preparats = new Set(obj.productes_preparats || []);
-        magState.pendingRefresh = null;
         renderArticles();
     } catch (e) {
-        // Errors del polling silenciosos (no embrutim la UI cada 5s)
+        // Errors del polling silenciosos (no embrutim la UI cada 15 s)
         if (!fromPolling) toast("error", "No s'ha pogut refrescar: " + e.message);
-    }
-}
-
-async function togglePreparat(artCodi, nouEstat) {
-    magState.lastInteractionTs = Date.now();
-    _resetPollBackoff();  // hi ha activitat — torna a polls de 5s
-    // Feedback tàctil immediat (vibració a tablet/mòbil).
-    if (navigator.vibrate) {
-        try { navigator.vibrate(nouEstat ? 60 : [30, 40, 30]); } catch {}
-    }
-    // Optimista: actualitza UI immediatament
-    if (nouEstat) magState.preparats.add(artCodi);
-    else magState.preparats.delete(artCodi);
-    renderArticles();
-    try {
-        const r = await fetchJ(`/api/agrupacions/${encodeURIComponent(magState.id)}/producte`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ art_codi: artCodi, preparat: nouEstat }),
-        });
-        // Sincronitza el comptador si vol
-        calculaProgres();
-    } catch (e) {
-        // Rollback
-        if (nouEstat) magState.preparats.delete(artCodi);
-        else magState.preparats.add(artCodi);
-        renderArticles();
-        toast("error", "No s'ha guardat: " + e.message);
-    }
-}
-
-async function desferPreparats() {
-    const n = magState.preparats.size;
-    if (!n) return;
-    const ok = await window.mostrarConfirmacio({
-        titol: "Desfer preparats",
-        missatge: `Es desmarcaran ${n} producte${n > 1 ? "s" : ""} com a preparat${n > 1 ? "s" : ""}. Vols continuar?`,
-        btnOk: "Sí, desfés-los",
-        btnCancel: "No",
-        tipus: "danger",
-    });
-    if (!ok) return;
-    _resetPollBackoff();  // hi ha activitat — torna a polls de 5s
-    try {
-        await fetchJ(`/api/agrupacions/${encodeURIComponent(magState.id)}/reset-preparats`, {
-            method: "POST",
-        });
-        magState.preparats.clear();
-        renderArticles();
-        toast("success", `Desmarcats ${n} productes`);
-    } catch (e) {
-        toast("error", "No s'ha pogut desfer: " + e.message);
     }
 }
 
@@ -393,28 +349,14 @@ window.magatzemPrep = async function magatzemPrep(id) {
     magState.id = id;
     await refrescar();
 
-    // Delegació de clicks: checkbox preparat
-    $m("#mag-articles").addEventListener("click", (ev) => {
-        const btn = ev.target.closest('[data-act="toggle"]');
-        if (!btn) return;
-        const card = btn.closest(".mag-card");
-        if (!card) return;
-        const artCodi = card.dataset.artCodi;
-        const isPrep = magState.preparats.has(artCodi);
-        togglePreparat(artCodi, !isPrep);
-    });
-
-    // Toggle "amaga preparats"
+    // Toggle "amaga els fets"
     $m("#mag-ocultar-prep").addEventListener("change", (ev) => {
         magState.ocultarPrep = ev.target.checked;
         renderArticles();
     });
 
     // Botó refresca manual
-    $m("#mag-refresca").addEventListener("click", refrescar);
-
-    // Botó "Desfés preparats" — només visible quan n'hi ha algun
-    $m("#mag-desfes")?.addEventListener("click", desferPreparats);
+    $m("#mag-refresca").addEventListener("click", () => refrescar());
 
     // Botó imprimir: omple capçalera print-only i obre window.print()
     const btnImp = $m("#mag-imprimir");
@@ -475,27 +417,18 @@ window.magatzemPrep = async function magatzemPrep(id) {
         });
     }
 
-    // Polling de sincronització amb backoff (5s → 10s → 15s) si no hi ha
-    // canvis. Només quan la pestanya és visible. Si hi ha hagut interacció
-    // recent (tap a un check), el render es difereix perquè no s'esborri el
-    // feedback visual mentre l'operari acaba el toc.
+    // Polling cada 15 s, només amb la pestanya visible.
     function programaPoll() {
         clearTimeout(magState.pollTimer);
         if (document.hidden) return;
         magState.pollTimer = setTimeout(async () => {
             await refrescar({ fromPolling: true });
-            // Si s'havia diferit per interacció, reintentem aviat (no
-            // s'aplica el backoff perquè ens devem un render pendent)
-            if (magState.pendingRefresh) {
-                magState.pollTimer = setTimeout(programaPoll, 1500);
-            } else {
-                programaPoll();
-            }
-        }, _calcPollDelay());
+            programaPoll();
+        }, POLL_PREP_MS);
     }
     document.addEventListener("visibilitychange", () => {
         if (document.hidden) clearTimeout(magState.pollTimer);
-        else programaPoll();
+        else refrescar({ fromPolling: true }).then(programaPoll);
     });
     programaPoll();
 };

@@ -180,9 +180,43 @@ Persistent=true
 WantedBy=timers.target
 TIMERAGRC
 
+    # El pistolejat de l'SGA substitueix el checklist manual de la
+    # preparacio: aquest timer desa a productes_preparats el que ja esta fet,
+    # perque el llistat de magatzem i el Control estiguin al dia encara que
+    # ningu no tingui la preparacio oberta (scripts/sincronitzar_pistolejat.py).
+    info "Instal·lant o actualitzant la sincronitzacio del pistolejat..."
+    cat > "/etc/systemd/system/${SERVICE_NAME}-pistolejat.service" <<UNITPIST
+[Unit]
+Description=Sincronitzacio del pistolejat de l'SGA amb les agrupacions (variant SAP B1)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=KAIS_APP_PATH=$KAIS_PATH
+ExecStart=$VENV_DIR/bin/python $APP_DIR/scripts/sincronitzar_pistolejat.py
+UNITPIST
+
+    cat > "/etc/systemd/system/${SERVICE_NAME}-pistolejat.timer" <<TIMERPIST
+[Unit]
+Description=Sincronitzacio del pistolejat cada 2 minuts
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+TIMERPIST
+
     systemctl daemon-reload
     systemctl enable --now "${SERVICE_NAME}-agregats.timer"
     systemctl enable --now "${SERVICE_NAME}-agregats-complet.timer"
+    systemctl enable --now "${SERVICE_NAME}-pistolejat.timer"
 }
 
 # ==============================================================

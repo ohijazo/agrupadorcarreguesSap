@@ -128,9 +128,13 @@ def _casos_pistolejat() -> list[dict]:
     casos limit (llista buida, inexistent, duplicats)."""
     ids = [int(c["car_numero"]) for c in sql.llistar_carregues(*RANG_AMPLI, limit=1000)["items"]]
     amb_comandes = sorted({c["carrega"] for c in sql_pist.obtenir_dades_pistolejat(ids)["comandes"]})
+    tancades = sorted({c["carrega"] for c in sql_pist.obtenir_dades_pistolejat(
+        ids, incloure_tancades=True)["comandes"]})
     return ([{"carregues": ids}, {"carregues": []}, {"carregues": [999999]},
-             {"carregues": ids[:3] * 2}]
-            + [{"carregues": [i]} for i in amb_comandes])
+             {"carregues": ids[:3] * 2},
+             {"carregues": ids, "incloure_tancades": True}]
+            + [{"carregues": [i]} for i in amb_comandes]
+            + [{"carregues": [i], "incloure_tancades": True} for i in tancades])
 
 
 def _casos_albarans() -> list[dict]:

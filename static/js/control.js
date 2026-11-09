@@ -130,7 +130,7 @@
                 <td>${escapeM(fmtHoraCurta(it.prep_iniciat))}</td>
                 <td>${escapeM(fmtHoraCurta(it.prep_finalitzat))}</td>
                 <td>${escapeM(fmtDurada(it.durada_s))}</td>
-                <td>${escapeM(it.prep_per_nom || "—")}</td>
+                <td>${escapeM(it.prep_per_nom || (it.prep_iniciat ? "SGA" : "—"))}</td>
                 <td>${accionsCell(it)}</td>
             </tr>`;
         }).join("");
