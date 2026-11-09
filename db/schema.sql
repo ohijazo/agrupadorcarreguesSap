@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS agrupacions (
     -- tots els productes estiguin marcats com a preparats. NULL = no tancada
     -- manualment.
     finalitzada_manual_at      TIMESTAMPTZ,
-    finalitzada_manual_per_id  INTEGER
+    finalitzada_manual_per_id  INTEGER,
+    -- % de kg pistolejats per l'SGA (migracio 007). NULL = no sincronitzat.
+    pct_pistolejat             SMALLINT
 );
 
 CREATE INDEX IF NOT EXISTS idx_agrupacions_ts                ON agrupacions (ts DESC);

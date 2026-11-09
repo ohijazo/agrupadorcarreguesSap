@@ -98,7 +98,7 @@ def test_index_es_recalcula_despres_eliminar(store_tmp):
 def test_sincronitza_afegeix_i_treu(store_tmp):
     info = agrupacions_store.guardar("X", [_carrega()], _resultat(("A", "B", "C")))
     r = agrupacions_store.sincronitza_preparats(info["id"], {"A", "B"})
-    assert r == {"afegits": ["A", "B"], "trets": []}
+    assert r == {"afegits": ["A", "B"], "trets": [], "percent_canviat": False}
     obj = agrupacions_store.obtenir(info["id"])
     assert obj["productes_preparats"] == ["A", "B"]
     # Sense usuari: ho ha fet l'SGA.
@@ -106,7 +106,7 @@ def test_sincronitza_afegeix_i_treu(store_tmp):
 
     # Albara cancel·lat: B torna a estar pendent.
     r = agrupacions_store.sincronitza_preparats(info["id"], {"A", "C"})
-    assert r == {"afegits": ["C"], "trets": ["B"]}
+    assert r == {"afegits": ["C"], "trets": ["B"], "percent_canviat": False}
     assert agrupacions_store.obtenir(info["id"])["productes_preparats"] == ["A", "C"]
 
 
@@ -114,7 +114,18 @@ def test_sincronitza_sense_canvis_no_toca_la_versio(store_tmp):
     info = agrupacions_store.guardar("X", [_carrega()], _resultat(("A",)))
     agrupacions_store.sincronitza_preparats(info["id"], {"A"})
     v = agrupacions_store.get_version()
-    assert agrupacions_store.sincronitza_preparats(info["id"], {"A"}) == {"afegits": [], "trets": []}
+    assert agrupacions_store.sincronitza_preparats(info["id"], {"A"}) == {
+        "afegits": [], "trets": [], "percent_canviat": False}
+    assert agrupacions_store.get_version() == v
+
+
+def test_sincronitza_desa_el_percent_per_a_la_pagina_principal(store_tmp):
+    info = agrupacions_store.guardar("X", [_carrega("2026/01/0000321")], _resultat(("A", "B")))
+    r = agrupacions_store.sincronitza_preparats(info["id"], set(), 35)
+    assert r["percent_canviat"] is True
+    assert agrupacions_store.index_carregues_agrupades()["2026/01/0000321"][0]["pct_pistolejat"] == 35
+    v = agrupacions_store.get_version()
+    assert agrupacions_store.sincronitza_preparats(info["id"], set(), 35)["percent_canviat"] is False
     assert agrupacions_store.get_version() == v
 
 

@@ -46,7 +46,7 @@ def progres_i_sincronitza(obj: dict) -> dict:
     dades = obtenir_dades_pistolejat(ids_carregues(obj), incloure_tancades=True)
     progres = calc.progres_agrupacio(obj.get("resultat") or {}, dades)
     if not obj.get("finalitzada_manual_at"):
-        agrupacions_store.sincronitza_preparats(obj["id"], progres["fets"])
+        agrupacions_store.sincronitza_preparats(obj["id"], progres["fets"], progres["percent"])
     return progres
 
 
@@ -61,9 +61,9 @@ def sincronitza_totes(dies: int = 30) -> dict:
     canviades = 0
     for o in objs:
         progres = calc.progres_agrupacio(o["resultat"], _dades_de(dades, set(ids_carregues(o))))
-        canvis = agrupacions_store.sincronitza_preparats(o["id"], progres["fets"])
-        if canvis and (canvis["afegits"] or canvis["trets"]):
+        canvis = agrupacions_store.sincronitza_preparats(o["id"], progres["fets"], progres["percent"])
+        if canvis and (canvis["afegits"] or canvis["trets"] or canvis["percent_canviat"]):
             canviades += 1
-            log.info("pistolejat agrupacio=%s afegits=%s trets=%s",
-                     o["id"], canvis["afegits"], canvis["trets"])
+            log.info("pistolejat agrupacio=%s afegits=%s trets=%s percent=%s",
+                     o["id"], canvis["afegits"], canvis["trets"], progres["percent"])
     return {"agrupacions": len(objs), "canviades": canviades}

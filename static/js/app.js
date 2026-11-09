@@ -634,7 +634,7 @@ function actualitzarPeuPaginacio() {
 // Resol l'estat d'agrupació d'una càrrega: null o info de l'agrupació.
 // Tres estats possibles:
 //   - "activa"         → agrupada però cap producte preparat encara
-//   - "en_preparacio"  → 1+ productes ja marcats però no tots (magatzem treballant-hi)
+//   - "en_preparacio"  → l'SGA ja ha pistolejat alguna cosa (productes fets o % de kg > 0)
 //   - "finalitzada"    → tots els productes preparats
 // (una càrrega només pot estar en una agrupació activa al mateix temps)
 function estatAgrupacio(c) {
@@ -642,7 +642,8 @@ function estatAgrupacio(c) {
     if (!ags.length) return null;
     const activa = ags.find(a => !a.finalitzada);
     if (activa) {
-        const tipus = (activa.n_preparats || 0) > 0 ? "en_preparacio" : "activa";
+        const tipus = (activa.n_preparats || 0) > 0 || (activa.pct_pistolejat || 0) > 0
+            ? "en_preparacio" : "activa";
         return { tipus, info: activa, totes: ags };
     }
     return { tipus: "finalitzada", info: ags[0], totes: ags };
@@ -658,7 +659,10 @@ function badgeAgrupacioHTML(estat) {
         cls = "badge-grouped badge-grouped--progress";
         const np = estat.info.n_preparats || 0;
         const nt = estat.info.n_productes || 0;
-        txt = nt > 0 ? `Agrupada (en preparació · ${np}/${nt})` : "Agrupada (en preparació)";
+        // % de kg pistolejats per l'SGA (preparacio_sga.py); null si encara no s'ha sincronitzat.
+        const pct = estat.info.pct_pistolejat;
+        const parts = [nt > 0 ? `${np}/${nt}` : "", pct != null ? `${pct}%` : ""].filter(Boolean);
+        txt = parts.length ? `Agrupada (en preparació · ${parts.join(" · ")})` : "Agrupada (en preparació)";
     } else {
         cls = "badge-grouped";
         txt = "Ja agrupada";

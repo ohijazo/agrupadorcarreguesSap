@@ -337,7 +337,8 @@ def eliminar(id_: str) -> bool:
 # ---------------------------------------------------------------------------
 # Productes preparats (magatzem)
 # ---------------------------------------------------------------------------
-def sincronitza_preparats(id_: str, fets: set[str] | list[str]) -> dict | None:
+def sincronitza_preparats(id_: str, fets: set[str] | list[str],
+                          percent: int | None = None) -> dict | None:
     """Deixa `productes_preparats` igual que `fets`: els productes que el
     pistolejat de l'SGA dona per fets (vegeu `dades.pistolejat.progres_agrupacio`).
 
@@ -345,7 +346,9 @@ def sincronitza_preparats(id_: str, fets: set[str] | list[str]) -> dict | None:
     sense usuari) i treu els que ja no estan fets (p. ex. un albara cancel·lat),
     tambe les marques manuals antigues. Nomes toca la versio i l'auditoria si
     hi ha canvis, perque es crida a cada refresc de la pantalla i des del timer.
-    Retorna {"afegits", "trets"} o None si l'agrupacio no existeix.
+    `percent` es el % de kg pistolejats; es desa a `agrupacions.pct_pistolejat`
+    perque la pagina principal ensenyi l'avanc parcial.
+    Retorna {"afegits", "trets", "percent_canviat"} o None si l'agrupacio no existeix.
     """
     try:
         _valida_id(id_)
@@ -354,9 +357,15 @@ def sincronitza_preparats(id_: str, fets: set[str] | list[str]) -> dict | None:
     fets = set(fets)
     with db.get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM agrupacions WHERE id = %s", (id_,))
-            if not cur.fetchone():
+            cur.execute("SELECT pct_pistolejat FROM agrupacions WHERE id = %s", (id_,))
+            fila = cur.fetchone()
+            if not fila:
                 return None
+            pct_ara = fila[0] if isinstance(fila, tuple) else fila["pct_pistolejat"]
+            percent_canviat = percent is not None and pct_ara != int(percent)
+            if percent_canviat:
+                cur.execute("UPDATE agrupacions SET pct_pistolejat = %s WHERE id = %s",
+                            (int(percent), id_))
             cur.execute("SELECT art_codi FROM productes_preparats WHERE agrupacio_id = %s", (id_,))
             ara = {r[0] if isinstance(r, tuple) else r["art_codi"] for r in cur.fetchall()}
             afegits = sorted(fets - ara)
@@ -375,13 +384,13 @@ def sincronitza_preparats(id_: str, fets: set[str] | list[str]) -> dict | None:
                     "DELETE FROM productes_preparats WHERE agrupacio_id = %s AND art_codi = ANY(%s)",
                     (id_, trets),
                 )
-            if afegits or trets:
+            if afegits or trets or percent_canviat:
                 _bump_version(cur)
     if afegits:
         audit.log("producte_fet_sga", target=id_, detall={"art_codis": afegits})
     if trets:
         audit.log("producte_desfet_sga", target=id_, detall={"art_codis": trets})
-    return {"afegits": afegits, "trets": trets}
+    return {"afegits": afegits, "trets": trets, "percent_canviat": percent_canviat}
 
 
 def llistar_per_sincronitzar(dies: int = 30) -> list[dict]:
@@ -478,9 +487,10 @@ def index_carregues_agrupades() -> dict[str, list[dict]]:
     # Refetch sense lock — no bloquegem altres lectors mentre fem la JOIN
     sql = """
         SELECT ac.carrega_id, v.id, v.nom, v.ts, v.finalitzada,
-               v.n_productes, v.n_preparats
+               v.n_productes, v.n_preparats, a.pct_pistolejat
         FROM agrupacio_carregues ac
         JOIN v_agrupacions_estat v ON v.id = ac.agrupacio_id
+        JOIN agrupacions a ON a.id = ac.agrupacio_id
         ORDER BY v.ts DESC
     """
     index: dict[str, list[dict]] = {}
@@ -492,6 +502,7 @@ def index_carregues_agrupades() -> dict[str, list[dict]]:
             "finalitzada": bool(r["finalitzada"]),
             "n_productes": int(r["n_productes"] or 0),
             "n_preparats": int(r["n_preparats"] or 0),
+            "pct_pistolejat": r["pct_pistolejat"],
         })
 
     # Re-llegim la versió després del fetch: si entremig algú ha escrit,
