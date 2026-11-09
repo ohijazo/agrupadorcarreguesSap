@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magatzem — Preparació</title>
+    <title>Agrupacions</title>
     <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
     <link rel="stylesheet" href="{{ static_url('css/magatzem.css') }}">
 </head>
-<body class="mag-body">
+{#- `data-oficina`: si es pinten les accions d'oficina (Reimprimir, Finalitza,
+    Reobrir, Elimina). El servidor les torna a comprovar igualment. -#}
+<body class="mag-body" data-oficina="{{ '1' if not current_user or current_user.rol in ('admin', 'oficina') else '0' }}">
 
 <header class="mag-header">
     <div class="container mag-header-row">
         <div>
-            <h1>📦 Preparació d'agrupacions</h1>
-            <p class="mag-subtitle">Tria una agrupació per veure què s'ha de carregar i com va el pistolejat</p>
+            <h1>📦 Agrupacions</h1>
+            <p class="mag-subtitle">Totes les agrupacions desades: com va el pistolejat, preparar-les, reimprimir-les o tancar-les</p>
         </div>
         <div class="mag-header-tools">
             {% include '_user_menu.html' %}
@@ -28,18 +30,31 @@
 <main class="container">
     {% if error %}<div class="mag-error">{{ error }}</div>{% endif %}
     <div id="mag-llista-bar" class="mag-llista-bar" hidden>
-        <label class="mag-toggle">
-            <input type="checkbox" id="mag-mostra-acabades">
-            <span>Mostra també les finalitzades (<span id="mag-acabades-count">0</span>)</span>
+        <label class="mag-filtre">
+            <span>Estat</span>
+            <select id="mag-filtre-estat">
+                <option value="actives">Actives (pendents i en curs)</option>
+                <option value="">Totes</option>
+                <option value="pendent">Pendents</option>
+                <option value="en_curs">En curs</option>
+                <option value="acabada">Acabades</option>
+                <option value="tancada">Tancades</option>
+                <option value="plantilla">Plantilles</option>
+            </select>
         </label>
+        <label class="mag-toggle">
+            <input type="checkbox" id="mag-nomes-avui">
+            <span>Només d'avui</span>
+        </label>
+        <span class="mag-llista-count" id="mag-llista-count"></span>
     </div>
     <ul id="mag-llista" class="mag-llista"></ul>
     <p id="mag-buit" class="mag-empty" hidden>
         Cap agrupació desada.
-        {% if not current_user or current_user.rol in ('admin', 'oficina') %}<a href="/">Fes-ne una a l'Agrupació de càrregues</a>.{% else %}L'oficina n'ha de desar una primer.{% endif %}
+        {% if not current_user or current_user.rol in ('admin', 'oficina') %}<a href="/">Fes-ne una a Agrupar càrregues</a>.{% else %}L'oficina n'ha de desar una primer.{% endif %}
     </p>
-    <p id="mag-totes-acabades" class="mag-empty" hidden>
-        🎉 Totes les agrupacions desades estan finalitzades. Activa "Mostra també les finalitzades" per veure-les.
+    <p id="mag-filtre-buit" class="mag-empty" hidden>
+        Cap agrupació amb aquest filtre. Tria "Totes" per veure-les totes.
     </p>
 </main>
 
@@ -47,6 +62,7 @@
 
 <script src="{{ static_url('js/fmt.js') }}"></script>
 <script src="{{ static_url('js/palets.js') }}"></script>
+<script src="{{ static_url('js/dialogs.js') }}"></script>
 <script src="{{ static_url('js/magatzem.js') }}"></script>
 <script src="{{ static_url('js/user-menu.js') }}"></script>
 </body>

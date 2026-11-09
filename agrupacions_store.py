@@ -240,7 +240,9 @@ def llistar_control(origen: str | None = None) -> list[dict]:
         elif completa:
             estat = "acabada"
             prep_finalitzat = r["prep_ultim_ts"]
-        elif n_prep > 0:
+        elif n_prep > 0 or (r["pct_pistolejat"] or 0) > 0:
+            # Amb alguna cosa pistolejada ja està en curs, encara que cap
+            # producte estigui acabat (igual que a la pàgina principal).
             estat = "en_curs"
             prep_finalitzat = None
         else:

@@ -616,9 +616,10 @@ def ajuda():
 
 
 @app.route("/control", strict_slashes=False)
-@auth.requires_rol("admin", "oficina")
 def control_llista():
-    return render_template("control.html")
+    # "Gestió d'agrupacions" s'ha fusionat amb la llista de /magatzem
+    # ("Agrupacions"); es manté la ruta per als enllaços desats.
+    return redirect("/magatzem")
 
 
 @app.route("/albarans", strict_slashes=False)
@@ -952,23 +953,12 @@ def api_articles():
 @app.route("/api/agrupacions", methods=["GET"])
 @auth.requires_rol("admin", "oficina", "magatzem")
 def api_agrupacions_llista():
+    """Llista de la pantalla "Agrupacions" (/magatzem): estat, progrés,
+    temps de preparació, plantilles i origen (vegeu `llistar_control`)."""
     try:
-        return jsonify(agrupacions_store.llistar())
+        return jsonify(agrupacions_store.llistar_control())
     except Exception:
         log.exception("agrupacions llistar")
-        return _err_genèric()
-
-
-@app.route("/api/control/agrupacions", methods=["GET"])
-@auth.requires_rol("admin", "oficina")
-def api_control_agrupacions():
-    origen = request.args.get("origen")
-    if origen and origen not in ("desada", "impresa"):
-        return _err_validacio("'origen' ha de ser 'desada' o 'impresa'.")
-    try:
-        return jsonify(agrupacions_store.llistar_control(origen=origen))
-    except Exception:
-        log.exception("control llistar")
         return _err_genèric()
 
 

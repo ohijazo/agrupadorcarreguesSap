@@ -223,5 +223,5 @@ def test_menu_magatzem_sense_gestio_albarans(amb_rol):
 def test_menu_amaga_gestio_albarans_sense_cap_funcio(amb_rol, monkeypatch):
     monkeypatch.setenv("CRYSTAL_PDF_URL", "")
     monkeypatch.setenv("CANCELAR_ALBARANS", "")
-    html = amb_rol("oficina").get("/control").data
+    html = amb_rol("oficina").get("/magatzem").data
     assert b'href="/albarans"' not in html

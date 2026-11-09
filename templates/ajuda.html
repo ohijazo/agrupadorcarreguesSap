@@ -272,7 +272,7 @@
             <li><a href="#agrupar">Fer una agrupació</a></li>
             <li><a href="#resultat">Entendre el Resultat de l'agrupació</a></li>
             <li><a href="#desar">Desar agrupacions i plantilles recurrents</a></li>
-            <li><a href="#desades">Gestió d'agrupacions</a></li>
+            <li><a href="#desades">Agrupacions</a></li>
             <li><a href="#magatzem">Mode magatzem (preparació amb tablet)</a></li>
             <li><a href="#impressio">Impressió en paper</a></li>
             <li><a href="#dreceres">Dreceres de teclat</a></li>
@@ -529,19 +529,18 @@
     </ul>
 
     <!-- 6. Desades -->
-    <h2 id="desades">6. Gestió d'agrupacions</h2>
+    <h2 id="desades">6. Agrupacions</h2>
     <p>
-        Les agrupacions ja fetes tenen dues pantalles, segons per a què les vulguis:
+        El botó <strong>📦 Agrupacions</strong> mostra totes les agrupacions desades, també les plantilles, en targetes grans.
+        Per defecte només hi surten les actives (pendents i en curs); el filtre <em>Estat</em> mostra les acabades, les tancades,
+        les plantilles o totes, i <em>Només d'avui</em> deixa les creades avui. Cada targeta diu el % pistolejat, els productes fets
+        i, quan ja ha començat, des de quina hora s'està pistolejant. Accions:
     </p>
     <ul>
-        <li><strong>📦 Preparació d'agrupacions</strong> — per al magatzem: què s'ha de carregar per a cada agrupació i com va el pistolejat.</li>
-        <li><strong>📊 Gestió d'agrupacions</strong> (oficina) — totes les agrupacions desades, també les plantilles, amb filtres per estat i origen. Per a cadascuna:
-            <ul>
-                <li><strong>Reimprimir</strong> — obre el Resultat a la pàgina principal, amb el mateix format que quan es va crear.</li>
-                <li><strong>Finalitza</strong> / <strong>Reobrir</strong> — la tanca a mà encara que no estigui tot pistolejat, o la torna a obrir.</li>
-                <li><strong>Elimina</strong> — l'esborra definitivament. Les seves càrregues tornen a estar disponibles per agrupar.</li>
-            </ul>
-        </li>
+        <li><strong>Preparació</strong> — què s'ha de carregar i com va el pistolejat de cada producte.</li>
+        <li><strong>Reimprimir</strong> (oficina) — obre el Resultat a Agrupar càrregues, amb el mateix format que quan es va crear.</li>
+        <li><strong>Finalitza</strong> / <strong>Reobrir</strong> (oficina) — la tanca a mà encara que no estigui tot pistolejat, o la torna a obrir.</li>
+        <li><strong>Elimina</strong> (oficina) — l'esborra definitivament. Les seves càrregues tornen a estar disponibles per agrupar.</li>
     </ul>
     <p>
         <strong>Pendents del dia</strong> és una altra cosa: hi surten <em>totes</em> les càrregues que surten avui, demà o aquesta setmana,
@@ -549,7 +548,7 @@
         (toca-la per anar a la preparació) o <strong>Sense agrupar</strong>.
     </p>
     <p>
-        Inici, Fi i Durada són l'hora en què l'app va detectar el pistolejat de l'SGA (es comprova cada 2 minuts), no l'hora exacta de cada lectura.
+        Les hores de pistolejat de cada targeta són l'hora en què l'app el va detectar (es comprova cada 2 minuts), no l'hora exacta de cada lectura.
     </p>
 
     <div class="help-tip">
@@ -586,7 +585,7 @@
     <h3>7.3 Actualització automàtica</h3>
     <p>
         La pantalla consulta SAP cada 15 segons mentre està oberta. Encara que ningú no la tingui oberta,
-        el servidor actualitza cada 2 minuts el llistat del magatzem i la Gestió d'agrupacions.
+        el servidor actualitza cada 2 minuts la llista d'Agrupacions.
         Si SAP no respon, es manté l'última dada bona i surt un avís.
     </p>
 

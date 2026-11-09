@@ -78,84 +78,170 @@ async function fetchJ(url, opts = {}) {
     return r.json();
 }
 
-// ---- Vista LLISTA ------------------------------------------------------
-const _isAcabada = (it) => (it.n_productes || 0) > 0 && (it.n_preparats || 0) >= (it.n_productes || 0);
-const _isTancada = (it) => !!it.finalitzada_manual_at;
-const _isFinalitzada = (it) => _isTancada(it) || _isAcabada(it);
+// ---- Vista LLISTA: "Agrupacions" ---------------------------------------
+// Una sola pantalla per a les agrupacions desades (abans n'hi havia tres:
+// la finestra "Desades", aquesta llista i "Control d'agrupacions"). Cada
+// targeta porta a la preparació i, per a admin i oficina, permet reimprimir,
+// finalitzar/reobrir i eliminar. Dades: /api/agrupacions (llistar_control).
+const LLISTA_POLL_MS = 30_000;
+const FILTRE_KEY = "mag-filtre-estat";
+
+const ESTAT_LLISTA = {
+    pendent: { txt: "Pendent", cls: "ctrl-badge-pendent" },
+    en_curs: { txt: "En curs", cls: "ctrl-badge-en-curs" },
+    acabada: { txt: "Acabada", cls: "ctrl-badge-acabada" },
+    tancada: { txt: "Tancada", cls: "ctrl-badge-tancada" },
+};
+
+const llistaState = { items: [], timer: null };
+
+function fmtDuradaM(s) {
+    if (s == null) return "";
+    if (s < 60) return "<1 min";
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), mr = m % 60;
+    return mr ? `${h}h ${mr}min` : `${h}h`;
+}
+
+function esOficina() {
+    return document.body.dataset.oficina === "1";
+}
+
+function avuiISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function filtraLlista(items) {
+    const estat = $m("#mag-filtre-estat").value;
+    const avui = $m("#mag-nomes-avui").checked ? avuiISO() : null;
+    return items.filter(it => {
+        if (avui && !(it.ts || "").startsWith(avui)) return false;
+        if (estat === "actives") return it.estat === "pendent" || it.estat === "en_curs";
+        if (estat === "plantilla") return !!it.plantilla;
+        return !estat || it.estat === estat;
+    });
+}
+
+// Línia de temps: quan va començar i acabar el pistolejat (o qui la va tancar).
+function textTemps(it) {
+    if (it.estat === "tancada") {
+        const qui = it.finalitzada_manual_per_nom ? ` per ${it.finalitzada_manual_per_nom}` : "";
+        return `Tancada${qui} · ${fmtHoraCurta(it.finalitzada_manual_at)}`;
+    }
+    if (!it.prep_iniciat) return "";
+    const fi = it.prep_finalitzat ? ` → ${fmtHoraCurta(it.prep_finalitzat)} (${fmtDuradaM(it.durada_s)})` : "";
+    return `Pistolejat des de les ${fmtHoraCurta(it.prep_iniciat)}${fi} · ${it.prep_per_nom || "SGA"}`;
+}
+
+function accionsLlista(it) {
+    const id = encodeURIComponent(it.id);
+    let html = `<a class="btn btn-primary mag-agr-prep" href="/magatzem/${id}">Preparació</a>`;
+    if (!esOficina()) return html;
+    html += `<a class="btn btn-ghost" href="/?agrupacio=${id}" title="Obre el resultat a Agrupar càrregues per tornar-lo a imprimir">Reimprimir</a>`;
+    if (it.estat === "tancada") {
+        html += `<button type="button" class="btn btn-ghost" data-act="reobrir" data-id="${escapeM(it.id)}">Reobrir</button>`;
+    } else if (it.estat !== "acabada") {
+        html += `<button type="button" class="btn btn-ghost" data-act="finalitzar" data-id="${escapeM(it.id)}" title="Tanca-la encara que no estigui tot pistolejat">Finalitza</button>`;
+    }
+    html += `<button type="button" class="btn btn-ghost mag-agr-elimina" data-act="eliminar" data-id="${escapeM(it.id)}">Elimina</button>`;
+    return html;
+}
 
 function _pintaLlistaItems(items) {
     const ul = $m("#mag-llista");
-    ul.innerHTML = "";
-    for (const it of items) {
-        const li = document.createElement("li");
-        const tancada = _isTancada(it);
-        const acabada = !tancada && _isAcabada(it);
-        const finalitzada = tancada || acabada;
-        let badge = "";
-        if (tancada) badge = '<span class="badge-tancada">TANCADA</span>';
-        else if (acabada) badge = '<span class="badge-acabada">ACABADA</span>';
-        const creador = it.created_by_nom
-            ? `<span class="mag-llista-creador">· ${escapeM(it.created_by_nom)}</span>`
-            : "";
-        li.innerHTML = `
-            <a href="/magatzem/${encodeURIComponent(it.id)}" class="${finalitzada ? "is-acabada" : ""}">
-                <div class="nom">
-                    ${escapeM(it.nom)}
-                    ${badge}
+    ul.innerHTML = items.map(it => {
+        const e = ESTAT_LLISTA[it.estat] || { txt: it.estat, cls: "" };
+        const badges = `<span class="ctrl-badge ${e.cls}">${escapeM(e.txt)}</span>`
+            + (it.plantilla ? ` <span class="ctrl-badge ctrl-badge-origen-desada" title="Plantilla recurrent">Plantilla</span>` : "")
+            + (it.origen === "impresa" ? ` <span class="ctrl-badge ctrl-badge-origen-impresa" title="Desada en imprimir-la">Impresa</span>` : "");
+        const creador = it.created_by_nom ? ` · ${escapeM(it.created_by_nom)}` : "";
+        const temps = textTemps(it);
+        const fin = it.estat === "acabada" || it.estat === "tancada";
+        return `
+            <li class="mag-agr${fin ? " is-acabada" : ""}">
+                <div class="mag-agr-cap">
+                    <a class="nom" href="/magatzem/${encodeURIComponent(it.id)}">${escapeM(it.nom)}</a>
+                    <span class="mag-agr-badges">${badges}</span>
                 </div>
-                <div class="meta">
-                    ${escapeM(fmtData(it.ts))} ${creador} · ${it.n_carregues} càrregues · ${it.n_productes} productes · ${fmtN.format(it.total_palets_fisics)} palets
-                </div>
-                <div class="meta progres">${textProgres(it.pct_pistolejat, it.n_preparats || 0, it.n_productes || 0)}</div>
-            </a>`;
-        ul.appendChild(li);
+                <div class="meta">${escapeM(fmtData(it.ts))}${creador} · ${it.n_carregues} càrregues · ${fmtN.format(it.total_palets_fisics || 0)} palets</div>
+                <div class="meta progres">${escapeM(textProgres(it.pct_pistolejat, it.n_preparats || 0, it.n_productes || 0))}</div>
+                ${temps ? `<div class="meta temps">${escapeM(temps)}</div>` : ""}
+                <div class="mag-agr-accions">${accionsLlista(it)}</div>
+            </li>`;
+    }).join("");
+}
+
+function pintaLlista() {
+    const items = llistaState.items;
+    const llista = filtraLlista(items);
+    $m("#mag-buit").hidden = items.length > 0;
+    $m("#mag-llista-bar").hidden = items.length === 0;
+    $m("#mag-filtre-buit").hidden = !(items.length > 0 && llista.length === 0);
+    $m("#mag-llista-count").textContent = items.length ? `${llista.length} de ${items.length}` : "";
+    _pintaLlistaItems(llista);
+}
+
+async function carregaLlista({ silenciós = false } = {}) {
+    try {
+        llistaState.items = await fetchJ("/api/agrupacions");
+        pintaLlista();
+    } catch (e) {
+        if (!silenciós) toast("error", "No s'ha pogut carregar el llistat: " + e.message);
     }
 }
 
-window.magatzemLlista = async function magatzemLlista() {
-    let items = [];
+async function accioLlista(act, id) {
+    const enc = encodeURIComponent(id);
     try {
-        items = await fetchJ("/api/agrupacions");
-    } catch (e) {
-        toast("error", "No s'ha pogut carregar el llistat: " + e.message);
-        return;
-    }
-    const buit = $m("#mag-buit");
-    const totesAcabades = $m("#mag-totes-acabades");
-    const bar = $m("#mag-llista-bar");
-    const countEl = $m("#mag-acabades-count");
-    const toggle = $m("#mag-mostra-acabades");
-
-    if (!items.length) {
-        buit.hidden = false;
-        bar.hidden = true;
-        return;
-    }
-
-    const finalitzades = items.filter(_isFinalitzada);
-    const obertes = items.filter(it => !_isFinalitzada(it));
-
-    // Sempre mostrem la barra amb el comptador (per recuperar les finalitzades)
-    bar.hidden = false;
-    countEl.textContent = finalitzades.length;
-
-    const refresca = () => {
-        const mostrar = toggle.checked;
-        const llista = mostrar ? items : obertes;
-        if (llista.length === 0) {
-            $m("#mag-llista").innerHTML = "";
-            buit.hidden = true;
-            // Si totes són finalitzades i no es mostren, ho indiquem
-            totesAcabades.hidden = !(finalitzades.length > 0);
-        } else {
-            totesAcabades.hidden = true;
-            buit.hidden = true;
-            _pintaLlistaItems(llista);
+        if (act === "eliminar") {
+            const ok = await window.mostrarConfirmacio({
+                titol: "Eliminar agrupació",
+                missatge: "L'agrupació quedarà eliminada definitivament i les seves càrregues tornaran a estar disponibles per agrupar.",
+                btnOk: "Sí, elimina-la",
+                btnCancel: "No",
+                tipus: "danger",
+            });
+            if (!ok) return;
+            await fetchJ(`/api/agrupacions/${enc}`, { method: "DELETE" });
+            toast("success", "Agrupació eliminada");
+        } else if (act === "finalitzar" || act === "reobrir") {
+            await fetchJ(`/api/agrupacions/${enc}/${act}`, { method: "POST" });
+            toast("success", act === "finalitzar" ? "Agrupació tancada" : "Agrupació reoberta");
         }
-    };
+    } catch (e) {
+        toast("error", e.message);
+    }
+    carregaLlista();
+}
 
-    toggle.addEventListener("change", refresca);
-    refresca();
+window.magatzemLlista = async function magatzemLlista() {
+    const sel = $m("#mag-filtre-estat");
+    try { sel.value = localStorage.getItem(FILTRE_KEY) ?? "actives"; } catch { /* sense storage */ }
+    if (sel.selectedIndex < 0) sel.value = "actives";   // valor desat que ja no existeix
+    sel.addEventListener("change", () => {
+        try { localStorage.setItem(FILTRE_KEY, sel.value); } catch { /* sense storage */ }
+        pintaLlista();
+    });
+    $m("#mag-nomes-avui").addEventListener("change", pintaLlista);
+    $m("#mag-llista").addEventListener("click", ev => {
+        const btn = ev.target.closest("button[data-act]");
+        if (btn && !btn.disabled) accioLlista(btn.dataset.act, btn.dataset.id);
+    });
+
+    await carregaLlista();
+    // El pistolejat avança sol: refresquem amb la pestanya visible.
+    const programa = () => {
+        clearTimeout(llistaState.timer);
+        if (document.hidden) return;
+        llistaState.timer = setTimeout(async () => { await carregaLlista({ silenciós: true }); programa(); }, LLISTA_POLL_MS);
+    };
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) clearTimeout(llistaState.timer);
+        else carregaLlista({ silenciós: true }).then(programa);
+    });
+    programa();
 };
 
 // ---- Vista PREPARACIÓ --------------------------------------------------

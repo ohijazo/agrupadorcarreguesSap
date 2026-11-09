@@ -128,7 +128,7 @@
     font-size: 1.1rem;
 }
 
-/* Barra superior del llistat (toggle d'acabades) */
+/* Barra de filtres de la llista "Agrupacions" */
 .mag-llista-bar {
     margin: 1.25rem 0 .5rem;
     padding: .65rem 1rem;
@@ -137,8 +137,21 @@
     border-radius: 10px;
     display: flex;
     align-items: center;
+    gap: 1rem 1.5rem;
+    flex-wrap: wrap;
 }
 .mag-llista-bar .mag-toggle { font-size: .95rem; }
+.mag-filtre { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; color: #2d3748; }
+.mag-filtre select {
+    min-height: 44px;
+    padding: 0 .6rem;
+    font: inherit;
+    font-weight: 500;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    background: #fff;
+}
+.mag-llista-count { margin-left: auto; color: #5a6675; font-size: .92rem; }
 
 /* Badge "ACABADA" / "TANCADA" al títol */
 .badge-acabada,
@@ -156,7 +169,7 @@
 .badge-acabada { background: #276749; }
 .badge-tancada { background: #c2410c; }
 
-/* Llista d'agrupacions desades */
+/* Targetes de la llista "Agrupacions" */
 .mag-llista {
     list-style: none;
     margin: 1.25rem 0;
@@ -164,32 +177,31 @@
     display: grid;
     gap: .85rem;
 }
-.mag-llista a {
-    display: block;
+.mag-agr {
     background: #fff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 1.1rem 1.25rem;
-    color: inherit;
-    text-decoration: none;
-    transition: transform .12s ease, box-shadow .12s ease;
+    padding: 1rem 1.25rem;
     box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
-.mag-llista a:hover,
-.mag-llista a:active {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(0,0,0,.1);
-    border-color: #2c5282;
+.mag-agr.is-acabada { background: #f7fcf9; border-color: #9ae6b4; }
+.mag-agr-cap { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.mag-agr .nom {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #1a365d;
+    text-decoration: none;
 }
-.mag-llista a.is-acabada {
-    background: #f7fcf9;
-    border-color: #38a169;
-    opacity: .85;
-}
-.mag-llista a.is-acabada .nom { color: #276749; }
-.mag-llista .nom { font-size: 1.2rem; font-weight: 700; }
+.mag-agr .nom:hover { text-decoration: underline; }
+.mag-agr-badges { display: inline-flex; gap: .35rem; flex-wrap: wrap; }
 .mag-llista .meta { font-size: .95rem; color: #5a6675; margin-top: .25rem; }
 .mag-llista .progres { color: #276749; font-weight: 600; }
+.mag-llista .temps { font-size: .88rem; }
+.mag-agr-accions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+.mag-agr-accions .btn { min-height: 44px; text-decoration: none; }
+.mag-agr-prep { min-width: 9rem; justify-content: center; }
+.mag-agr-elimina { color: #9b2c2c; }
+.mag-agr-elimina:hover { background: #fff5f5; border-color: #feb2b2; }
 
 /* Cards d'article */
 .mag-articles {
