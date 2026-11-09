@@ -1,4 +1,7 @@
-// Pantalla /control — seguiment d'agrupacions amb traçabilitat de preparació.
+// Pantalla /control, "Gestió d'agrupacions": totes les agrupacions desades
+// (també les plantilles), amb el progrés del pistolejat i les accions
+// d'oficina. Substitueix la finestra "Agrupacions desades" de la pàgina
+// principal: "Reimprimir" obre el resultat allà (/?agrupacio=<id>).
 (function () {
     "use strict";
 
@@ -58,8 +61,17 @@
 
     function badgeOrigen(it) {
         const m = ORIGEN_MAP[it.origen];
-        if (!m) return "";
-        return `<span class="ctrl-badge ${m.cls}" title="${escapeM(m.title)}">${escapeM(m.txt)}</span>`;
+        const plantilla = it.plantilla
+            ? ` <span class="ctrl-badge ctrl-badge-origen-desada" title="Plantilla recurrent: l'app la suggereix en futures cerques">Plantilla</span>`
+            : "";
+        if (!m) return plantilla;
+        return `<span class="ctrl-badge ${m.cls}" title="${escapeM(m.title)}">${escapeM(m.txt)}</span>${plantilla}`;
+    }
+
+    // Mateix llenguatge que la resta de pantalles: % pistolejat i productes fets.
+    function textProgres(it) {
+        const prod = `${it.n_preparats || 0}/${it.n_productes || 0} fets`;
+        return it.pct_pistolejat == null ? prod : `${it.pct_pistolejat}% · ${prod}`;
     }
 
     function badgeEstat(it) {
@@ -87,7 +99,7 @@
         const nomesAvui = $("#ctrl-nomes-avui").checked;
         const today = avuiISO();
         return items.filter((it) => {
-            if (origen && it.origen !== origen) return false;
+            if (origen === "plantilla" ? !it.plantilla : (origen && it.origen !== origen)) return false;
             if (estat && it.estat !== estat) return false;
             if (nomesAvui && !(it.ts || "").startsWith(today)) return false;
             return true;
@@ -102,8 +114,9 @@
         } else if (it.estat !== "acabada") {
             principal = `<button type="button" class="ctrl-btn ctrl-btn-fin" data-act="finalitzar" data-id="${idEsc}">Finalitza</button>`;
         }
+        const btnImp = `<a class="ctrl-btn ctrl-btn-reo" href="/?agrupacio=${encodeURIComponent(it.id)}" title="Obre el resultat a la pàgina principal per tornar-lo a imprimir">Reimprimir</a>`;
         const btnDel = `<button type="button" class="ctrl-btn ctrl-btn-del" data-act="eliminar" data-id="${idEsc}">Elimina</button>`;
-        return `<div class="ctrl-actions">${principal}${btnDel}</div>`;
+        return `<div class="ctrl-actions">${btnImp}${principal}${btnDel}</div>`;
     }
 
     function pinta() {
@@ -119,7 +132,7 @@
         }
         buit.hidden = true;
         tbody.innerHTML = items.map((it) => {
-            const progres = `${it.n_preparats || 0} / ${it.n_productes || 0}`;
+            const progres = textProgres(it);
             return `<tr>
                 <td>${badgeOrigen(it)}</td>
                 <td><a href="/magatzem/${encodeURIComponent(it.id)}" class="ctrl-nom">${escapeM(it.nom)}</a></td>

@@ -181,7 +181,9 @@ def llistar() -> list[dict]:
 
 
 def llistar_control(origen: str | None = None) -> list[dict]:
-    """Llistat per a la pantalla /control: agrega inici/fi/durada/preparador.
+    """Llistat per a la pantalla "Gestió d'agrupacions" (/control): agrega
+    inici/fi/durada/preparador. Hi surten també les plantilles (`plantilla`),
+    perquè la pantalla substitueix la finestra "Agrupacions desades".
 
     Estats possibles:
       - "pendent": cap producte marcat.
@@ -201,6 +203,7 @@ def llistar_control(origen: str | None = None) -> list[dict]:
         params.append(origen)
     sql = f"""
         SELECT a.id, a.nom, a.ts, a.n_carregues, a.n_productes, a.origen,
+               a.plantilla, a.pct_pistolejat, a.total_palets_fisics,
                a.finalitzada_manual_at, ufm.nom AS finalitzada_manual_per_nom,
                COALESCE(agg.n_preparats, 0) AS n_preparats,
                uc.nom AS created_by_nom,
@@ -220,7 +223,7 @@ def llistar_control(origen: str | None = None) -> list[dict]:
             WHERE p.agrupacio_id = a.id
         ) agg ON TRUE
         LEFT JOIN usuaris up ON up.id = agg.prep_per_id
-        WHERE a.plantilla = FALSE{extra_where}
+        WHERE TRUE{extra_where}
         ORDER BY a.ts DESC
     """
     out = []
@@ -262,6 +265,9 @@ def llistar_control(origen: str | None = None) -> list[dict]:
             "durada_s": durada_s,
             "estat": estat,
             "origen": r["origen"],
+            "plantilla": bool(r["plantilla"]),
+            "pct_pistolejat": r["pct_pistolejat"],
+            "total_palets_fisics": r["total_palets_fisics"],
             "finalitzada_manual_at": _format_ts(fin_manual_at) if fin_manual_at else None,
             "finalitzada_manual_per_nom": r["finalitzada_manual_per_nom"],
         })

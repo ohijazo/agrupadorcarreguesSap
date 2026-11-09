@@ -156,6 +156,11 @@ Vanilla JS sense framework. Tres "modes":
   - També es desa el % de kg pistolejats a `agrupacions.pct_pistolejat` (migració 007). La pàgina principal el mostra a l'estat de la càrrega ("en preparació · 1/3 · 35%") i la compta com a en preparació en quant és > 0.
   - Les agrupacions tancades a mà no es toquen.
 
+- **Gestió d'agrupacions (`/control`, `static/js/control.js`)**, només per a admin i oficina. Des de novembre de 2026 substitueix la finestra "Agrupacions desades" de la pàgina principal.
+  - Llista totes les agrupacions, plantilles incloses (`llistar_control`), amb el % pistolejat i filtres per origen i estat.
+  - Accions: Reimprimir, que obre `/?agrupacio=<id>` (la pàgina principal fa la cerca i després obre el resultat), Finalitza / Reobrir i Elimina.
+  - Les agrupacions ja fetes tenen dues pantalles segons el propòsit: Preparació de càrregues (`/magatzem`), per al magatzem, i aquesta, per a l'oficina.
+
 - **Gestió d'albarans (`/albarans`, `static/js/albarans.js`)** — només admin i oficina, entrada pròpia al menú d'usuari. Fins al novembre de 2026 era una secció dins la preparació; ara la preparació ja no en mostra res.
   - Llista els albarans (`ODLN`) amb càrrega creats per l'SGA (`ALBARANS_SGA_USUARIS`) en un rang de dates (avui, ahir, 7 dies, 30 dies o personalitzat, 31 dies com a màxim), amb cerca per client, albarà o càrrega. La cerca es fa al navegador.
   - Botó "📄 PDF" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_dates`, que passa pel commutador SQL/SL.

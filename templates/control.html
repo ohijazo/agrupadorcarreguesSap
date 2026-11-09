@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control d'agrupacions</title>
+    <title>Gestió d'agrupacions</title>
     <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
     <link rel="stylesheet" href="{{ static_url('css/magatzem.css') }}">
@@ -13,8 +13,8 @@
 <header class="mag-header">
     <div class="container mag-header-row">
         <div>
-            <h1>📊 Control d'agrupacions</h1>
-            <p class="mag-subtitle">Estat i traçabilitat de la preparació</p>
+            <h1>📊 Gestió d'agrupacions</h1>
+            <p class="mag-subtitle">Totes les agrupacions desades: com van, reimprimir-les, tancar-les o eliminar-les</p>
         </div>
         <div class="mag-header-tools">
             {% include '_user_menu.html' %}
@@ -33,6 +33,7 @@
                 <option value="">Totes</option>
                 <option value="desada">Desades</option>
                 <option value="impresa">Impressions</option>
+                <option value="plantilla">Plantilles</option>
             </select>
         </label>
         <label>
@@ -61,7 +62,7 @@
                     <th>Nom</th>
                     <th>Creada</th>
                     <th>Creador</th>
-                    <th class="num">Productes</th>
+                    <th class="num">Progrés</th>
                     <th>Estat</th>
                     <th>Inici</th>
                     <th>Fi</th>

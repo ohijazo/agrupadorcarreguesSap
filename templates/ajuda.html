@@ -272,7 +272,7 @@
             <li><a href="#agrupar">Fer una agrupació</a></li>
             <li><a href="#resultat">Entendre el Resultat de l'agrupació</a></li>
             <li><a href="#desar">Desar agrupacions i plantilles recurrents</a></li>
-            <li><a href="#desades">Agrupacions desades (★)</a></li>
+            <li><a href="#desades">Gestió d'agrupacions</a></li>
             <li><a href="#magatzem">Mode magatzem (preparació amb tablet)</a></li>
             <li><a href="#impressio">Impressió en paper</a></li>
             <li><a href="#dreceres">Dreceres de teclat</a></li>
@@ -529,16 +529,23 @@
     </ul>
 
     <!-- 6. Desades -->
-    <h2 id="desades">6. Agrupacions desades (★)</h2>
+    <h2 id="desades">6. Gestió d'agrupacions</h2>
     <p>
-        El botó quadrat <strong>★ Agrupacions desades</strong> de la capçalera obre el diàleg amb totes les agrupacions desades,
-        ordenades per data (més recents primer). Cadascuna mostra:
+        Les agrupacions ja fetes tenen dues pantalles, segons per a què les vulguis:
     </p>
     <ul>
-        <li>Nom + data + nombre de càrregues + productes + palets físics</li>
-        <li><strong>Carrega</strong> — obre el Resultat al modal (mateix layout que quan ho vas crear).</li>
-        <li><strong>Elimina</strong> — esborra definitivament. Les càrregues d'aquesta agrupació tornen a estar disponibles per agrupar.</li>
+        <li><strong>📦 Preparació de càrregues</strong> — per al magatzem: què s'ha de preparar i com va el pistolejat de cada agrupació.</li>
+        <li><strong>📊 Gestió d'agrupacions</strong> (oficina) — totes les agrupacions desades, també les plantilles, amb filtres per estat i origen. Per a cadascuna:
+            <ul>
+                <li><strong>Reimprimir</strong> — obre el Resultat a la pàgina principal, amb el mateix format que quan es va crear.</li>
+                <li><strong>Finalitza</strong> / <strong>Reobrir</strong> — la tanca a mà encara que no estigui tot pistolejat, o la torna a obrir.</li>
+                <li><strong>Elimina</strong> — l'esborra definitivament. Les seves càrregues tornen a estar disponibles per agrupar.</li>
+            </ul>
+        </li>
     </ul>
+    <p>
+        Inici, Fi i Durada són l'hora en què l'app va detectar el pistolejat de l'SGA (es comprova cada 2 minuts), no l'hora exacta de cada lectura.
+    </p>
 
     <div class="help-tip">
         <strong>💡 Drecera:</strong> a la pàgina principal pots clicar el badge "Ja agrupada" o la cel·la d'agrupació de qualsevol fila per saltar directament al Resultat d'aquella agrupació.
@@ -574,7 +581,7 @@
     <h3>7.3 Actualització automàtica</h3>
     <p>
         La pantalla consulta SAP cada 15 segons mentre està oberta. Encara que ningú no la tingui oberta,
-        el servidor actualitza cada 2 minuts el llistat del magatzem i el Control d'agrupacions.
+        el servidor actualitza cada 2 minuts el llistat del magatzem i la Gestió d'agrupacions.
         Si SAP no respon, es manté l'última dada bona i surt un avís.
     </p>
 

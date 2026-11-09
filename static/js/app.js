@@ -2025,43 +2025,6 @@ async function desarAgrupacioActual() {
     }
 }
 
-async function obrirDesades() {
-    const dlg = $("#desades-dialog");
-    if (!dlg) return;
-    try {
-        const items = await fetchJson("/api/agrupacions");
-        const ul = $("#desades-llista");
-        const buit = $("#desades-buit");
-        ul.innerHTML = "";
-        if (!items.length) {
-            buit.hidden = false;
-        } else {
-            buit.hidden = true;
-            for (const it of items) {
-                const li = document.createElement("li");
-                const creador = it.created_by_nom
-                    ? ` · <span class="desades-creador">creada per ${escapeHtml(it.created_by_nom)}</span>`
-                    : "";
-                li.innerHTML = `
-                    <div class="desades-item-info">
-                        <strong>${escapeHtml(it.nom)}</strong>
-                        <div class="meta">${escapeHtml(fmtData(it.ts))}${creador} · ${it.n_carregues} càrregues · ${it.n_productes} productes · ${fmt.format(it.total_palets_fisics)} palets</div>
-                    </div>
-                    <div class="desades-item-actions">
-                        <button type="button" class="btn btn-primary btn-sm" data-act="carregar" data-id="${escapeHtml(it.id)}">Carrega</button>
-                        <button type="button" class="btn btn-ghost btn-sm" data-act="eliminar" data-id="${escapeHtml(it.id)}">Elimina</button>
-                    </div>
-                `;
-                ul.appendChild(li);
-            }
-        }
-        if (typeof dlg.showModal === "function" && !dlg.open) dlg.showModal();
-        else dlg.setAttribute("open", "");
-    } catch (e) {
-        showToast("error", "No s'han pogut llegir les agrupacions desades", e.message);
-    }
-}
-
 async function carregarAgrupacioDesada(id) {
     try {
         const obj = await fetchJson(`/api/agrupacions/${encodeURIComponent(id)}`);
@@ -2085,7 +2048,6 @@ async function carregarAgrupacioDesada(id) {
         renderResultat(state.resultat);
         actualitzarBotoMagatzem();
         obrirModalResultat();
-        $("#desades-dialog")?.close();
         showToast("info", "Agrupació recuperada", obj.nom);
     } catch (e) {
         showToast("error", "Error carregant l'agrupació", e.message);
@@ -2258,24 +2220,6 @@ function iniciaResizeColumna(ev, th) {
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
-}
-
-async function eliminarAgrupacioDesada(id) {
-    const ok = await window.mostrarConfirmacio({
-        titol: "Eliminar agrupació",
-        missatge: "L'agrupació desada quedarà eliminada definitivament. Les seves càrregues tornaran a estar disponibles per agrupar.",
-        btnOk: "Sí, elimina-la",
-        btnCancel: "No",
-        tipus: "danger",
-    });
-    if (!ok) return;
-    try {
-        await fetchJson(`/api/agrupacions/${encodeURIComponent(id)}`, { method: "DELETE" });
-        showToast("success", "Agrupació eliminada");
-        obrirDesades();  // refresca llista
-    } catch (e) {
-        showToast("error", "Error eliminant", e.message);
-    }
 }
 
 function netejaFiltresAvancats() {
@@ -2472,20 +2416,6 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#btn-exportar-csv").addEventListener("click", exportarCsv);
     $("#btn-imprimir").addEventListener("click", imprimirInforme);
     $("#btn-desar-agrupacio")?.addEventListener("click", desarAgrupacioActual);
-    $("#btn-agrupacions-desades")?.addEventListener("click", obrirDesades);
-
-    // Diàleg de desades — delega clicks
-    const dlgDes = $("#desades-dialog");
-    if (dlgDes) {
-        dlgDes.addEventListener("click", (ev) => {
-            if (ev.target.matches("[data-close]")) { dlgDes.close(); return; }
-            const btn = ev.target.closest("button[data-act]");
-            if (!btn) return;
-            const id = btn.dataset.id;
-            if (btn.dataset.act === "carregar") carregarAgrupacioDesada(id);
-            else if (btn.dataset.act === "eliminar") eliminarAgrupacioDesada(id);
-        });
-    }
     $("#btn-tanca-resultat").addEventListener("click", tancarModalResultat);
 
     // Tancar modal en clicar fora
@@ -2556,9 +2486,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Auto-cerca en obrir: les dates ja venen posades (del servidor o de
     // l'última cerca), i un peó no ha de saber que encara cal prémer Cerca.
+    // "Reimprimir" de Gestió d'agrupacions porta aquí amb ?agrupacio=<id>:
+    // primer la cerca de sempre i després el resultat d'aquella agrupació, de
+    // manera que en tancar-lo es torna a la llista de càrregues normal.
+    const agrupacioEnllac = new URLSearchParams(location.search).get("agrupacio");
+    if (agrupacioEnllac) history.replaceState(null, "", location.pathname);
     if (validarFormulari()) {
         // petit retard perquè es vegi la UI inicial
-        setTimeout(() => buscarCarregues(), 100);
+        setTimeout(async () => {
+            await buscarCarregues();
+            if (agrupacioEnllac) carregarAgrupacioDesada(agrupacioEnllac);
+        }, 100);
+    } else if (agrupacioEnllac) {
+        carregarAgrupacioDesada(agrupacioEnllac);
     }
 
     // Eines de depuració en localhost (no exposem a producció)

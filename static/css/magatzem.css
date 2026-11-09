@@ -821,7 +821,7 @@
 .ctrl-actions {
     display: flex;
     gap: 6px;
-    justify-content: flex-end;
+    justify-content: flex-start;   /* "Reimprimir" sempre al mateix lloc */
 }
 .ctrl-btn {
     padding: 4px 10px;
@@ -832,6 +832,13 @@
     cursor: pointer;
     transition: background 0.1s, border-color 0.1s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+/* A la tablet els peons (rol oficina) també fan servir aquesta pantalla. */
+@media (pointer: coarse) {
+    .ctrl-btn { min-height: 44px; padding: 0 14px; font-size: .9rem; }
 }
 .ctrl-btn-fin {
     background: #eff6ff;
@@ -1069,4 +1076,15 @@
     .alb-accions .btn + .btn { margin-left: 0; }
     .alb-pdf,
     .alb-cancel { flex: 1; justify-content: center; }
+}
+
+/* Gestió d'agrupacions a la tablet: per sota de 1200 px s'amaguen Creador,
+   Inici, Fi, Durada i Preparador (columnes 4, 7-10) perquè la columna
+   d'Accions es vegi sense fer scroll lateral. */
+@media (max-width: 1200px) {
+    .control-table th:nth-child(4), .control-table td:nth-child(4),
+    .control-table th:nth-child(7), .control-table td:nth-child(7),
+    .control-table th:nth-child(8), .control-table td:nth-child(8),
+    .control-table th:nth-child(9), .control-table td:nth-child(9),
+    .control-table th:nth-child(10), .control-table td:nth-child(10) { display: none; }
 }
