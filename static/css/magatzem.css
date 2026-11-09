@@ -12,8 +12,9 @@
     color: #fff;
     padding: 1.25rem 0 1.1rem;
     box-shadow: 0 2px 10px rgba(0,0,0,.15);
-    position: sticky;
-    top: 0;
+    /* No fixa: amb la fila de botons de navegació fa uns 230 px i, enganxada
+       a dalt, es menjava un terç de la tablet en baixar per la llista. */
+    position: relative;
     z-index: 50;
 }
 .mag-header h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
@@ -1087,4 +1088,34 @@
     .control-table th:nth-child(8), .control-table td:nth-child(8),
     .control-table th:nth-child(9), .control-table td:nth-child(9),
     .control-table th:nth-child(10), .control-table td:nth-child(10) { display: none; }
+}
+
+/* Pendents del dia: a quina agrupació és cada càrrega (o "Sense agrupar"). */
+.pend-agrupacio,
+.pend-sense-agrupar {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    margin-left: .4rem;
+    padding: 0 .65rem;
+    border-radius: 999px;
+    font-size: .85rem;
+    font-weight: 600;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.pend-agrupacio {
+    color: #1a365d;
+    background: #ebf4ff;
+    border: 1px solid #bfd3ee;
+    text-decoration: none;
+}
+.pend-agrupacio:hover { background: #dbeafe; }
+.pend-sense-agrupar {
+    color: #4a5568;
+    background: #edf2f7;
+    border: 1px dashed #a0aec0;
+}
+@media (pointer: coarse) {
+    .pend-agrupacio { min-height: 44px; }
 }

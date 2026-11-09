@@ -1,4 +1,5 @@
-// Pantalla "Pendents de pistolejar" (tablet de magatzem). Només lectura:
+// Pantalla "Pendents del dia" (tablet de magatzem): totes les càrregues que
+// surten, agrupades o no, amb el que queda per pistolejar de cada comanda. Només lectura:
 // llegeix /api/pistolejat/pendents i refresca cada 15 s amb la pestanya visible.
 "use strict";
 
@@ -93,11 +94,19 @@ function pintaCarrega(c) {
         .filter(Boolean).join(" ");
     const meta = [c.transportista, c.matricula].filter(Boolean).map(escP).join(" · ");
     const t = c.totals;
+    // L'agrupació on és la càrrega (porta a la seva preparació) o "Sense
+    // agrupar". `undefined` vol dir que el servidor no ho ha pogut saber.
+    let agrupacio = "";
+    if (c.agrupacio) {
+        agrupacio = `<a class="pend-agrupacio" href="/magatzem/${encodeURIComponent(c.agrupacio.id)}">📦 ${escP(c.agrupacio.nom)}</a>`;
+    } else if (c.agrupacio === null) {
+        agrupacio = `<span class="pend-sense-agrupar">Sense agrupar</span>`;
+    }
     return `
         <section class="pend-carrega ${t.n_pendents === 0 ? "is-acabada" : ""}">
             <header class="pend-carrega-cap">
                 <div>
-                    <div class="pend-carrega-nom">${escP(c.nom || `Càrrega ${c.docentry}`)} <span class="pend-carrega-num">#${c.docentry}</span></div>
+                    <div class="pend-carrega-nom">${escP(c.nom || `Càrrega ${c.docentry}`)} <span class="pend-carrega-num">#${c.docentry}</span> ${agrupacio}</div>
                     <div class="pend-carrega-meta">🕒 ${escP(quan || "sense hora")}${meta ? ` · ${meta}` : ""}</div>
                 </div>
                 <div class="pend-carrega-progres">

@@ -158,7 +158,7 @@ def test_pagina_no_la_tapa_la_ruta_d_agrupacio(client, monkeypatch):
                         lambda _id: pytest.fail("ha entrat a magatzem_prep"))
     r = c.get("/magatzem/pendents")
     assert r.status_code == 200
-    assert b"Pendents de pistolejar" in r.data
+    assert b"Pendents del dia" in r.data
 
 
 # --- Progres d'una agrupacio (substitueix el checklist manual) -------------
@@ -274,3 +274,30 @@ def test_progres_amb_cache_reaprofita_uns_segons(monkeypatch):
     rellotge[0] += preparacio_sga.CACHE_S + 1
     preparacio_sga.progres_amb_cache(a)
     assert crides == ["a" * 32, "b" * 32, "a" * 32]
+
+
+# --- Pendents del dia: a quina agrupacio es cada carrega -----------------
+def test_pendents_diu_l_agrupacio_o_sense_agrupar(monkeypatch):
+    import app as app_module
+    index = {
+        "SAP/1/87": [{"id": "vella", "nom": "Tancada", "finalitzada": True},
+                     {"id": "viva", "nom": "Escapa dimarts", "finalitzada": False}],
+        "SAP/1/98": [{"id": "acabada", "nom": "Baldo", "finalitzada": True}],
+    }
+    monkeypatch.setattr(app_module.agrupacions_store, "index_carregues_agrupades", lambda: index)
+    carregues = [{"carrega_id": "SAP/1/87"}, {"carrega_id": "SAP/1/98"}, {"carrega_id": "SAP/1/99"}]
+    app_module._afegeix_agrupacio(carregues)
+    assert carregues[0]["agrupacio"] == {"id": "viva", "nom": "Escapa dimarts"}
+    assert carregues[1]["agrupacio"] == {"id": "acabada", "nom": "Baldo"}
+    assert carregues[2]["agrupacio"] is None
+
+
+def test_pendents_sense_postgres_no_posa_etiqueta(monkeypatch):
+    import app as app_module
+
+    def falla():
+        raise RuntimeError("PG caigut")
+    monkeypatch.setattr(app_module.agrupacions_store, "index_carregues_agrupades", falla)
+    carregues = [{"carrega_id": "SAP/1/87"}]
+    app_module._afegeix_agrupacio(carregues)
+    assert "agrupacio" not in carregues[0]

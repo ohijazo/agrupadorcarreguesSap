@@ -2,8 +2,10 @@
     Pensats per a la tablet del magatzem: icona a sobre, nom a sota.
     Mateixa visibilitat per rol que el menú d'usuari (_user_menu.html).
     Les agrupacions ja fetes tenen dues pantalles segons per a què serveixen:
-    "Preparació de càrregues" (magatzem: què s'ha de preparar i com va) i
-    "Gestió d'agrupacions" (oficina: reimprimir, tancar, eliminar). -#}
+    "Preparació d'agrupacions" (magatzem: què s'ha de carregar i com va) i
+    "Gestió d'agrupacions" (oficina: reimprimir, tancar, eliminar).
+    "Pendents del dia" és una altra cosa: totes les càrregues que surten,
+    agrupades o no (n'hi ha que es preparen sense agrupar). -#}
 {% set rol = current_user.rol if current_user else None %}
 {% set oficina = not current_user or rol in ('admin', 'oficina') %}
 {% macro actiu(ruta) %}{% if request.path == ruta %} aria-current="page"{% endif %}{% endmacro %}
@@ -17,11 +19,11 @@
     {#- També activa dins la preparació d'una agrupació (/magatzem/<id>). -#}
     <a href="/magatzem" class="nav-tile"{% if request.path == '/magatzem' or (request.path.startswith('/magatzem/') and request.path != '/magatzem/pendents') %} aria-current="page"{% endif %}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></svg>
-        <span>Preparació de càrregues</span>
+        <span>Preparació d'agrupacions</span>
     </a>
     <a href="/magatzem/pendents" class="nav-tile"{{ actiu('/magatzem/pendents') }}>
         {% include '_icona_pda.html' %}
-        <span>Pendents de pistolejar</span>
+        <span>Pendents del dia</span>
     </a>
     {% if oficina and (pdf_albarans or cancelar_albarans) %}
     <a href="/albarans" class="nav-tile"{{ actiu('/albarans') }}>

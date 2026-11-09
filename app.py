@@ -655,14 +655,32 @@ def api_pendents_pistolejar():
         return _err_validacio("El rang màxim és de 31 dies.")
     nomes_pendents = request.args.get("tots") != "1"
     try:
-        return jsonify(llistar_pendents_pistolejar(
-            desde_d.isoformat(), fins_d.isoformat(), nomes_pendents=nomes_pendents))
+        r = llistar_pendents_pistolejar(
+            desde_d.isoformat(), fins_d.isoformat(), nomes_pendents=nomes_pendents)
     except backend_dades.ERRORS_DADES:
         log.exception("DB error a pendents de pistolejar")
         return _err_db()
     except Exception:
         log.exception("pendents de pistolejar")
         return _err_genèric()
+    _afegeix_agrupacio(r.get("carregues") or [])
+    return jsonify(r)
+
+
+def _afegeix_agrupacio(carregues: list[dict]) -> None:
+    """A cada carrega de "Pendents del dia", l'agrupacio on es (la no
+    tancada mes recent) o None si no esta agrupada: hi ha carregues que es
+    preparen sense agrupar. Si PostgreSQL falla no es posa la clau i la
+    pantalla funciona igual, sense l'etiqueta."""
+    try:
+        index = agrupacions_store.index_carregues_agrupades()
+    except Exception:
+        log.warning("pendents: sense index d'agrupacions", exc_info=True)
+        return
+    for c in carregues:
+        ags = index.get(c.get("carrega_id")) or []
+        ag = next((a for a in ags if not a["finalitzada"]), ags[0] if ags else None)
+        c["agrupacio"] = {"id": ag["id"], "nom": ag["nom"]} if ag else None
 
 
 # --- Gestio d'albarans: llista per dates i PDF amb el Crystal de SAP -----

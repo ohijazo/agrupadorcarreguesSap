@@ -171,7 +171,7 @@ let magState = {
     lastAcabada: null,       // si estava tota feta al darrer render (null = abans del primer)
 };
 
-// Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents de pistolejar").
+// Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents del dia").
 const POLL_PREP_MS = 15_000;
 
 const ETIQUETA_ESTAT_PREP = {
