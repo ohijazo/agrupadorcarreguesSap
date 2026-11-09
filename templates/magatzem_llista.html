@@ -13,16 +13,15 @@
 <header class="mag-header">
     <div class="container mag-header-row">
         <div>
-            {% if not current_user or current_user.rol in ('admin', 'oficina') %}
-            <a href="/" class="mag-back">← Agrupació de càrregues</a>
-            {% endif %}
             <h1>📦 Preparació de càrregues</h1>
             <p class="mag-subtitle">Tria una agrupació desada per començar</p>
         </div>
         <div class="mag-header-tools">
-            <a href="/magatzem/pendents" class="btn-pendents">{% include '_icona_pda.html' %} Pendents de pistolejar</a>
             {% include '_user_menu.html' %}
         </div>
+    </div>
+    <div class="container">
+        {% include '_nav_rapida.html' %}
     </div>
 </header>
 
