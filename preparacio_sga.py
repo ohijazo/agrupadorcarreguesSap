@@ -11,6 +11,8 @@ preparacio oberta) i `scripts/sincronitzar_pistolejat.py` (timer).
 from __future__ import annotations
 
 import logging
+import time
+from threading import Lock
 
 import agrupacions_store
 from consultes_carregues import obtenir_dades_pistolejat
@@ -47,6 +49,30 @@ def progres_i_sincronitza(obj: dict) -> dict:
     progres = calc.progres_agrupacio(obj.get("resultat") or {}, dades)
     if not obj.get("finalitzada_manual_at"):
         agrupacions_store.sincronitza_preparats(obj["id"], progres["fets"], progres["percent"])
+    return progres
+
+
+# Diverses tablets amb la mateixa agrupacio oberta (cadascuna refresca cada
+# 15 s) han de fer una sola consulta a SAP: el resultat d'una agrupacio es
+# reaprofita durant uns segons. Es per proces; amb dos workers, com a molt
+# dues consultes per finestra.
+CACHE_S = 10
+_cache: dict[str, tuple[float, dict]] = {}
+_cache_lock = Lock()
+
+
+def progres_amb_cache(obj: dict) -> dict:
+    """`progres_i_sincronitza` amb una cache curta per agrupacio."""
+    ara = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(obj["id"])
+        if hit and ara - hit[0] < CACHE_S:
+            return hit[1]
+    progres = progres_i_sincronitza(obj)
+    with _cache_lock:
+        _cache[obj["id"]] = (time.monotonic(), progres)
+        for k in [k for k, (t, _) in _cache.items() if ara - t > 10 * CACHE_S]:
+            del _cache[k]
     return progres
 
 

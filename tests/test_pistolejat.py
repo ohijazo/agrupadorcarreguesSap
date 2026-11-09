@@ -255,3 +255,22 @@ def test_progres_no_diu_100_si_falta_algun_producte():
 def test_progres_granel_sense_sacs():
     r = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0, sacs=0)]))
     assert r["productes"]["33851"]["sacs_total"] is None
+
+
+# --- Cache del progres (diverses tablets, una consulta a SAP) --------------
+def test_progres_amb_cache_reaprofita_uns_segons(monkeypatch):
+    import preparacio_sga
+    crides = []
+    monkeypatch.setattr(preparacio_sga, "progres_i_sincronitza",
+                        lambda obj: crides.append(obj["id"]) or {"fets": [], "id": obj["id"]})
+    monkeypatch.setattr(preparacio_sga, "_cache", {})
+    rellotge = [1000.0]
+    monkeypatch.setattr(preparacio_sga.time, "monotonic", lambda: rellotge[0])
+    a, b = {"id": "a" * 32}, {"id": "b" * 32}
+    preparacio_sga.progres_amb_cache(a)
+    preparacio_sga.progres_amb_cache(a)
+    preparacio_sga.progres_amb_cache(b)
+    assert crides == ["a" * 32, "b" * 32]
+    rellotge[0] += preparacio_sga.CACHE_S + 1
+    preparacio_sga.progres_amb_cache(a)
+    assert crides == ["a" * 32, "b" * 32, "a" * 32]

@@ -14,6 +14,7 @@ import time
 from collections import defaultdict, deque
 from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
+from contextlib import contextmanager
 from threading import Lock
 
 import requests
@@ -683,9 +684,21 @@ def _usuaris_sga() -> set[int]:
     return {int(x) for x in crus.replace(" ", "").split(",") if x.isdigit()}
 
 
-# Una cancel·lacio alhora per proces: la comprovacio d'estat i el POST han
-# d'anar junts perque un doble clic no faci dues crides a SAP.
-_cancel_lock = Lock()
+# Una cancel·lacio alhora per albara: la comprovacio d'estat i el POST han
+# d'anar junts perque dues persones (o un doble clic) no facin dues crides a
+# SAP. Un Lock() de Python nomes valia dins d'un proces, i Gunicorn en te
+# dos: el bloqueig es a PostgreSQL (advisory lock de transaccio), que el
+# comparteixen tots. La segona peticio espera, torna a llegir l'albara i el
+# troba cancel·lat. `_BLOQUEIG_ALBARANS` separa aquests locks dels d'altres usos.
+_BLOQUEIG_ALBARANS = 7101
+
+
+@contextmanager
+def _bloqueig_albara(doc_entry: int):
+    import db
+    with db.get_conn() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(%s, %s)", (_BLOQUEIG_ALBARANS, int(doc_entry)))
+        yield   # el lock es deixa anar amb el commit en sortir de get_conn()
 
 
 @app.route("/api/albarans")
@@ -774,31 +787,42 @@ def cancelar_albara(doc_entry: int):
     if not _rate_limit(f"cancel_alb:{session.get('user_id') or request.remote_addr}", max_req=10, window_sec=60):
         return jsonify({"error": "Massa cancel·lacions seguides; espera un minut."}), 429
 
-    with _cancel_lock:
-        try:
-            estat = escriptura_albarans.estat_albara(doc_entry)
-        except (SLError, requests.RequestException):
-            log.exception("SL no respon llegint l'albara %s", doc_entry)
-            return jsonify({"error": "SAP no respon. Torna-ho a provar d'aquí a una estona."}), 503
-        if estat is None:
-            return jsonify({"error": "Aquest albarà no existeix a SAP."}), 404
-        motiu_no = escriptura_albarans.motiu_no_cancelable(estat, _usuaris_sga())
-        if motiu_no:
-            return jsonify({"error": motiu_no}), 409
+    import psycopg
+    try:
+        with _bloqueig_albara(doc_entry):
+            return _cancela_albara_bloquejat(doc_entry, motiu)
+    except psycopg.Error:
+        # Sense PostgreSQL no podem garantir una sola cancel·lacio: no seguim.
+        log.exception("No s'ha pogut agafar el bloqueig de l'albara %s", doc_entry)
+        return jsonify({"error": "No s'ha pogut cancel·lar ara mateix. Torna-ho a provar d'aquí a una estona."}), 503
 
-        detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu}
-        try:
-            escriptura_albarans.cancelar_albara(doc_entry)
-        except SLError as e:
-            msg_sap = escriptura_albarans.missatge_sap(e)
-            log.error("SAP no ha cancel·lat l'albara %s (%s): %s", doc_entry,
-                      getattr(e, "status_code", None), e)
-            audit.log("cancelar_albara_error", target=str(estat["docnum"]),
-                      detall={**detall, "error": msg_sap or str(e)[:300]})
-            status = getattr(e, "status_code", None)
-            if status and 400 <= status < 500 and msg_sap:
-                return jsonify({"error": f"SAP no ha deixat cancel·lar l'albarà: {msg_sap}"}), 409
-            return jsonify({"error": "No s'ha pogut cancel·lar l'albarà a SAP. Avisa administració."}), 503
+
+def _cancela_albara_bloquejat(doc_entry: int, motiu: str):
+    """Comprovacio d'estat i POST a SAP. S'ha de cridar amb `_bloqueig_albara`."""
+    try:
+        estat = escriptura_albarans.estat_albara(doc_entry)
+    except (SLError, requests.RequestException):
+        log.exception("SL no respon llegint l'albara %s", doc_entry)
+        return jsonify({"error": "SAP no respon. Torna-ho a provar d'aquí a una estona."}), 503
+    if estat is None:
+        return jsonify({"error": "Aquest albarà no existeix a SAP."}), 404
+    motiu_no = escriptura_albarans.motiu_no_cancelable(estat, _usuaris_sga())
+    if motiu_no:
+        return jsonify({"error": motiu_no}), 409
+
+    detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu}
+    try:
+        escriptura_albarans.cancelar_albara(doc_entry)
+    except SLError as e:
+        msg_sap = escriptura_albarans.missatge_sap(e)
+        log.error("SAP no ha cancel·lat l'albara %s (%s): %s", doc_entry,
+                  getattr(e, "status_code", None), e)
+        audit.log("cancelar_albara_error", target=str(estat["docnum"]),
+                  detall={**detall, "error": msg_sap or str(e)[:300]})
+        status = getattr(e, "status_code", None)
+        if status and 400 <= status < 500 and msg_sap:
+            return jsonify({"error": f"SAP no ha deixat cancel·lar l'albarà: {msg_sap}"}), 409
+        return jsonify({"error": "No s'ha pogut cancel·lar l'albarà a SAP. Avisa administració."}), 503
 
     log.info("Albara %s (DocEntry %s) cancel·lat", estat["docnum"], doc_entry)
     audit.log("cancelar_albara", target=str(estat["docnum"]), detall=detall)
@@ -1058,11 +1082,17 @@ def api_agrupacions_pistolejat(id_):
     """Progres de la preparacio segons el pistolejat de l'SGA. Substitueix el
     checklist manual: de pas, desa els productes fets a `productes_preparats`
     (vegeu preparacio_sga.py)."""
+    # Cada crida pot anar a SAP. Una tablet en fa 4 per minut; el límit
+    # només atura un script. Per IP del client (darrere l'Apache, la de
+    # X-Forwarded-For, com al login): diverses tablets poden compartir usuari.
+    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+    if not _rate_limit(f"pistolejat:{ip}", max_req=60, window_sec=60):
+        return jsonify({"error": "Massa peticions seguides; espera un minut."}), 429
     obj = agrupacions_store.obtenir(id_)
     if obj is None:
         return jsonify({"error": "Agrupació no trobada."}), 404
     try:
-        return jsonify(preparacio_sga.progres_i_sincronitza(obj))
+        return jsonify(preparacio_sga.progres_amb_cache(obj))
     except backend_dades.ERRORS_DADES:
         log.exception("DB error a pistolejat de l'agrupacio %s", id_)
         return _err_db()

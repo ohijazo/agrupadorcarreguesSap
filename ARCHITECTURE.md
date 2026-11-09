@@ -151,6 +151,7 @@ Vanilla JS sense framework. Tres "modes":
 - **Preparació d'una agrupació (`/magatzem/<id>`)** — només lectura. Fins al novembre de 2026 era un checklist que l'operari marcava a mà; ara el progrés surt del pistolejat de l'SGA:
   - `preparacio_sga.py` llegeix `obtenir_dades_pistolejat(carregues, incloure_tancades=True)` i calcula per producte amb `dades.pistolejat.progres_agrupacio`. Un producte és fet quan, a totes les línies de comanda de les seves càrregues, `kg_oberts − pistolejat ≤ 0`: tot pistolejat o ja amb albarà. Es compara en kg; els sacs només es mostren.
   - Els fets es desen a `productes_preparats` (`agrupacions_store.sincronitza_preparats`, `marcat_ip='SGA'`, sense usuari). Així el llistat de magatzem, `/control`, la planificació i `v_agrupacions_estat` funcionen igual que abans. Si es cancel·la un albarà, el producte se'n treu.
+  - L'endpoint reaprofita el resultat de cada agrupació durant 10 s (`preparacio_sga.progres_amb_cache`), perquè diverses tablets amb la mateixa agrupació oberta facin una sola consulta a SAP, i limita a 60 peticions per minut per IP del client.
   - La sincronització es fa en dos llocs. La pantalla oberta crida `/api/agrupacions/<id>/pistolejat` cada 15 s. El timer `agrupacio-carregues-sap-pistolejat` (cada 2 min, `scripts/sincronitzar_pistolejat.py`) cobreix les agrupacions no tancades dels últims 30 dies amb una sola consulta a SAP.
   - També es desa el % de kg pistolejats a `agrupacions.pct_pistolejat` (migració 007). La pàgina principal el mostra a l'estat de la càrrega ("en preparació · 1/3 · 35%") i la compta com a en preparació en quant és > 0.
   - Les agrupacions tancades a mà no es toquen.
@@ -165,6 +166,7 @@ Vanilla JS sense framework. Tres "modes":
   - Botó "✖ Cancel·la" als albarans oberts fets per l'SGA (`ALBARANS_SGA_USUARIS`). Demana un motiu obligatori.
   - Fa `POST DeliveryNotes(N)/Cancel` pel Service Layer (`dades/sl/escriptura_albarans.py`), sigui quin sigui el backend de lectura. Abans torna a llegir l'albarà de SAP i el rebutja si ja està cancel·lat, no és de l'SGA o té línies tancades (facturat o amb devolució).
   - Si el POST dona error o timeout, torna a llegir l'estat: si SAP el mostra cancel·lat, és un èxit.
+  - La comprovació i el POST van dins d'un bloqueig per albarà a PostgreSQL (`pg_advisory_xact_lock(7101, DocEntry)`), que comparteixen els dos workers de Gunicorn: si dues persones cancel·len alhora, la segona espera i rep "ja està cancel·lat". Sense PostgreSQL no es cancel·la (503).
   - A SAP la cancel·lació la signa l'usuari del Service Layer. Qui ho ha fet i per què només queda a l'auditoria de l'app.
   - Apagat per defecte (`CANCELAR_ALBARANS`).
 

@@ -4,6 +4,7 @@ SAP ni PostgreSQL: es substitueix `escriptura_albarans` per un fals.
 La logica del modul de debo (`dades/sl/escriptura_albarans.py`) es prova al
 final, nomes si l'app germana hi es (necessita `sap_service_layer`).
 """
+import contextlib
 import os
 import sys
 import types
@@ -76,6 +77,15 @@ def client(monkeypatch):
     app_module._rate_buckets.clear()
     app_module.app.config["CSRF_ENABLED"] = False
     monkeypatch.setattr(app_module, "SLError", _ErrorSL)
+    # Sense PostgreSQL: el bloqueig per albara (advisory lock) es fals i
+    # apunta quins albarans s'han bloquejat.
+    app_module._bloquejats = []
+
+    @contextlib.contextmanager
+    def bloqueig(doc_entry):
+        app_module._bloquejats.append(doc_entry)
+        yield
+    monkeypatch.setattr(app_module, "_bloqueig_albara", bloqueig)
     auditats = []
     monkeypatch.setattr(app_module.audit, "log",
                         lambda accio, target=None, detall=None: auditats.append((accio, target, detall)))
@@ -102,6 +112,25 @@ def test_cancela_i_audita_amb_motiu(client, monkeypatch):
     assert fals.cancelats == [148]
     assert auditats == [("cancelar_albara", "26700148",
                          {"docentry": 148, "carrega": 98, "motiu": "Lot equivocat"})]
+    # La comprovacio i el POST van dins del bloqueig d'aquest albara.
+    assert app_module._bloquejats == [148]
+
+
+def test_sense_bloqueig_no_cancel_la(client, monkeypatch):
+    # Si PostgreSQL no respon no podem garantir una sola cancel·lacio entre
+    # els dos workers: no es crida SAP.
+    import psycopg
+    c, app_module, auditats = client
+    fals = _posa(monkeypatch, app_module, _Fals())
+
+    @contextlib.contextmanager
+    def sense_pg(doc_entry):
+        raise psycopg.OperationalError("PG caigut")
+        yield
+    monkeypatch.setattr(app_module, "_bloqueig_albara", sense_pg)
+    r = _cancela(c)
+    assert r.status_code == 503
+    assert fals.cancelats == [] and auditats == []
 
 
 def test_apagat_per_defecte(client, monkeypatch):
