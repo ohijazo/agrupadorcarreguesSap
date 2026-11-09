@@ -50,7 +50,7 @@ if _PREP_PATH and os.path.isdir(_PREP_PATH) and _PREP_PATH not in sys.path:
 # Imports locals (després del sys.path)
 from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
-    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_carregues,
+    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_dates,
     llistar_carregues, llistar_estats_carregues, llistar_pendents_pistolejar,
     llistar_transportistes, resum_carrega,
 )
@@ -619,6 +619,12 @@ def control_llista():
     return render_template("control.html")
 
 
+@app.route("/albarans", strict_slashes=False)
+@auth.requires_rol("admin", "oficina")
+def albarans_llista():
+    return render_template("albarans.html")
+
+
 @app.route("/magatzem/<id_>")
 @auth.requires_rol("admin", "oficina", "magatzem")
 def magatzem_prep(id_):
@@ -657,7 +663,7 @@ def api_pendents_pistolejar():
         return _err_genèric()
 
 
-# --- Albarans: llista per carrega i PDF amb el Crystal de SAP ------------
+# --- Gestio d'albarans: llista per dates i PDF amb el Crystal de SAP -----
 # El PDF el genera `serveis/crystal-pdf`, un servei Windows al servidor de SAP
 # (Crystal no funciona a Linux). Sense CRYSTAL_PDF_URL la funcio esta apagada.
 def _crystal_pdf_url() -> str:
@@ -682,17 +688,20 @@ _cancel_lock = Lock()
 
 
 @app.route("/api/albarans")
-@auth.requires_rol("admin", "oficina", "magatzem")
+@auth.requires_rol("admin", "oficina")
 def api_albarans():
-    """Albarans de venda de les carregues indicades: `?carregues=87,98`
-    (DocEntry de `@SEI_ORDENCARGA`)."""
-    crues = [x.strip() for x in (request.args.get("carregues") or "").split(",") if x.strip()]
-    if not crues or len(crues) > 50 or not all(x.isdigit() for x in crues):
-        return _err_validacio("'carregues' ha de ser una llista de fins a 50 números separats per comes.")
+    """Albarans de l'SGA (amb carrega) amb data entre `?desde` i `?fins`
+    (YYYY-MM-DD, tots dos inclosos, 31 dies com a maxim)."""
+    rang, err = valida_rang_dates(request.args.get("desde"), request.args.get("fins"))
+    if err:
+        return _err_validacio(err)
+    desde_d, fins_d = rang
+    if (fins_d - desde_d).days > 31:
+        return _err_validacio("El rang màxim és de 31 dies.")
     try:
-        albarans = llistar_albarans_carregues([int(x) for x in crues])
-        cancelar = _cancelar_albarans_actiu()
         sga = _usuaris_sga()
+        albarans = llistar_albarans_dates(desde_d, fins_d, sorted(sga))
+        cancelar = _cancelar_albarans_actiu()
         for a in albarans:
             # Orientatiu per pintar el boto; la comprovacio de debo es fa en
             # cancel·lar, amb l'estat fresc de SAP.
@@ -712,7 +721,7 @@ def _text(msg: str, status: int):
 
 
 @app.route("/albarans/<int:doc_entry>/pdf")
-@auth.requires_rol("admin", "oficina", "magatzem")
+@auth.requires_rol("admin", "oficina")
 def albara_pdf(doc_entry: int):
     """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
     url = _crystal_pdf_url()
@@ -747,7 +756,7 @@ def albara_pdf(doc_entry: int):
 
 
 @app.route("/api/albarans/<int:doc_entry>/cancelar", methods=["POST"])
-@auth.requires_rol("admin", "oficina", "magatzem")
+@auth.requires_rol("admin", "oficina")
 def cancelar_albara(doc_entry: int):
     """Cancel·la a SAP un albara fet per l'SGA. Cos: `{"motiu": "..."}`.
 

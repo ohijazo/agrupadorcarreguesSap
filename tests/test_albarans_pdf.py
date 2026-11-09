@@ -2,12 +2,13 @@
 `/albarans/<docentry>/pdf` cap al servei `serveis/crystal-pdf`, sense SAP, sense
 PostgreSQL i sense el servei (es mockeja `requests.get`).
 
-La paritat SQL/SL de `llistar_albarans_carregues` es comprova amb
-`scripts/paritat_backends.py --funcio llistar_albarans_carregues`.
+La paritat SQL/SL de `llistar_albarans_dates` es comprova amb
+`scripts/paritat_backends.py --funcio llistar_albarans_dates`.
 """
 import os
 import sys
 import types
+from datetime import date
 
 import pytest
 import requests
@@ -134,29 +135,92 @@ def test_pdf_docentry_no_numeric_no_arriba_al_servei(client, monkeypatch):
     assert crides == []
 
 
-# --- Llista -------------------------------------------------------------
+# --- Llista ---------------------------------------------------------------
 def test_api_albarans(client, monkeypatch):
     c, app_module, _ = client
     rebut = []
-    monkeypatch.setattr(app_module, "llistar_albarans_carregues",
-                        lambda ids: rebut.append(ids) or [{"docentry": 148}])
-    r = c.get("/api/albarans?carregues=98, 87")
+    monkeypatch.setenv("ALBARANS_SGA_USUARIS", "23, 22")
+    monkeypatch.setattr(app_module, "llistar_albarans_dates",
+                        lambda d, f, u: rebut.append((d, f, u)) or [{"docentry": 148}])
+    r = c.get("/api/albarans?desde=2026-11-01&fins=2026-11-09")
     assert r.status_code == 200
     assert r.get_json() == {"albarans": [{"docentry": 148, "cancelable": False}],
                             "pdf": True, "cancelar": False}
-    assert rebut == [[98, 87]]
+    assert rebut == [(date(2026, 11, 1), date(2026, 11, 9), [22, 23])]
 
 
-@pytest.mark.parametrize("qs", ["", "carregues=", "carregues=1,a", "carregues=-1",
-                                "carregues=" + ",".join(["1"] * 51)])
-def test_api_albarans_valida(client, qs):
-    c, _, _ = client
+@pytest.mark.parametrize("qs", ["", "desde=2026-11-01", "fins=2026-11-01",
+                                "desde=2026-11-09&fins=2026-11-01",
+                                "desde=2026-13-01&fins=2026-13-02",
+                                "desde=2026-10-01&fins=2026-11-09",
+                                "carregues=98"])
+def test_api_albarans_valida(client, monkeypatch, qs):
+    c, app_module, _ = client
+    monkeypatch.setattr(app_module, "llistar_albarans_dates",
+                        lambda *a: pytest.fail("no s'havia de consultar SAP"))
     assert c.get(f"/api/albarans?{qs}").status_code == 400
 
 
-def test_pantalla_preparacio_nomes_ensenya_albarans_si_hi_ha_servei(client, monkeypatch):
+def test_api_albarans_31_dies_es_el_maxim(client, monkeypatch):
+    c, app_module, _ = client
+    monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda *a: [])
+    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-11-01").status_code == 200
+    assert c.get("/api/albarans?desde=2026-10-01&fins=2026-11-02").status_code == 400
+
+
+def test_preparacio_ja_no_ensenya_albarans(client, monkeypatch):
     c, app_module, _ = client
     monkeypatch.setattr(app_module.agrupacions_store, "obtenir", lambda _id: {"nom": "A"})
-    assert b'id="mag-albarans"' in c.get("/magatzem/x").data
+    html = c.get("/magatzem/x").data
+    assert b"mag-albarans" not in html and b"Albarans de SAP" not in html
+
+
+def test_pantalla_gestio_albarans(client):
+    c, _, _ = client
+    r = c.get("/albarans")
+    assert r.status_code == 200
+    assert b"js/albarans.js" in r.data and b"js/dialogs.js" in r.data
+
+
+# --- Rols -----------------------------------------------------------------
+@pytest.fixture
+def amb_rol(client, monkeypatch):
+    c, app_module, _ = client
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda *a: [])
+    _mock_get(monkeypatch, app_module, _Resp())
+
+    def entra(rol):
+        with c.session_transaction() as sess:
+            sess.update(user_id=1, user_name="Prova", user_username="prova@pytest.local", user_rol=rol)
+        return c
+    return entra
+
+
+@pytest.mark.parametrize("url", ["/albarans", "/api/albarans?desde=2026-11-09&fins=2026-11-09",
+                                 "/albarans/148/pdf"])
+def test_magatzem_no_hi_te_acces(amb_rol, url):
+    assert amb_rol("magatzem").get(url).status_code == 403
+
+
+@pytest.mark.parametrize("rol", ["admin", "oficina"])
+def test_oficina_i_admin_hi_tenen_acces(amb_rol, rol):
+    c = amb_rol(rol)
+    r = c.get("/albarans")
+    assert r.status_code == 200
+    assert b'href="/albarans"' in r.data  # entrada del menu
+    assert c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09").status_code == 200
+    assert c.get("/albarans/148/pdf").status_code == 200
+
+
+def test_menu_magatzem_sense_gestio_albarans(amb_rol):
+    html = amb_rol("magatzem").get("/magatzem/pendents").data
+    assert b"Pendents de pistolejar" in html
+    assert b'href="/albarans"' not in html
+
+
+def test_menu_amaga_gestio_albarans_sense_cap_funcio(amb_rol, monkeypatch):
     monkeypatch.setenv("CRYSTAL_PDF_URL", "")
-    assert b'id="mag-albarans"' not in c.get("/magatzem/x").data
+    monkeypatch.setenv("CANCELAR_ALBARANS", "")
+    html = amb_rol("oficina").get("/control").data
+    assert b'href="/albarans"' not in html

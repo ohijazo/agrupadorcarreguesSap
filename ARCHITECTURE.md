@@ -148,12 +148,13 @@ Vanilla JS sense framework. Tres "modes":
   - El càlcul és a `dades/pistolejat.py`, que és pur i no toca SAP. Les dades crues surten de `obtenir_dades_pistolejat`, que passa pel commutador SQL/SL igual que la resta. Vegeu `docs/descoberta_pistolejat_albarans.md`.
   - Polling cada 15 s amb la pestanya visible. Si SAP falla, es manté a la pantalla l'última llista bona.
 
-- **Albarans de SAP a la preparació (`/magatzem/<id>`)**:
-  - Llista els albarans (`ODLN`) de les càrregues de l'agrupació amb un botó "🖨 Albarà" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_carregues`, que passa pel commutador SQL/SL.
+- **Gestió d'albarans (`/albarans`, `static/js/albarans.js`)** — només admin i oficina, entrada pròpia al menú d'usuari. Fins al novembre de 2026 era una secció dins la preparació; ara la preparació ja no en mostra res.
+  - Llista els albarans (`ODLN`) amb càrrega creats per l'SGA (`ALBARANS_SGA_USUARIS`) en un rang de dates (avui, ahir, 7 dies, 30 dies o personalitzat, 31 dies com a màxim), amb cerca per client, albarà o càrrega. La cerca es fa al navegador.
+  - Botó "📄 PDF" que obre el PDF en una pestanya nova. Les dades surten de `llistar_albarans_dates`, que passa pel commutador SQL/SL.
   - El PDF el genera `serveis/crystal-pdf`, un servei Windows (C#) al servidor de SAP, amb el **mateix Crystal** que imprimeix SAP: llegeix el layout per defecte (`RTYP.DEFLT_REP` → `RDOC.Template`) a cada petició i li passa `DocKey@`. Crystal no funciona a Linux, i el Service Layer sobre SQL Server no exporta PDF.
-  - L'app només fa de proxy (`/albarans/<docentry>/pdf`) amb un token compartit. No desa cap PDF. Sense `CRYSTAL_PDF_URL` la secció no surt.
+  - L'app només fa de proxy (`/albarans/<docentry>/pdf`) amb un token compartit. No desa cap PDF. Sense `CRYSTAL_PDF_URL` ni `CANCELAR_ALBARANS` l'entrada del menú no surt.
   - El servei entra a SQL amb el seu compte de Windows (`NT SERVICE\CrystalPdf`, només lectura) i no té cap contrasenya en fitxers.
-- **Cancel·lar albarans de l'SGA (mateixa llista)**: és la **primera escriptura a SAP** de l'app.
+- **Cancel·lar albarans de l'SGA (mateixa pantalla)**: és la **primera escriptura a SAP** de l'app.
   - Botó "✖ Cancel·la" als albarans oberts fets per l'SGA (`ALBARANS_SGA_USUARIS`). Demana un motiu obligatori.
   - Fa `POST DeliveryNotes(N)/Cancel` pel Service Layer (`dades/sl/escriptura_albarans.py`), sigui quin sigui el backend de lectura. Abans torna a llegir l'albarà de SAP i el rebutja si ja està cancel·lat, no és de l'SGA o té línies tancades (facturat o amb devolució).
   - Si el POST dona error o timeout, torna a llegir l'estat: si SAP el mostra cancel·lat, és un èxit.
@@ -178,9 +179,10 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/calendari` | tots auth | |
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
-| `GET` | `/api/albarans?carregues=87,98` | tots auth | màxim 50 càrregues |
-| `GET` | `/albarans/<docentry>/pdf` | tots auth | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
-| `POST` | `/api/albarans/<docentry>/cancelar` | tots auth | CSRF; `{"motiu"}` obligatori; només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
+| `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
+| `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |
+| `GET` | `/albarans/<docentry>/pdf` | admin, oficina | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
+| `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina | CSRF; `{"motiu"}` obligatori; només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

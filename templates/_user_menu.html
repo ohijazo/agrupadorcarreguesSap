@@ -18,6 +18,11 @@
         <a href="/control" class="user-menu-item" role="menuitem">
             <span aria-hidden="true">📊</span> Control d'agrupacions
         </a>
+        {% if pdf_albarans or cancelar_albarans %}
+        <a href="/albarans" class="user-menu-item" role="menuitem">
+            <span aria-hidden="true">🧾</span> Gestió d'albarans
+        </a>
+        {% endif %}
         {% endif %}
         {% if current_user.rol == 'admin' %}
         <a href="/admin/usuaris" class="user-menu-item" role="menuitem">

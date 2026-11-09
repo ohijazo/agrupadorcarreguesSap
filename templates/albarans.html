@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestió d'albarans</title>
+    <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
+    <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('css/magatzem.css') }}">
+</head>
+<body class="mag-body">
+
+<header class="mag-header">
+    <div class="container mag-header-row">
+        <div>
+            <a href="/" class="mag-back">← Inici</a>
+            <h1>🧾 Gestió d'albarans</h1>
+            <p class="mag-subtitle">Albarans de venda que l'SGA ha creat a SAP per a les càrregues</p>
+        </div>
+        <div class="mag-header-tools">
+            {% include '_user_menu.html' %}
+        </div>
+    </div>
+</header>
+
+<main class="container">
+    <div class="pend-toolbar">
+        <div class="pend-rangs" role="group" aria-label="Dies">
+            <button type="button" class="pend-rang" data-rang="avui">Avui</button>
+            <button type="button" class="pend-rang" data-rang="ahir">Ahir</button>
+            <button type="button" class="pend-rang" data-rang="setmana">7 dies</button>
+            <button type="button" class="pend-rang" data-rang="mes">30 dies</button>
+        </div>
+        <div class="alb-dates">
+            <label>Des de <input type="date" id="alb-desde"></label>
+            <label>Fins a <input type="date" id="alb-fins"></label>
+        </div>
+        <input type="search" id="alb-cerca" class="alb-cerca"
+               placeholder="Cerca client, albarà o càrrega" aria-label="Cerca client, albarà o càrrega">
+        <button type="button" class="btn btn-ghost" id="alb-refresca" aria-label="Refresca des de SAP">↻ Refresca</button>
+        <span class="pend-actualitzat" id="alb-actualitzat" aria-live="polite"></span>
+    </div>
+
+    {% if not pdf_albarans %}
+    <p class="alb-avis">La impressió d'albarans no està activada en aquest servidor.</p>
+    {% endif %}
+    {% if not cancelar_albarans %}
+    <p class="alb-avis">La cancel·lació d'albarans no està activada en aquest servidor.</p>
+    {% endif %}
+
+    <div id="alb-error" class="mag-error" hidden></div>
+    <table class="alb-taula" id="alb-taula" hidden>
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Albarà</th>
+                <th>Càrrega</th>
+                <th>Client</th>
+                <th>Estat</th>
+                <th><span class="visually-hidden">Accions</span></th>
+            </tr>
+        </thead>
+        <tbody id="alb-files"></tbody>
+    </table>
+    <p id="alb-buit" class="mag-empty" hidden>No hi ha albarans en aquestes dates.</p>
+</main>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="{{ static_url('js/fmt.js') }}"></script>
+<script src="{{ static_url('js/dialogs.js') }}"></script>
+<script src="{{ static_url('js/albarans.js') }}"></script>
+<script src="{{ static_url('js/user-menu.js') }}"></script>
+</body>
+</html>

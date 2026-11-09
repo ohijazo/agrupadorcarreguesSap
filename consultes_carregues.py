@@ -70,6 +70,7 @@ FUNCIONS = [
     "resum_carrega",
     "obtenir_dades_pistolejat",
     "llistar_albarans_carregues",
+    "llistar_albarans_dates",
 ]
 
 
@@ -127,6 +128,11 @@ def obtenir_dades_pistolejat(*args, **kwargs):
 def llistar_albarans_carregues(*args, **kwargs):
     return _b.despatxa("llistar_albarans_carregues", _sql_alb.llistar_albarans_carregues,
                        getattr(_sl_alb, "llistar_albarans_carregues", None), *args, **kwargs)
+
+
+def llistar_albarans_dates(*args, **kwargs):
+    return _b.despatxa("llistar_albarans_dates", _sql_alb.llistar_albarans_dates,
+                       getattr(_sl_alb, "llistar_albarans_dates", None), *args, **kwargs)
 
 
 def llistar_pendents_pistolejar(desde: str, fins: str, nomes_pendents: bool = True) -> dict:

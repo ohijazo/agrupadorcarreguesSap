@@ -193,13 +193,13 @@ def test_demana_csrf(client, monkeypatch):
 def test_llista_marca_els_cancelables(client, monkeypatch):
     c, app_module, _ = client
     alb = lambda **kw: {"docentry": 1, "usuari": 22, "obert": True, "cancelat": False, **kw}
-    monkeypatch.setattr(app_module, "llistar_albarans_carregues", lambda ids: [
+    monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda d, f, u: [
         alb(), alb(usuari=12), alb(obert=False), alb(cancelat=True)])
-    j = c.get("/api/albarans?carregues=98").get_json()
+    j = c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09").get_json()
     assert j["cancelar"] is True
     assert [a["cancelable"] for a in j["albarans"]] == [True, False, False, False]
     monkeypatch.setenv("CANCELAR_ALBARANS", "false")
-    j = c.get("/api/albarans?carregues=98").get_json()
+    j = c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09").get_json()
     assert j["cancelar"] is False and not any(a["cancelable"] for a in j["albarans"])
 
 
@@ -241,3 +241,13 @@ def test_missatge_sap(esc):
     e = esc.SLError("x", status_code=400, body={"error": {"message": {"value": " No es pot "}}})
     assert esc.missatge_sap(e) == "No es pot"
     assert esc.missatge_sap(esc.SLError("x")) == ""
+
+
+def test_magatzem_no_pot_cancel_lar(client, monkeypatch):
+    c, app_module, auditats = client
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    fals = _posa(monkeypatch, app_module, _Fals())
+    with c.session_transaction() as sess:
+        sess.update(user_id=1, user_name="Prova", user_username="prova@pytest.local", user_rol="magatzem")
+    assert _cancela(c).status_code == 403
+    assert fals.cancelats == [] and auditats == []

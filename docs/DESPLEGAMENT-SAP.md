@@ -257,8 +257,10 @@ CRYSTAL_PDF_URL=http://AE01SAPSQL:8095
 CRYSTAL_PDF_TOKEN=<el mateix Token del crystal-pdf.exe.config>
 ```
 
-Després cal reiniciar l'app. Si `CRYSTAL_PDF_URL` és buit, la funció queda apagada i a
-la preparació no surt la secció "Albarans de SAP".
+Després cal reiniciar l'app. Els albarans es gestionen des de **Gestió d'albarans**
+(`/albarans`, menú d'usuari, només admin i oficina). Si `CRYSTAL_PDF_URL` és buit, el
+botó de PDF no surt; si a més la cancel·lació està apagada, tampoc no surt l'entrada
+del menú.
 
 ## 10. Cancel·lar albarans de l'SGA
 

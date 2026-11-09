@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import time
+from datetime import date, timedelta
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -142,10 +143,24 @@ def _casos_albarans() -> list[dict]:
             + [{"carregues": [i]} for i in amb_albarans])
 
 
+def _casos_albarans_dates() -> list[dict]:
+    """Els ultims 7 i 31 dies amb els usuaris de l'SGA, un dia sense
+    albarans i la llista d'usuaris buida."""
+    avui = date.today()
+    sga = sorted(app._usuaris_sga())
+    return [
+        {"desde": avui - timedelta(days=7), "fins": avui, "usuaris": sga},
+        {"desde": avui - timedelta(days=31), "fins": avui, "usuaris": sga},
+        {"desde": date(2000, 1, 1), "fins": date(2000, 1, 1), "usuaris": sga},
+        {"desde": avui - timedelta(days=7), "fins": avui, "usuaris": []},
+    ]
+
+
 # Funcions que no viuen a dades/{sql,sl}/carregues.py.
 MODULS = {
     "obtenir_dades_pistolejat": (sql_pist, sl_pist),
     "llistar_albarans_carregues": (sql_alb, sl_alb),
+    "llistar_albarans_dates": (sql_alb, sl_alb),
 }
 
 
@@ -164,6 +179,7 @@ FUNCIONS = {
     "resum_carrega": lambda: _casos_per_carrega("resum_carrega"),
     "obtenir_dades_pistolejat": _casos_pistolejat,
     "llistar_albarans_carregues": _casos_albarans,
+    "llistar_albarans_dates": _casos_albarans_dates,
 }
 
 

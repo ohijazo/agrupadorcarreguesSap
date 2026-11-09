@@ -369,7 +369,6 @@
     /* Amaga el que no aporta al paper */
     .mag-header,
     .mag-toolbar,
-    .mag-albarans,
     .mag-llista-bar,
     .toasts,
     #mag-buit,
@@ -972,59 +971,84 @@
 }
 .btn-pendents:hover { background: #ebf4ff; }
 
-/* ===== Albarans de SAP a la preparació ================================== */
-.mag-albarans {
+/* ===== Gestió d'albarans (/albarans) =================================== */
+.alb-dates { display: flex; gap: .75rem; flex-wrap: wrap; }
+.alb-dates label { display: inline-flex; align-items: center; gap: .4rem; color: #4a5568; }
+.alb-dates input,
+.alb-cerca {
+    min-height: 44px;
+    padding: 0 .6rem;
+    font: inherit;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
     background: #fff;
-    border-bottom: 1px solid #e2e8f0;
-    padding: .5rem 0;
 }
-.mag-albarans summary {
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 1.05rem;
-    padding: .35rem 0;
+.alb-cerca { flex: 1 1 16rem; min-width: 0; }
+.alb-avis {
+    margin: 0 0 .75rem;
+    padding: .5rem .75rem;
+    color: #744210;
+    background: #fffaf0;
+    border: 1px solid #fbd38d;
+    border-radius: 8px;
 }
-.mag-albarans-n { color: #718096; font-weight: 500; }
-.mag-albarans-llista {
-    list-style: none;
-    margin: .4rem 0 .2rem;
-    padding: 0;
-    display: grid;
-    gap: .4rem;
+.alb-taula {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
 }
-.mag-albara {
-    display: flex;
-    align-items: center;
-    gap: .6rem;
-    flex-wrap: wrap;
-    padding: .45rem .65rem;
-    border-left: 4px solid var(--cb-color, #718096);
-    background: #f8fafc;
-    border-radius: 6px;
-}
-.mag-albara .dot {
-    width: .6rem; height: .6rem; border-radius: 50%;
-    background: var(--cb-color, #718096);
-    flex: none;
-}
-.mag-albara-num { font-weight: 700; font-variant-numeric: tabular-nums; }
-.mag-albara-cli { font-weight: 500; }
-.mag-albara-meta { color: #4a5568; font-size: .9rem; }
-.mag-albara-accions { margin-left: auto; display: inline-flex; gap: .4rem; flex-wrap: wrap; }
-.mag-albara-pdf,
-.mag-albara-cancel { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
-.mag-albara-cancel { color: #9b2c2c; }
-.mag-albara-cancel:hover:not(:disabled) { background: #fff5f5; border-color: #feb2b2; }
-.mag-albara.is-cancelat { opacity: .6; }
-.mag-albara-cancelat {
-    margin-left: auto;
+.alb-taula th,
+.alb-taula td { padding: .55rem .75rem; text-align: left; vertical-align: middle; }
+.alb-taula th {
     font-size: .85rem;
-    color: #9b2c2c;
-    text-transform: uppercase;
-    letter-spacing: .03em;
+    color: #4a5568;
+    background: #f7fafc;
+    border-bottom: 1px solid #e2e8f0;
 }
-@media (max-width: 640px) {
-    .mag-albara-accions { margin-left: 0; width: 100%; }
-    .mag-albara-pdf,
-    .mag-albara-cancel { flex: 1; justify-content: center; }
+.alb-taula tbody tr + tr td { border-top: 1px solid #edf2f7; }
+.alb-taula tr.is-cancelat td { color: #718096; }
+.alb-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.alb-cli { font-weight: 500; }
+.alb-cli-codi { color: #718096; font-size: .85rem; }
+.alb-estat {
+    display: inline-block;
+    padding: .1rem .5rem;
+    font-size: .8rem;
+    font-weight: 600;
+    border-radius: 999px;
+}
+.alb-estat.is-obert { color: #22543d; background: #c6f6d5; }
+.alb-estat.is-tancat { color: #2a4365; background: #bee3f8; }
+.alb-estat.is-cancelat { color: #9b2c2c; background: #fed7d7; }
+.alb-accions { text-align: right; white-space: nowrap; }
+.alb-accions .btn + .btn { margin-left: .4rem; }
+.alb-pdf,
+.alb-cancel { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+.alb-cancel { color: #9b2c2c; }
+.alb-cancel:hover:not(:disabled) { background: #fff5f5; border-color: #feb2b2; }
+
+@media (max-width: 720px) {
+    .alb-taula thead { display: none; }
+    .alb-taula,
+    .alb-taula tbody,
+    .alb-taula tr,
+    .alb-taula td { display: block; width: 100%; }
+    .alb-taula tbody tr + tr td { border-top: 0; }
+    .alb-taula tbody tr + tr { border-top: 1px solid #e2e8f0; }
+    .alb-taula td { padding: .25rem .75rem; }
+    .alb-taula td[data-lbl]::before {
+        content: attr(data-lbl);
+        display: inline-block;
+        min-width: 5.5rem;
+        color: #718096;
+        font-size: .85rem;
+    }
+    .alb-taula tr { padding: .5rem 0; }
+    .alb-accions { text-align: left; display: flex !important; gap: .4rem; }
+    .alb-accions .btn + .btn { margin-left: 0; }
+    .alb-pdf,
+    .alb-cancel { flex: 1; justify-content: center; }
 }
