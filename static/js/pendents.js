@@ -63,6 +63,7 @@ function pintaLinia(l) {
             <div class="pend-art">
                 <div class="pend-art-descrip">${escP(l.art_descrip)}</div>
                 <div class="pend-art-codi">${escP(l.art_codi)}</div>
+                ${l.cancelat ? `<div class="avis-cancelat" role="note">⚠ ${fmtKg.format(l.cancelat.kg)} kg ja pistolejats per a l'albarà ${escP((l.cancelat.albarans || []).join(", "))}, cancel·lat. Poden ser al palet: torna'ls a pistolejar a l'SGA.</div>` : ""}
             </div>
             <div class="pend-qtat">
                 <div class="pend-qtat-big">${l.estat === "complet" ? "✓" : escP(quantitat(l, "pendents"))}</div>

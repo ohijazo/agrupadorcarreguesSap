@@ -278,6 +278,14 @@ function esFet(artCodi) {
     return (magState.progres?.fets || []).includes(artCodi);
 }
 
+// Lectures de l'SGA d'un albarà que després es va cancel·lar: no compten
+// (l'SGA demana tornar a pistolejar), però la mercaderia pot ser al palet.
+function avisCancelat(c) {
+    if (!c || !c.kg) return "";
+    const albs = (c.albarans || []).join(", ");
+    return `<div class="avis-cancelat" role="note">⚠ ${fmtKgN.format(c.kg)} kg ja pistolejats per a l'albarà ${escapeM(albs)}, cancel·lat. Poden ser al palet: torna'ls a pistolejar a l'SGA.</div>`;
+}
+
 // "10 de 40 sacs" o, si la línia no té sacs (granel), en kg.
 function textPistolejat(pr) {
     if (!pr || pr.estat === "sense_dades") return "";
@@ -410,6 +418,7 @@ function renderArticles() {
                 <div class="mag-art-totals-sec">${fmtKgN.format(p.total_kg)} kg</div>
                 <div class="mag-art-carregues">${carregesHtml}</div>
                 ${pistHtml}
+                ${avisCancelat(pr?.cancelat)}
                 ${prepMetaHtml}
             </div>
             <div class="mag-estat-col">

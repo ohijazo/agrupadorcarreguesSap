@@ -22,10 +22,11 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     """
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
-        return {"comandes": [], "pistolejats": [], "estats": {}}
+        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {}}
 
     comandes: dict[int, dict] = {}
     pistolejats: list[dict] = []
+    cancelats: list[dict] = []
     estats: dict[int, str] = {}
 
     conn = connectar()
@@ -86,6 +87,31 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "kg": round(float(r.kg or 0), 6),
                 })
 
+            # Lectures d'un albara que despres es va cancel·lar: es queden a
+            # @SEIOPIC apuntant-hi. No compten com a pistolejat (la linia
+            # torna a estar oberta i l'SGA demana tornar a pistolejar), pero
+            # la mercaderia pot ser al palet: es tornen a part per avisar-ne.
+            for r in conn.execute(f"""
+                SELECT p.U_BaseEntry AS comanda, p.U_BaseLine AS linia,
+                       p.U_TargetEntry AS albara, d.DocNum AS docnum,
+                       SUM(p.U_Quantity) AS sacs, SUM(p.U_InvQty) AS kg
+                FROM   [@SEIOPIC] p WITH (NOLOCK)
+                JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = p.U_TargetEntry
+                WHERE  p.U_BaseObject = 17
+                  AND  p.U_TargetType = 15
+                  AND  d.CANCELED = 'Y'
+                  AND  p.U_BaseEntry IN ({ph})
+                GROUP  BY p.U_BaseEntry, p.U_BaseLine, p.U_TargetEntry, d.DocNum
+            """, *tros).fetchall():
+                cancelats.append({
+                    "comanda": int(r.comanda),
+                    "linia": int(r.linia),
+                    "albara": int(r.albara),
+                    "docnum": int(r.docnum),
+                    "sacs": round(float(r.sacs or 0), 6),
+                    "kg": round(float(r.kg or 0), 6),
+                })
+
             # Ultim estat = la fila amb el Code mes alt (autoincremental).
             for r in conn.execute(f"""
                 SELECT e.U_SEIDocEntry AS comanda, RTRIM(e.U_SEIEstado) AS estat
@@ -101,5 +127,6 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     return {
         "comandes": [comandes[d] for d in docs],
         "pistolejats": sorted(pistolejats, key=lambda p: (p["comanda"], p["linia"])),
+        "pistolejats_cancelats": sorted(cancelats, key=lambda p: (p["comanda"], p["linia"], p["albara"])),
         "estats": estats,
     }

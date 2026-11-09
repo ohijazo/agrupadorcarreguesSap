@@ -301,3 +301,32 @@ def test_pendents_sense_postgres_no_posa_etiqueta(monkeypatch):
     carregues = [{"carrega_id": "SAP/1/87"}]
     app_module._afegeix_agrupacio(carregues)
     assert "agrupacio" not in carregues[0]
+
+
+# --- Lectures d'un albara cancel·lat: avis, sense restar del pendent ------
+def _cancelats(kg=250.0, sacs=10.0, docnum=26700148, comanda=279, linia=0):
+    return [{"comanda": comanda, "linia": linia, "albara": 148, "docnum": docnum, "sacs": sacs, "kg": kg}]
+
+
+def test_pendents_avisa_de_lectures_d_albara_cancel_lat():
+    d = _dades([_linia(0), _linia(1, art="30350")])
+    d["pistolejats_cancelats"] = _cancelats()
+    r = calc.construir([_carrega(87)], d, nomes_pendents=False)
+    l0, l1 = r["carregues"][0]["comandes"][0]["linies"]
+    assert l0["cancelat"] == {"kg": 250.0, "sacs": 10.0, "albarans": [26700148]}
+    assert l0["estat"] == "pendent" and l0["kg_pendents"] == 1000  # no resta del pendent
+    assert l1["cancelat"] is None
+
+
+def test_preparacio_avisa_per_producte_i_per_carrega():
+    d = _dades([_linia(0)])
+    d["pistolejats_cancelats"] = _cancelats()
+    p = calc.progres_agrupacio(_resultat(("33851", [87])), d)["productes"]["33851"]
+    assert p["estat"] == "pendent" and p["kg_fets"] == 0
+    assert p["cancelat"] == {"kg": 250.0, "albarans": [26700148]}
+    assert p["per_carrega"]["SAP/1/87"]["cancelat"] == {"kg": 250.0, "albarans": [26700148]}
+
+
+def test_sense_lectures_cancel_lades_no_hi_ha_avis():
+    p = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0)]))["productes"]["33851"]
+    assert p["cancelat"] is None

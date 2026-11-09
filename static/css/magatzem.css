@@ -1131,3 +1131,15 @@
 @media (pointer: coarse) {
     .pend-agrupacio { min-height: 44px; }
 }
+
+/* Avís: lectures de l'SGA d'un albarà cancel·lat (la mercaderia pot ser al palet). */
+.avis-cancelat {
+    margin-top: .45rem;
+    padding: .45rem .65rem;
+    font-size: .9rem;
+    color: #744210;
+    background: #fffaf0;
+    border: 1px solid #f6ad55;
+    border-radius: 8px;
+}
+@media print { .avis-cancelat { display: none !important; } }

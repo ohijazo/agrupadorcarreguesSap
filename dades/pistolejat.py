@@ -98,6 +98,26 @@ def _suma_pistolejats(dades: dict) -> dict[tuple[int, int], dict]:
     return pist
 
 
+def _suma_cancelats(dades: dict) -> dict[tuple[int, int], dict]:
+    """Lectures d'albarans cancel·lats per linia de comanda (vegeu
+    `pistolejats_cancelats`). Nomes per avisar: no resten del pendent."""
+    out: dict[tuple[int, int], dict] = {}
+    for p in dades.get("pistolejats_cancelats") or []:
+        acc = out.setdefault((int(p["comanda"]), int(p["linia"])),
+                             {"kg": 0.0, "sacs": 0.0, "albarans": set()})
+        acc["kg"] += float(p.get("kg") or 0)
+        acc["sacs"] += float(p.get("sacs") or 0)
+        acc["albarans"].add(int(p.get("docnum") or p.get("albara") or 0))
+    return out
+
+
+def _avis_cancelat(acc: dict | None) -> dict | None:
+    if not acc or acc["kg"] <= _EPSILON:
+        return None
+    return {"kg": round(acc["kg"], 3), "sacs": round(acc["sacs"], 2),
+            "albarans": sorted(acc["albarans"])}
+
+
 def construir(
     carregues: list[dict],
     dades: dict,
@@ -114,17 +134,24 @@ def construir(
         pistolejats: [{comanda, linia, sacs, kg}] lectures sense albara,
                      ja sumades per linia o no (aqui se sumen igualment).
         estats:      {docentry_comanda: ultim estat de @SEIESTATSCOM}
+        pistolejats_cancelats (opcional): lectures d'albarans cancel·lats;
+                     cada linia en porta l'avis a `cancelat` (o None).
 
     Amb `nomes_pendents`, es treuen les linies completes, les comandes i
     carregues que queden buides, i les carregues ja sortides.
     """
     pist = _suma_pistolejats(dades)
+    canc = _suma_cancelats(dades)
     estats = dades.get("estats") or {}
 
     per_carrega: dict[int, list[dict]] = {}
     for c in dades.get("comandes") or []:
-        linies = [_linia(l, pist.get((int(c["docentry"]), int(l.get("linia") or 0))))
-                  for l in sorted(c.get("linies") or [], key=lambda x: int(x.get("linia") or 0))]
+        linies = []
+        for l in sorted(c.get("linies") or [], key=lambda x: int(x.get("linia") or 0)):
+            clau = (int(c["docentry"]), int(l.get("linia") or 0))
+            lc = _linia(l, pist.get(clau))
+            lc["cancelat"] = _avis_cancelat(canc.get(clau))
+            linies.append(lc)
         if nomes_pendents:
             linies = [l for l in linies if l["estat"] != ESTAT_COMPLET]
         if not linies:
@@ -174,9 +201,13 @@ def construir(
 ESTAT_SENSE_DADES = "sense_dades"
 
 
-def _acumula(acc: dict, l: dict, lc: dict) -> None:
+def _acumula(acc: dict, l: dict, lc: dict, cancelat: dict | None = None) -> None:
     """Suma a `acc` una linia de comanda: `l` es la linia crua del backend i
-    `lc` la que torna `_linia` (amb el pendent ja calculat)."""
+    `lc` la que torna `_linia` (amb el pendent ja calculat). `cancelat`: les
+    lectures d'albarans cancel·lats d'aquesta linia, si n'hi ha."""
+    if cancelat:
+        acc["kg_cancelat"] += cancelat["kg"]
+        acc["albarans_cancelats"] |= cancelat["albarans"]
     kg = float(l.get("kg") or 0)
     sacs = float(l.get("sacs") or 0)
     kg_fets = max(kg - lc["kg_pendents"], 0.0)
@@ -192,13 +223,14 @@ def _acumula(acc: dict, l: dict, lc: dict) -> None:
 
 def _nou_acc() -> dict:
     return {"kg_total": 0.0, "kg_fets": 0.0, "kg_pistolejats": 0.0,
-            "sacs_total": 0.0, "sacs_fets": 0.0, "sense_sacs": False}
+            "sacs_total": 0.0, "sacs_fets": 0.0, "sense_sacs": False,
+            "kg_cancelat": 0.0, "albarans_cancelats": set()}
 
 
 def _tanca(acc: dict | None) -> dict:
     if acc is None:
         return {"estat": ESTAT_SENSE_DADES, "kg_total": 0, "kg_fets": 0, "kg_pendents": 0,
-                "sacs_total": None, "sacs_fets": None, "percent": 0}
+                "sacs_total": None, "sacs_fets": None, "percent": 0, "cancelat": None}
     kg_pend = max(acc["kg_total"] - acc["kg_fets"], 0.0)
     if kg_pend <= _EPSILON:
         estat = ESTAT_COMPLET
@@ -216,6 +248,9 @@ def _tanca(acc: dict | None) -> dict:
         "sacs_total": round(acc["sacs_total"], 2) if amb_sacs else None,
         "sacs_fets": round(acc["sacs_fets"], 2) if amb_sacs else None,
         "percent": round(100 * acc["kg_fets"] / acc["kg_total"]) if acc["kg_total"] > _EPSILON else 100,
+        # Lectures d'albarans cancel·lats: la mercaderia pot ser al palet.
+        "cancelat": ({"kg": round(acc["kg_cancelat"], 3), "albarans": sorted(acc["albarans_cancelats"])}
+                     if acc["kg_cancelat"] > _EPSILON else None),
     }
 
 
@@ -245,14 +280,16 @@ def progres_agrupacio(resultat: dict, dades: dict) -> dict:
     s'acabaria mai sola.
     """
     pist = _suma_pistolejats(dades)
+    canc = _suma_cancelats(dades)
 
     # (art_codi, docentry carrega) -> acumulat
     accs: dict[tuple[str, int], dict] = {}
     for c in dades.get("comandes") or []:
         car = int(c["carrega"])
         for l in c.get("linies") or []:
-            lc = _linia(l, pist.get((int(c["docentry"]), int(l.get("linia") or 0))))
-            _acumula(accs.setdefault((lc["art_codi"], car), _nou_acc()), l, lc)
+            clau = (int(c["docentry"]), int(l.get("linia") or 0))
+            lc = _linia(l, pist.get(clau))
+            _acumula(accs.setdefault((lc["art_codi"], car), _nou_acc()), l, lc, canc.get(clau))
 
     productes: dict[str, dict] = {}
     for p in resultat.get("productes") or []:
@@ -264,9 +301,10 @@ def progres_agrupacio(resultat: dict, dades: dict) -> dict:
             per_carrega[str(pc.get("carrega_id"))] = _tanca(acc)
             if acc is not None:
                 total = total or _nou_acc()
-                for k in ("kg_total", "kg_fets", "kg_pistolejats", "sacs_total", "sacs_fets"):
+                for k in ("kg_total", "kg_fets", "kg_pistolejats", "sacs_total", "sacs_fets", "kg_cancelat"):
                     total[k] += acc[k]
                 total["sense_sacs"] = total["sense_sacs"] or acc["sense_sacs"]
+                total["albarans_cancelats"] |= acc["albarans_cancelats"]
         productes[art] = {**_tanca(total), "per_carrega": per_carrega}
 
     fets = sorted(a for a, v in productes.items()

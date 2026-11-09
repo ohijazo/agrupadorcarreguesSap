@@ -23,7 +23,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     una per tros de 40 comandes a cadascuna de les dues UDT."""
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
-        return {"comandes": [], "pistolejats": [], "estats": {}}
+        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {}}
 
     c = client()
     comandes: dict[int, dict] = {}
@@ -64,6 +64,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
 
     docs = sorted(comandes)
     sumes: dict[tuple[int, int], dict] = {}
+    amb_albara: dict[tuple[int, int, int], dict] = {}
     estats: dict[int, str] = {}
     ultim_code: dict[int, int] = {}
     for tros in od.trossos(docs):
@@ -75,6 +76,20 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         ):
             acc = sumes.setdefault((int(p["U_BaseEntry"]), int(p["U_BaseLine"])),
                                    {"sacs": 0.0, "kg": 0.0})
+            acc["sacs"] += float(p.get("U_Quantity") or 0)
+            acc["kg"] += float(p.get("U_InvQty") or 0)
+
+        # Lectures ja lligades a un albara: despres es mira quins albarans
+        # estan cancel·lats (el Service Layer no pot fer el JOIN amb ODLN).
+        for p in c.tot(
+            PISTOLEJATS,
+            select="U_BaseEntry,U_BaseLine,U_TargetEntry,U_Quantity,U_InvQty",
+            filtre=od.i("U_BaseObject eq 17", "U_TargetType eq 15", "U_TargetEntry ne null",
+                        od.qualsevol_num("U_BaseEntry", tros)),
+        ):
+            acc = amb_albara.setdefault(
+                (int(p["U_BaseEntry"]), int(p["U_BaseLine"]), int(p["U_TargetEntry"])),
+                {"sacs": 0.0, "kg": 0.0})
             acc["sacs"] += float(p.get("U_Quantity") or 0)
             acc["kg"] += float(p.get("U_InvQty") or 0)
 
@@ -93,8 +108,25 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         {"comanda": com, "linia": lin, "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
         for (com, lin), v in sorted(sumes.items())
     ]
+
+    # Dels albarans que tenen lectures, nomes els cancel·lats (CANCELED = 'Y').
+    cancelats_docnum: dict[int, int] = {}
+    for tros in od.trossos(sorted({alb for (_, _, alb) in amb_albara})):
+        for d in c.tot(
+            "DeliveryNotes",
+            select="DocEntry,DocNum",
+            filtre=od.i(od.qualsevol_num("DocEntry", tros), "CancelStatus eq 'csYes'"),
+        ):
+            cancelats_docnum[int(d["DocEntry"])] = int(d["DocNum"])
+    pistolejats_cancelats = [
+        {"comanda": com, "linia": lin, "albara": alb, "docnum": cancelats_docnum[alb],
+         "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
+        for (com, lin, alb), v in sorted(amb_albara.items())
+        if alb in cancelats_docnum
+    ]
     return {
         "comandes": [comandes[d] for d in docs],
         "pistolejats": pistolejats,
+        "pistolejats_cancelats": pistolejats_cancelats,
         "estats": estats,
     }
