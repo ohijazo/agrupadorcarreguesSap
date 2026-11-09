@@ -70,12 +70,21 @@ Tot en un PowerShell com a administrador:
    USE DB_FARIN_TEST;   -- i, quan es passi a producció, la BD real
    CREATE USER [NT SERVICE\CrystalPdf] FOR LOGIN [NT SERVICE\CrystalPdf];
    ALTER ROLE db_datareader ADD MEMBER [NT SERVICE\CrystalPdf];
+   -- El layout DLN20014 crida aquestes dues funcions escalars de SEIDOR.
+   -- Sense EXECUTE, Crystal falla amb "Código del proveedor de base de datos: 229".
+   GRANT EXECUTE ON dbo.SEI_MODIFICAR_CODI_IDIOMA TO [NT SERVICE\CrystalPdf];
+   GRANT EXECUTE ON dbo.SEI_TRADUCCIO TO [NT SERVICE\CrystalPdf];
    ```
+   Només es dona EXECUTE a funcions escalars, que no poden modificar dades. No es
+   dona a tot l'esquema `dbo`, perquè també inclou procediments que escriuen. Si algú
+   afegeix al layout una funció nova, al log sortirà l'error 229 i caldrà un
+   `GRANT EXECUTE` per a aquella funció.
 
 5. **Configurar i xifrar**. Al `crystal-pdf.exe.config`:
    - `Token`: generar-lo aquí mateix amb `[Convert]::ToBase64String((1..32 | % {Get-Random -Max 256}) -as [byte[]])`. Copiar-lo a `CRYSTAL_PDF_TOKEN` del `.env` de l'app.
    - `SqlServer` = `localhost`, `SqlDatabase` = `DB_FARIN_TEST`.
    - `SqlUser` i `SqlPassword` **buits**.
+   - `IpsPermeses` = IP de `ae01farwebsrv` (`192.168.11.244`). El servei respon 403 a qualsevol altra IP (la mateixa màquina sempre hi pot entrar). Fa falta perquè al servidor de SAP el tallafocs està desactivat al perfil de domini i la regla del pas 6 no s'aplica (comprovat el 30-10-2026).
 
    Després:
    ```powershell
@@ -89,11 +98,13 @@ Tot en un PowerShell com a administrador:
    New-NetFirewallRule -DisplayName "CrystalPdf 8095" -Direction Inbound -Protocol TCP `
      -LocalPort 8095 -RemoteAddress <IP de ae01farwebsrv> -Action Allow
    ```
+   La regla només té efecte si el perfil de tallafocs actiu està encès (`Get-NetFirewallProfile`). Si no ho està, la restricció la fa `IpsPermeses`.
 
 7. **Comprovar-ho des de `ae01farwebsrv`**
    ```bash
    curl http://AE01SAPSQL:8095/health      # -> ok
    ```
+   Des de qualsevol altre PC, la mateixa URL ha de donar 403 "No permes".
 
 ### Prova a mà (opcional, abans del pas 2)
 `crystal-pdf.exe --prova DLN2 148 C:\Temp\albara_148.pdf` genera un PDF amb l'usuari de Windows que l'executa.

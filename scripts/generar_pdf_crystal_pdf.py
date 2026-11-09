@@ -209,7 +209,13 @@ def generate():
         f"CREATE LOGIN [{COMPTE}] FROM WINDOWS;\n"
         f"USE {BD};\n"
         f"CREATE USER [{COMPTE}] FOR LOGIN [{COMPTE}];\n"
-        f"ALTER ROLE db_datareader ADD MEMBER [{COMPTE}];"
+        f"ALTER ROLE db_datareader ADD MEMBER [{COMPTE}];\n"
+        f"GRANT EXECUTE ON dbo.SEI_MODIFICAR_CODI_IDIOMA TO [{COMPTE}];\n"
+        f"GRANT EXECUTE ON dbo.SEI_TRADUCCIO TO [{COMPTE}];"
+    )
+    pdf.body_text(
+        "Les dues últimes línies fan falta perquè el layout de l'albarà crida aquestes "
+        "dues funcions de SEIDOR. Són funcions escalars i no poden modificar dades."
     )
     pdf.info_box(
         f"{BD} és la base de dades que fa servir avui l'Agrupador. Quan l'aplicació "
@@ -231,6 +237,7 @@ def generate():
             ["SqlServer", "localhost"],
             ["SqlDatabase", BD],
             ["SqlUser / SqlPassword", "BUITS (seguretat integrada)"],
+            ["IpsPermeses", WEB_IP],
             ["MaxJobs", "2"],
         ],
         [60, 130],
@@ -248,6 +255,13 @@ def generate():
         f"    -Protocol TCP -LocalPort {PORT} -RemoteAddress {WEB_IP} -Action Allow\n"
         f"Invoke-WebRequest http://localhost:{PORT}/health -UseBasicParsing | % Content\n"
         "# esperat: ok"
+    )
+    pdf.info_box(
+        "La regla de tallafocs només s'aplica si el perfil actiu està encès "
+        "(Get-NetFirewallProfile). En aquest servidor el perfil de domini està "
+        f"desactivat, i per això el mateix servei rebutja (403) tot el que no ve de {WEB_IP} "
+        "o de la mateixa màquina (clau IpsPermeses).",
+        "info",
     )
 
     # ---------------- 4. Servidor web ----------------
@@ -288,8 +302,8 @@ def generate():
     )
     pdf.sub_title("5.3 Un altre equip NO hi arriba")
     pdf.body_text(
-        f"Des de qualsevol PC de la xarxa, http://AE01SAPSQL:{PORT}/health no ha de "
-        "respondre (el tallafocs només deixa passar el servidor web)."
+        f"Des de qualsevol PC de la xarxa, http://AE01SAPSQL:{PORT}/health ha de donar "
+        "403 (No permes) o no respondre: només hi pot entrar el servidor web."
     )
     pdf.sub_title("5.4 Prova d'usuari")
     pdf.body_text(
@@ -327,6 +341,7 @@ def generate():
             ["/health no respon des del web", "Tallafocs o port", "Revisar regla del punt 3.6"],
             ["Error 401 a la prova 5.2", "Token diferent", "Comparar config i .env"],
             ["Error 500 al log: login failed", "Falta el punt 3.4", "Revisar permisos SQL"],
+            ["Error 500 al log: codi 229", "Funció SQL sense EXECUTE", "GRANT EXECUTE (punt 3.4)"],
             ["Error 503 a l'aplicació", "Servei aturat", "sc.exe query CrystalPdf"],
         ],
         [55, 55, 80],

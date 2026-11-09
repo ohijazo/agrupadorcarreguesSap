@@ -13,6 +13,9 @@
     <add key="Escolta" value="+" />
     <!-- Secret compartit amb l'app Flask (CRYSTAL_PDF_TOKEN). Minim 24 caracters. -->
     <add key="Token" value="" />
+    <!-- IPs que poden fer peticions (separades per comes), a mes de la mateixa
+         maquina. Buit = qualsevol IP. Produccio: el servidor web. -->
+    <add key="IpsPermeses" value="192.168.11.244" />
     <add key="SqlServer" value="localhost" />
     <add key="SqlDatabase" value="DB_FARIN_TEST" />
     <!-- Buit (recomanat) = seguretat integrada amb el compte del servei.

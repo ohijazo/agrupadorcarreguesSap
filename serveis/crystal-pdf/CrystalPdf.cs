@@ -54,6 +54,10 @@ namespace CrystalPdf
         public string Proveidor;     // buit = el que porta el .rpt (MSOLEDBSQL)
         public int MaxJobs;
         public int EsperaJobSegons;
+        // IPs que poden fer peticions, a mes de la mateixa maquina. Buit = totes.
+        // Fa la feina del tallafocs quan no n'hi ha: el servidor de SAP te el
+        // perfil de domini desactivat i la regla de Windows no s'hi aplica.
+        public HashSet<IPAddress> IpsPermeses = new HashSet<IPAddress>();
         public string DirTreball;
 
         public static Config Llegeix()
@@ -74,6 +78,13 @@ namespace CrystalPdf
                 EsperaJobSegons = int.Parse(a["EsperaJobSegons"] ?? "30"),
                 DirTreball = Path.Combine(dir, "treball"),
             };
+            foreach (var ip in (a["IpsPermeses"] ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                IPAddress adr;
+                if (!IPAddress.TryParse(ip, out adr))
+                    throw new ConfigurationErrorsException("IpsPermeses: '" + ip + "' no es una IP");
+                c.IpsPermeses.Add(adr.IsIPv4MappedToIPv6 ? adr.MapToIPv4() : adr);
+            }
             if (c.Token.Length < 24)
                 throw new ConfigurationErrorsException("Token ha de tenir com a minim 24 caracters");
             if (c.SqlDatabase == "")
@@ -278,6 +289,9 @@ namespace CrystalPdf
         {
             http.Start();
             Log.Escriu("Escoltant al port " + cfg.Port + " (BD " + cfg.SqlDatabase + ")");
+            Log.Escriu(cfg.IpsPermeses.Count == 0
+                ? "AVIS: IpsPermeses buit, s'accepten peticions de qualsevol IP"
+                : "IPs permeses: " + string.Join(", ", cfg.IpsPermeses) + " i la mateixa maquina");
             Task.Run(() => Bucle());
         }
 
@@ -309,6 +323,14 @@ namespace CrystalPdf
             return dif == 0;
         }
 
+        bool IpPermesa(IPEndPoint remot)
+        {
+            if (cfg.IpsPermeses.Count == 0) return true;
+            if (remot == null) return false;
+            var ip = remot.Address.IsIPv4MappedToIPv6 ? remot.Address.MapToIPv4() : remot.Address;
+            return IPAddress.IsLoopback(ip) || cfg.IpsPermeses.Contains(ip);
+        }
+
         static void Respon(HttpListenerResponse resp, int codi, string text)
         {
             var b = Encoding.UTF8.GetBytes(text);
@@ -326,6 +348,12 @@ namespace CrystalPdf
             try
             {
                 var cami = req.Url.AbsolutePath.TrimEnd('/');
+                if (!IpPermesa(req.RemoteEndPoint))
+                {
+                    Log.Escriu("REBUTJAT " + req.RemoteEndPoint + " " + req.Url.PathAndQuery);
+                    Respon(resp, 403, "No permes");
+                    return;
+                }
                 if (req.HttpMethod != "GET") { Respon(resp, 405, "Nomes GET"); return; }
                 if (cami == "/health") { Respon(resp, 200, "ok"); return; }
                 if (cami != "/pdf") { Respon(resp, 404, "No existeix"); return; }
