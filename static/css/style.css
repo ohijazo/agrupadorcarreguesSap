@@ -32,6 +32,9 @@
 
 * { box-sizing: border-box; }
 *:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* L'atribut `hidden` sempre amaga, encara que la classe posi `display`
+   (p. ex. `.btn { display: inline-flex }` feia visible un botó amagat). */
+[hidden] { display: none !important; }
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -738,8 +741,26 @@ body {
 /* Atenuades per defecte (visibles, però el motor les ignora). */
 .data-table tbody tr.not-palletitzable > td,
 .data-table tbody tr.not-palletitzable code {
-    color: #8a93a0;
+    color: #646e7b;
     font-style: italic;
+}
+.llegenda-np {
+    margin: 0;
+    padding: .35rem 1.25rem .6rem;
+    font-size: .85rem;
+    color: var(--gray-700);
+}
+.llegenda-np .mostra {
+    display: inline-block;
+    width: 6px; height: 1em;
+    margin-right: .4rem;
+    vertical-align: -2px;
+    background: #cbd5e1;
+}
+.llegenda-palets {
+    margin: .5rem 0 0;
+    font-size: .85rem;
+    color: var(--gray-700);
 }
 .data-table tbody tr.not-palletitzable > td:first-child {
     box-shadow: inset 6px 0 0 #cbd5e1;
@@ -776,16 +797,18 @@ body {
     box-shadow: 0 1px 2px rgba(0,0,0,.1);
     cursor: pointer;
     font-family: inherit;
+    white-space: nowrap;
 }
 .badge-grouped:hover { filter: brightness(1.1); }
+/* Tons foscos: text blanc a ≥4.5:1 (abans #d97706 i #38a169 quedaven a ~3:1). */
 .badge-grouped--progress {
-    background: #d97706;
-    border-color: #d97706;
+    background: #b45309;
+    border-color: #b45309;
     color: #fff;
 }
 .badge-grouped--done {
-    background: var(--success-strong);
-    border-color: var(--success-strong);
+    background: var(--success);
+    border-color: var(--success);
     color: #fff;
 }
 
@@ -1855,3 +1878,27 @@ body.has-action-bar main.container { padding-bottom: 96px; }
 
 /* Icona de PDA (templates/_icona_pda.html), alineada amb el text */
 .icona-pda { display: inline-block; vertical-align: -0.18em; flex-shrink: 0; }
+
+/* --- Tablet del magatzem ---------------------------------------------
+   Els peons fan les agrupacions a la tablet, drets i de vegades amb
+   guants: per sota de 1100 px els filtres no queden fixos (es menjaven un
+   terç de la pantalla) i s'amaguen Matrícula i Observacions (surten al
+   desplegable de la càrrega). Amb pantalla tàctil, tot el que es toca fa
+   com a mínim 44 px. */
+@media (max-width: 1100px) {
+    .panel-filters { position: static; box-shadow: none; }
+    #taula-carregues [data-col="car_matricula"],
+    #taula-carregues [data-col="car_observaciones"] { display: none; }
+}
+@media (pointer: coarse) {
+    body { font-size: 16px; }
+    .col-check input[type=checkbox] { width: 28px; height: 28px; }
+    .col-expand { width: 52px; }
+    .toggle-btn { width: 44px; height: 44px; font-size: 1.05rem; }
+    .chip-btn { min-height: 44px; padding: .5rem 1rem; font-size: .95rem; }
+    .btn-sm { min-height: 44px; padding: .5rem 1rem; font-size: .95rem; }
+    .btn { min-height: 44px; }
+    .badge-grouped { font-size: .8rem; padding: .3rem .6rem; }
+    .toggle-amaga-np { min-height: 44px; font-size: .95rem; }
+    .toggle-amaga-np input { width: 24px; height: 24px; }
+}

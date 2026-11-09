@@ -7,7 +7,17 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const fmt = new Intl.NumberFormat("ca-ES");
-const fmtKg = new Intl.NumberFormat("ca-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtKg = new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 0 });
+
+// "SAP/-1/97" -> "#97": el número de la càrrega, com a la preparació.
+// L'identificador sencer queda al title.
+function numCarrega(carregaId) {
+    const ultim = String(carregaId || "").split("/").pop() || "";
+    return `#${ultim.replace(/^0+/, "") || ultim}`;
+}
+function codiCarregaHTML(carregaId) {
+    return `<code title="${escapeHtml(carregaId)}">${escapeHtml(numCarrega(carregaId))}</code>`;
+}
 
 // fmtData i fmtDataHora venen carregades des de fmt.js abans d'aquest fitxer.
 
@@ -654,7 +664,7 @@ function badgeAgrupacioHTML(estat) {
     let cls, txt;
     if (estat.tipus === "finalitzada") {
         cls = "badge-grouped badge-grouped--done";
-        txt = "Agrupada (acabada)";
+        txt = "✓ Acabada";
     } else if (estat.tipus === "en_preparacio") {
         cls = "badge-grouped badge-grouped--progress";
         const np = estat.info.n_preparats || 0;
@@ -662,12 +672,14 @@ function badgeAgrupacioHTML(estat) {
         // % de kg pistolejats per l'SGA (preparacio_sga.py); null si encara no s'ha sincronitzat.
         const pct = estat.info.pct_pistolejat;
         const parts = [nt > 0 ? `${np}/${nt}` : "", pct != null ? `${pct}%` : ""].filter(Boolean);
-        txt = parts.length ? `Agrupada (en preparació · ${parts.join(" · ")})` : "Agrupada (en preparació)";
+        txt = parts.length ? `◐ Preparant · ${parts.join(" · ")}` : "◐ Preparant";
     } else {
         cls = "badge-grouped";
         txt = "Ja agrupada";
     }
-    const tip = `${estat.info.nom} · ${fmtData(estat.info.ts) || ""}`;
+    const tip = `Agrupació "${estat.info.nom}" · ${fmtData(estat.info.ts) || ""}` +
+        (estat.tipus === "en_preparacio" ? " · productes fets / total · % de kg pistolejats" : "") +
+        " · Toca per obrir-la";
     return ` <button type="button" class="${cls}" title="${escapeHtml(tip)}" data-act="obrir-agrupacio" data-id="${escapeHtml(estat.info.id)}">${txt}</button>`;
 }
 
@@ -677,7 +689,7 @@ function crearFilaCarrega(c) {
     tr.classList.add("row-clickable");
     if (c.palletitzable === false) {
         tr.classList.add("not-palletitzable");
-        tr.title = "Càrrega sense línies palletitzables (només UNI/GRA o sacs=0)";
+        tr.title = "No es pot palletitzar (granel o unitats soltes): l'agrupació no la compta";
     }
 
     const tdCheck = document.createElement("td");
@@ -703,7 +715,7 @@ function crearFilaCarrega(c) {
 
     const estat = estatAgrupacio(c);
     tr.insertAdjacentHTML("beforeend", `
-        <td data-col="carrega_id"><code>${escapeHtml(c.carrega_id)}</code>${badgeAgrupacioHTML(estat)}</td>
+        <td data-col="carrega_id">${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}</td>
         <td data-col="car_descripcion" class="cell-truncate" title="${escapeHtml(c.car_descripcion)}">${escapeHtml(c.car_descripcion || "—")}</td>
         <td data-col="car_fecsalida" class="col-data">${escapeHtml(((fmtData(c.car_fecsalida || c.car_fecha) || "") + (c.car_fecsalida_hora ? " " + c.car_fecsalida_hora : "")) || "—")}</td>
         <td data-col="transportista" class="cell-truncate" title="${escapeHtml(c.transportista || c.tra_codi)}">${escapeHtml(c.transportista || c.tra_codi)}</td>
@@ -746,7 +758,7 @@ function actualitzaFilaCarrega(tr, c, idx) {
     // Refresca el badge d'agrupació (3a td) i la cel·la d'agrupació (última td)
     // — necessari perquè quan refresquem via polling, l'estat (n_preparats,
     // finalitzada) pot haver canviat i el badge "(4/15)" hauria de reflectir-ho.
-    const novaBadgeTd = `<code>${escapeHtml(c.carrega_id)}</code>${badgeAgrupacioHTML(estat)}`;
+    const novaBadgeTd = `${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}`;
     const novaAgrupTd = cellAgrupacioHTML(estat);
     const tdBadge = tr.children[2];
     const tdAgrup = tr.children[tr.children.length - 1];
@@ -761,6 +773,8 @@ function renderLlistaCarregues() {
 
     const llista = llistaVisible();
     const carregats = state.carregues.length;
+    const llegendaNP = $("#llegenda-np");
+    if (llegendaNP) llegendaNP.hidden = !state.carregues.some(c => c.palletitzable === false);
     const total = state.paginacio.total || carregats;
     const nAgrupades = state.carregues.filter(c => estatAgrupacio(c) != null).length;
     const sufixAgrup = nAgrupades > 0 ? ` · ${nAgrupades} ja agrupades` : "";
@@ -1040,7 +1054,7 @@ function renderDetallCarrega(data) {
                     <span class="muted">${fmt.format(a.total_sacs)} sacs · ${fmtKg.format(a.total_kg)} kg</span>
                 </h4>
                 <table class="data-table data-table-mini">
-                    <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th></tr></thead>
+                    <thead><tr><th>Article</th><th>Descripció</th><th>Envàs</th><th class="num">Sacs</th><th class="num">Kg</th></tr></thead>
                     <tbody>${linies || `<tr><td colspan="5" class="muted">Sense línies</td></tr>`}</tbody>
                 </table>
             </div>
@@ -1060,12 +1074,21 @@ function renderDetallCarrega(data) {
 function actualitzarBotoMagatzem() {
     const a = $("#btn-veure-magatzem");
     if (!a) return;
-    if (state.agrupacioActualId) {
+    const desa = $("#btn-desar-agrupacio");
+    const desada = !!state.agrupacioActualId;
+    if (desada) {
         a.hidden = false;
         a.href = `/magatzem/${encodeURIComponent(state.agrupacioActualId)}`;
     } else {
         a.hidden = true;
         a.removeAttribute("href");
+    }
+    if (desa) {
+        desa.classList.toggle("btn-primary", !desada);
+        desa.classList.toggle("btn-ghost", desada);
+        desa.textContent = desada ? "✓ Desada" : "⭐ Desa";
+        desa.title = desada ? "Ja està desada. Torna-la a desar amb un altre nom si cal."
+                            : "Desa-la perquè el magatzem la pugui preparar";
     }
 }
 
@@ -1555,7 +1578,8 @@ function renderResultat(r) {
         ch.className = "chip";
         ch.style.setProperty("--chip-color", col.color);
         ch.style.setProperty("--chip-bg", col.bg);
-        ch.innerHTML = `<span class="chip-dot"></span><strong>${escapeHtml(c.carrega_id)}</strong> · ${escapeHtml(c.transportista || c.tra_codi)}` +
+        ch.innerHTML = `<span class="chip-dot"></span><strong title="${escapeHtml(c.carrega_id)}">${escapeHtml(numCarrega(c.carrega_id))}</strong>` +
+            (c.descripcio ? ` ${escapeHtml(c.descripcio)}` : "") + ` · ${escapeHtml(c.transportista || c.tra_codi)}` +
             (c.matricula ? ` · ${escapeHtml(c.matricula)}` : "");
         chips.appendChild(ch);
     }
@@ -2525,8 +2549,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setupKeyboard();
 
-    // Auto-cerca si tenim dates vàlides i prefs guardades
-    if (prefs.desde && prefs.fins && validarFormulari()) {
+    // Auto-cerca en obrir: les dates ja venen posades (del servidor o de
+    // l'última cerca), i un peó no ha de saber que encara cal prémer Cerca.
+    if (validarFormulari()) {
         // petit retard perquè es vegi la UI inicial
         setTimeout(() => buscarCarregues(), 100);
     }

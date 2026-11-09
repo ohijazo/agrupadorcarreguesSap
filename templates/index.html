@@ -98,6 +98,7 @@
                 <button type="button" id="btn-reset-amplades" class="btn btn-ghost btn-sm" title="Restablir amplades de columnes a la mida per defecte">↺ Amplades</button>
             </div>
         </header>
+        <p class="llegenda-np" id="llegenda-np" hidden><span class="mostra" aria-hidden="true"></span>Les files grises no es poden palletitzar (granel o unitats soltes): l'agrupació no les compta.</p>
         <div class="table-wrap">
             <table class="data-table sortable" id="taula-carregues">
                 <thead>
@@ -159,7 +160,7 @@
                 </div>
                 <div class="resultat-header-tools">
                     <span id="badge-incidencies" hidden></span>
-                    <a id="btn-veure-magatzem" class="btn btn-primary" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">📋</span> Checklist preparació</a>
+                    <a id="btn-veure-magatzem" class="btn btn-primary" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">📋</span> Veure preparació</a>
                     <button type="button" id="btn-imprimir" class="btn btn-primary" aria-label="Imprimir l'informe"><span aria-hidden="true">🖨</span> Imprimir</button>
                     <button type="button" id="btn-desar-agrupacio" class="btn btn-ghost">⭐ Desa</button>
                     <button type="button" id="btn-exportar-csv" class="btn btn-ghost">Exportar CSV</button>
@@ -200,7 +201,7 @@
                                 <th></th>
                                 <th data-sort="art_codi">Article</th>
                                 <th data-sort="art_descrip">Descripció</th>
-                                <th data-sort="tunitat">TUnitat</th>
+                                <th data-sort="tunitat">Envàs</th>
                                 <th>Càrregues</th>
                                 <th class="num" data-sort="total_sacs">Total sacs</th>
                                 <th class="num" data-sort="total_kg">Total kg</th>
@@ -209,6 +210,7 @@
                         <tbody></tbody>
                     </table>
                 </div>
+                <p class="llegenda-palets">Palets: <strong>[2×32]</strong> = 2 palets de 32 sacs · <strong>AM</strong> americà · <strong>EU</strong> europeu de fusta · <strong>EU·PL</strong> europeu de plàstic · <strong>PL</strong> plàstic · <strong>BASE</strong> base.</p>
 
                 <div id="incidencies" hidden>
                     <h3 class="section-title">Incidències <span id="count-incidencies" class="muted"></span></h3>
