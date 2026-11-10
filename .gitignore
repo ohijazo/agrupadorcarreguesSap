@@ -45,3 +45,7 @@ docs/Manual_Recepcionista_Visites.pdf
 udt_report.txt
 *_report.txt
 
+
+# Eines locals (proves visuals i disseny)
+.playwright-mcp/
+.impeccable/
