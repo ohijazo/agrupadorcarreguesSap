@@ -1088,8 +1088,8 @@ def api_agrupacions_version():
 @app.route("/api/agrupacions/<id_>/pistolejat")
 @auth.requires_rol("admin", "oficina", "magatzem")
 def api_agrupacions_pistolejat(id_):
-    """Progres de la preparacio segons el pistolejat de l'SGA. Substitueix el
-    checklist manual: de pas, desa els productes fets a `productes_preparats`
+    """Com va l'expedició (pistolejat de l'SGA) de l'agrupació. Informatiu:
+    la producció es marca a mà (/producte). De pas, desa el % pistolejat
     (vegeu preparacio_sga.py)."""
     # Cada crida pot anar a SAP. Una tablet en fa 4 per minut; el límit
     # només atura un script. Per IP del client (darrere l'Apache, la de
@@ -1108,6 +1108,40 @@ def api_agrupacions_pistolejat(id_):
     except Exception:
         log.exception("pistolejat de l'agrupacio %s", id_)
         return _err_genèric()
+
+
+@app.route("/api/agrupacions/<id_>/producte", methods=["PATCH"])
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_agrupacions_producte(id_):
+    """Marca o desmarca un producte com a PRODUÏT (producció, a mà). El
+    pistolejat de l'SGA és expedició i va a part (/pistolejat)."""
+    body = request.get_json(silent=True) or {}
+    art_codi, err = valida_codi(body.get("art_codi"), "art_codi", max_len=20)
+    if err:
+        return _err_validacio(err)
+    preparat = bool(body.get("preparat"))
+    obj = agrupacions_store.marca_producte(
+        id_, art_codi, preparat,
+        ip=request.remote_addr,
+        marcat_per_id=session.get("user_id"),
+    )
+    if obj is None:
+        return jsonify({"error": "Agrupació no trobada."}), 404
+    log.info(
+        "audit marca agrupacio=%s art=%s preparat=%s ip=%s",
+        id_, art_codi, preparat, request.remote_addr,
+    )
+    return jsonify({"ok": True, "n_preparats": len(obj.get("productes_preparats") or [])})
+
+
+@app.route("/api/agrupacions/<id_>/reset-preparats", methods=["POST"])
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_agrupacions_reset_preparats(id_):
+    obj = agrupacions_store.reset_preparats(id_, ip=request.remote_addr)
+    if obj is None:
+        return jsonify({"error": "Agrupació no trobada."}), 404
+    log.info("reset preparats agrupacio=%s ip=%s", id_, request.remote_addr)
+    return jsonify({"ok": True, "n_preparats": 0})
 
 
 @app.route("/api/agrupacions/<id_>/finalitzar", methods=["POST"])

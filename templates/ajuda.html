@@ -310,7 +310,7 @@
             </tr>
             <tr>
                 <td><strong>Magatzem</strong></td>
-                <td>Obre una agrupació al tablet i hi veu què queda per pistolejar. El progrés surt del pistolejat de l'SGA; no es marca a mà. No pot crear ni eliminar agrupacions ni veure la cerca de càrregues.</td>
+                <td>Obre una agrupació al tablet, marca els productes produïts i hi veu com va el pistolejat de l'SGA (expedició). No pot crear ni eliminar agrupacions ni veure la cerca de càrregues.</td>
                 <td>Directament a <code>/magatzem</code> (llista d'agrupacions pendents).</td>
             </tr>
         </tbody>
@@ -376,7 +376,7 @@
                 <span>☐</span>
                 <span>
                     <span class="mockup-cell-code">2026/01/0002209</span>
-                    <span class="mockup-badge" style="margin-left:.3rem; background:#b45309; color:#fff;">◐ 35% · 4/15 fets</span>
+                    <span class="mockup-badge" style="margin-left:.3rem; background:#b45309; color:#fff;">◐ 4/15 produïts · 35% pist.</span>
                 </span>
                 <span>ESCAPA PAL HIND</span>
                 <span>12-06-2026</span>
@@ -405,9 +405,9 @@
     <div class="help-info">
         <strong>Tres estats visuals d'agrupació:</strong>
         <ul style="margin:.4rem 0 0; padding-left:1.25rem;">
-            <li><strong style="color:var(--warning);">● Pic groc / fila groga</strong> — <em>Ja agrupada</em>. L'agrupació existeix però l'SGA encara no ha pistolejat res.</li>
-            <li><strong style="color:#b45309;">◐ Pic ambar / fila ambar</strong> — <em>◐ % · N/total fets</em>. L'SGA ja ha començat a pistolejar: el % són els kg pistolejats i N/total els productes acabats. Totes les pantalles diuen el progrés igual, primer el % i després els productes.</li>
-            <li><strong style="color:var(--success-strong);">✓ Pic verd / fila verda</strong> — <em>✓ Acabada</em>. Tots els productes pistolejats o amb albarà; la feina al magatzem és feta.</li>
+            <li><strong style="color:var(--warning);">● Pic groc / fila groga</strong> — <em>Ja agrupada</em>. L'agrupació existeix però encara no s'ha marcat cap producte com a produït.</li>
+            <li><strong style="color:#b45309;">◐ Pic ambar / fila ambar</strong> — <em>◐ N/total produïts · % pist.</em>. Ja s'ha produït algun producte: N/total són els productes marcats com a produïts i el %, els kg pistolejats a l'SGA (expedició, informatiu). Totes les pantalles ho diuen igual: primer la producció i després l'expedició.</li>
+            <li><strong style="color:var(--success-strong);">✓ Pic verd / fila verda</strong> — <em>✓ Acabada</em>. Tots els productes produïts (o l'oficina l'ha tancada).</li>
         </ul>
         <p style="margin:.5rem 0 0;">En tots tres casos la càrrega <strong>està bloquejada</strong> per no poder duplicar-la.</p>
         <p style="margin:.3rem 0 0;">La llista <strong>s'actualitza automàticament cada 5 segons</strong> sense que hagis de refrescar — a mesura que l'SGA pistoleja, el % i els productes acabats s'hi reflecteixen en un parell de minuts.</p>
@@ -582,21 +582,18 @@
 
     <h3>7.2 Pantalla de preparació</h3>
     <p>
-        En obrir una agrupació, cada producte té una card gran amb el seu estat. <strong>No cal marcar res:</strong>
-        el que està fet surt del <strong>pistolejat de l'SGA</strong> a SAP. Un producte està <em>fet</em> quan
-        tot el que demanen les comandes de les seves càrregues s'ha pistolejat o ja té l'albarà fet.
-        Aleshores la card es torna verda i passa al final de la llista.
+        <strong>Agrupar és per produir i pistolejar és per expedir.</strong> En obrir una agrupació, cada producte té una card gran
+        amb un <strong>botó ✓</strong> a la dreta: toca'l quan el producte estigui <strong>produït</strong>. La card es torna verda,
+        passa al final de la llista i hi surt qui ho ha marcat i quan. A dalt, en gran, surt quants productes de l'agrupació estan produïts.
+    </p>
+    <p>
+        A sota de cada producte hi ha la informació d'<strong>expedició</strong>, que surt del pistolejat de l'SGA i no s'ha de marcar:
     </p>
     <ul>
-        <li><strong>Pendent</strong> (vermell) — encara no s'ha pistolejat res.</li>
-        <li><strong>A mitges</strong> (taronja) — s'ha pistolejat una part. Sota el producte surt "Pistolejat: X de Y sacs".</li>
-        <li><strong>Fet</strong> (verd) — tot pistolejat o amb albarà.</li>
+        <li><strong>No pistolejat</strong> / <strong>Pistolejant</strong> / <strong>Pistolejat</strong> — com va el pistolejat del producte. Sota el producte surt "Expedició: pistolejat X de Y sacs", i cada càrrega porta el seu indicador.</li>
         <li><strong>Sense dades a SAP</strong> (gris) — el producte no apareix a cap comanda de les càrregues.</li>
+        <li>Si es cancel·la un albarà, el pistolejat torna a zero i surt un avís: la mercaderia pot ser al palet i s'ha de tornar a pistolejar a l'SGA.</li>
     </ul>
-    <p>
-        Cada càrrega del producte porta el seu propi indicador (✓ o "X de Y sacs"). Si es cancel·la un albarà,
-        el producte torna a sortir pendent.
-    </p>
 
     <h3>7.3 Actualització automàtica</h3>
     <p>
@@ -607,7 +604,8 @@
 
     <h3>7.4 Botons de la toolbar</h3>
     <ul>
-        <li><strong>Amaga els fets</strong> — deixa només els pendents per veure ràpid què queda.</li>
+        <li><strong>Amaga els produïts</strong> — deixa només el que queda per produir.</li>
+        <li><strong>↶ Desfés</strong> — desmarca tots els productes produïts (amb confirmació).</li>
         <li><strong>🖨 Imprimir</strong> — imprimeix la llista amb quadrats per marcar a mà al paper.</li>
         <li><strong>↻ Refresca</strong> — torna a consultar SAP ara mateix.</li>
     </ul>

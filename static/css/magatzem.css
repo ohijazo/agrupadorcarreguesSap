@@ -333,12 +333,34 @@
 .mag-estat-col {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: .5rem;
+    align-items: center;
+    gap: .35rem;
 }
 .pend-estat-sense_dades { background: #4a5568; }
-/* Quadrat per marcar a mà: només surt al paper (vegeu @media print) */
-.mag-prep-check { display: none; }
+/* Botó gros de "Produït" (a la impressió és el quadrat per marcar a mà). */
+.mag-prep-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border: 2px solid #cbd5e0;
+    border-radius: 16px;
+    background: #fff;
+    cursor: pointer;
+    transition: background .12s ease, border-color .12s ease, color .12s ease,
+                transform .14s cubic-bezier(.34, 1.56, .64, 1);
+    flex-shrink: 0;
+    color: #fff;
+    font-size: 2rem;
+    line-height: 1;
+    touch-action: manipulation;
+}
+.mag-prep-check:hover { border-color: #2c5282; }
+.mag-prep-check:active { transform: scale(.92); border-color: #2c5282; }
+.mag-prep-check.is-on { background: #276749; border-color: #276749; }
+.mag-prep-lbl { font-size: .82rem; font-weight: 700; color: #4a5568; text-align: center; min-width: 64px; }
+.mag-card.is-preparat .mag-prep-lbl { color: #276749; }
 .mag-pist { display: flex; flex-direction: column; gap: .1rem; max-width: 28rem; }
 .mag-pist-text { font-size: .95rem; color: #2d3748; font-variant-numeric: tabular-nums; }
 .mag-carrega-estat {
@@ -597,6 +619,7 @@
 
     .mag-error { display: none !important; }
     .mag-estat-col .pend-estat,
+    .mag-prep-lbl,
     .mag-pist,
     .mag-carrega-estat,
     .mag-actualitzat,

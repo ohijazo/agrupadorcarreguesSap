@@ -26,12 +26,12 @@ function escapeM(s) {
     }[c]));
 }
 
-// El mateix llenguatge de progrés a totes les pantalles: primer el % de kg
-// pistolejats per l'SGA, després els productes fets. `pct` és null si
-// l'agrupació encara no s'ha sincronitzat mai amb el pistolejat.
+// El mateix llenguatge a totes les pantalles: primer la PRODUCCIÓ (productes
+// marcats com a produïts) i després l'EXPEDICIÓ (% de kg pistolejats a l'SGA,
+// informatiu). `pct` és null si encara no s'ha llegit mai el pistolejat.
 function textProgres(pct, fets, total) {
-    const prod = `${fets} de ${total} productes fets`;
-    return pct == null ? prod : `${pct}% pistolejat · ${prod}`;
+    const prod = `${fets} de ${total} produïts`;
+    return pct == null ? prod : `${prod} · ${pct}% pistolejat`;
 }
 
 function fmtHoraCurta(iso) {
@@ -246,23 +246,30 @@ window.magatzemLlista = async function magatzemLlista() {
 };
 
 // ---- Vista PREPARACIÓ --------------------------------------------------
-// Només lectura: el que està fet ho diu el pistolejat de l'SGA
-// (/api/agrupacions/<id>/pistolejat), no l'operari. Vegeu preparacio_sga.py.
+// Agrupar és per PRODUIR i pistolejar és per EXPEDIR. L'operari marca cada
+// producte com a "Produït" (botó gros, /producte). El pistolejat de l'SGA
+// (/api/agrupacions/<id>/pistolejat) es mostra a part, com a informació
+// d'expedició. Vegeu preparacio_sga.py.
 let magState = {
     id: null,
     obj: null,
+    preparats: new Set(),    // productes marcats com a produïts
     progres: null,           // resposta de /pistolejat (null fins a la primera)
     ocultarPrep: false,
     colorsCarrega: new Map(),
     pollTimer: null,
-    lastAcabada: null,       // si estava tota feta al darrer render (null = abans del primer)
+    lastInteractionTs: 0,    // últim toc: el polling no repinta enmig
+    lastAcabada: null,       // si estava tot produït al darrer render (null = abans del primer)
 };
+
+const INTERACCIO_MS = 1200;
 
 // Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents del dia").
 const POLL_PREP_MS = 15_000;
 
+// Estat d'EXPEDICIÓ (pistolejat), no de producció.
 const ETIQUETA_ESTAT_PREP = {
-    pendent: "Pendent", parcial: "A mitges", complet: "Fet", sense_dades: "Sense dades a SAP",
+    pendent: "No pistolejat", parcial: "Pistolejant", complet: "Pistolejat", sense_dades: "Sense dades a SAP",
 };
 
 function colorPerCarregaIdx(i) {
@@ -273,10 +280,8 @@ function progresDe(artCodi) {
     return magState.progres?.productes?.[artCodi] || null;
 }
 
-// Els fets els decideix el servidor: inclou els "sense dades a SAP" (vegeu
-// dades/pistolejat.py:progres_agrupacio).
-function esFet(artCodi) {
-    return (magState.progres?.fets || []).includes(artCodi);
+function esProduit(artCodi) {
+    return magState.preparats.has(artCodi);
 }
 
 // Lectures de l'SGA d'un albarà que després es va cancel·lar: no compten
@@ -297,16 +302,18 @@ function textPistolejat(pr) {
 }
 
 function calculaProgres() {
-    const total = (magState.obj?.resultat?.productes || []).length;
-    const fets = magState.progres ? magState.progres.n_fets : 0;
-    const pct = magState.progres ? magState.progres.percent : 0;
-    // El número gran és el % pistolejat (el que omple la barra); a sota, els
-    // productes fets. Abans "0 / 3 fets" sobre una barra al 35% es contradeien.
-    $m("#mag-progres-pct").textContent = magState.progres ? `${pct}%` : "—";
-    $m("#mag-progres-sub").textContent = magState.progres
-        ? textProgres(null, fets, total) : "";
+    const prods = magState.obj?.resultat?.productes || [];
+    const total = prods.length;
+    const fets = prods.filter(p => esProduit(p.art_codi)).length;
+    // En gran, la producció (el que marca l'operari) i la seva barra; a sota,
+    // l'expedició (% pistolejat a l'SGA), que és informativa.
+    $m("#mag-progres-pct").textContent = `${fets} de ${total}`;
+    $m("#mag-progres-sub").textContent = "produïts"
+        + (magState.progres ? ` · ${magState.progres.percent}% pistolejat` : "");
     const fill = $m("#mag-progres-fill");
-    if (fill) fill.style.width = `${pct}%`;
+    if (fill) fill.style.width = `${total ? Math.round(100 * fets / total) : 0}%`;
+    const btnDesfes = $m("#mag-desfes");
+    if (btnDesfes) btnDesfes.hidden = fets === 0;
     const resum = magState.obj?.resultat;
     if (resum) {
         $m("#mag-resum").textContent =
@@ -328,7 +335,7 @@ function calculaProgres() {
     const wrap = $m(".mag-progres-box");
     if (wrap) wrap.classList.toggle("is-acabada", acabada);
     if (acabada && prev === false) {
-        toast("success", `Agrupació completada — ${total} productes pistolejats`);
+        toast("success", `Agrupació produïda — ${total} productes`);
         if (navigator.vibrate) {
             try { navigator.vibrate([200, 80, 200]); } catch {}
         }
@@ -345,10 +352,10 @@ function renderArticles() {
         return;
     }
     buit.hidden = true;
-    // Ordre: pendents primer (ordenats per total_sacs desc), fets al final
+    // Ordre: per produir primer (ordenats per total_sacs desc), produïts al final
     prods.sort((a, b) => {
-        const pa = esFet(a.art_codi) ? 1 : 0;
-        const pb = esFet(b.art_codi) ? 1 : 0;
+        const pa = esProduit(a.art_codi) ? 1 : 0;
+        const pb = esProduit(b.art_codi) ? 1 : 0;
         if (pa !== pb) return pa - pb;
         return (b.total_sacs || 0) - (a.total_sacs || 0);
     });
@@ -362,7 +369,7 @@ function renderArticles() {
 
     for (const p of prods) {
         const pr = progresDe(p.art_codi);
-        const isFet = esFet(p.art_codi);
+        const isFet = esProduit(p.art_codi);
         if (magState.ocultarPrep && isFet) continue;
 
         const pcOrdenats = (p.per_carrega || []).slice()
@@ -392,15 +399,16 @@ function renderArticles() {
         let pistHtml = "";
         if (pr && pr.estat !== "sense_dades") {
             pistHtml = `<div class="mag-pist">
-                    <span class="mag-pist-text">Pistolejat: ${escapeM(textPistolejat(pr))}</span>
+                    <span class="mag-pist-text">Expedició: pistolejat ${escapeM(textPistolejat(pr))}</span>
                     <div class="pend-barra"><div class="pend-barra-fill" style="width:${pr.percent}%"></div></div>
                 </div>`;
         }
         let prepMetaHtml = "";
         if (isFet) {
             const d = (magState.obj?.preparats_detall || {})[p.art_codi] || {};
-            const txt = [d.per_nom || "SGA", fmtHoraCurta(d.ts)].filter(Boolean).join(" · ");
-            prepMetaHtml = `<div class="mag-prep-meta">✓ ${escapeM(txt)}</div>`;
+            // "SGA": ho va marcar la sincronització del pistolejat del 9-11-2026.
+            const txt = [d.per_nom || (d.sga ? "SGA" : ""), fmtHoraCurta(d.ts)].filter(Boolean).join(" · ");
+            prepMetaHtml = `<div class="mag-prep-meta">✓ Produït${txt ? " · " + escapeM(txt) : ""}</div>`;
         }
         const estat = pr
             ? `<span class="pend-estat pend-estat-${escapeM(pr.estat)}">${escapeM(ETIQUETA_ESTAT_PREP[pr.estat] || pr.estat)}</span>`
@@ -423,8 +431,11 @@ function renderArticles() {
                 ${prepMetaHtml}
             </div>
             <div class="mag-estat-col">
+                <button type="button" class="mag-prep-check ${isFet ? "is-on" : ""}" data-act="toggle"
+                        aria-pressed="${isFet ? "true" : "false"}"
+                        aria-label="${isFet ? "Desmarca com a produït" : "Marca com a produït"}">${isFet ? "✓" : ""}</button>
+                <span class="mag-prep-lbl">${isFet ? "Produït" : "Produir"}</span>
                 ${estat}
-                <span class="mag-prep-check" aria-hidden="true"></span>
             </div>
         `;
         ul.appendChild(li);
@@ -436,10 +447,17 @@ async function refrescar({ fromPolling = false } = {}) {
     const id = encodeURIComponent(magState.id);
     const errBox = $m("#mag-pist-error");
     try {
-        // Primer el pistolejat (que de pas desa els fets) i després
-        // l'agrupació, perquè l'hora "✓ SGA · hh:mm" ja vingui actualitzada.
-        const progres = await fetchJ(`/api/agrupacions/${id}/pistolejat`).catch(e => ({ _error: e }));
-        magState.obj = await fetchJ(`/api/agrupacions/${id}`);
+        // L'agrupació (producció) i el pistolejat (expedició) en paral·lel.
+        const [obj, progres] = await Promise.all([
+            fetchJ(`/api/agrupacions/${id}`),
+            fetchJ(`/api/agrupacions/${id}/pistolejat`).catch(e => ({ _error: e })),
+        ]);
+        magState.obj = obj;
+        // Si l'operari acaba de tocar un botó, no trepitgem la seva marca amb
+        // dades que potser van sortir del servidor abans del toc.
+        if (!fromPolling || Date.now() - magState.lastInteractionTs > INTERACCIO_MS) {
+            magState.preparats = new Set(obj.productes_preparats || []);
+        }
         if (progres._error) {
             // Es manté l'últim pistolejat bo a la pantalla: és millor que buidar-la.
             if (errBox) {
@@ -459,11 +477,67 @@ async function refrescar({ fromPolling = false } = {}) {
     }
 }
 
+async function togglePreparat(artCodi, nouEstat) {
+    magState.lastInteractionTs = Date.now();
+    // Feedback tàctil immediat (vibració a tablet/mòbil).
+    if (navigator.vibrate) {
+        try { navigator.vibrate(nouEstat ? 60 : [30, 40, 30]); } catch {}
+    }
+    // Optimista: actualitza la pantalla de seguida i desfà si falla.
+    if (nouEstat) magState.preparats.add(artCodi);
+    else magState.preparats.delete(artCodi);
+    renderArticles();
+    try {
+        await fetchJ(`/api/agrupacions/${encodeURIComponent(magState.id)}/producte`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ art_codi: artCodi, preparat: nouEstat }),
+        });
+        magState.lastInteractionTs = Date.now();
+    } catch (e) {
+        if (nouEstat) magState.preparats.delete(artCodi);
+        else magState.preparats.add(artCodi);
+        renderArticles();
+        toast("error", "No s'ha guardat: " + e.message);
+    }
+}
+
+async function desferPreparats() {
+    const n = magState.preparats.size;
+    if (!n) return;
+    const ok = await window.mostrarConfirmacio({
+        titol: "Desfer produïts",
+        missatge: `Es desmarcaran ${n} producte${n > 1 ? "s" : ""} com a produït${n > 1 ? "s" : ""}. Vols continuar?`,
+        btnOk: "Sí, desfés-los",
+        btnCancel: "No",
+        tipus: "danger",
+    });
+    if (!ok) return;
+    try {
+        await fetchJ(`/api/agrupacions/${encodeURIComponent(magState.id)}/reset-preparats`, { method: "POST" });
+        magState.preparats.clear();
+        magState.lastInteractionTs = Date.now();
+        renderArticles();
+        toast("success", `Desmarcats ${n} productes`);
+    } catch (e) {
+        toast("error", "No s'ha pogut desfer: " + e.message);
+    }
+}
+
 window.magatzemPrep = async function magatzemPrep(id) {
     magState.id = id;
     await refrescar();
 
-    // Toggle "amaga els fets"
+    // Botó gros de cada targeta: marca o desmarca "Produït".
+    $m("#mag-articles").addEventListener("click", (ev) => {
+        const btn = ev.target.closest('[data-act="toggle"]');
+        const card = btn?.closest(".mag-card");
+        if (!card) return;
+        togglePreparat(card.dataset.artCodi, !esProduit(card.dataset.artCodi));
+    });
+    $m("#mag-desfes")?.addEventListener("click", desferPreparats);
+
+    // Toggle "amaga els produïts"
     $m("#mag-ocultar-prep").addEventListener("change", (ev) => {
         magState.ocultarPrep = ev.target.checked;
         renderArticles();

@@ -1,9 +1,10 @@
-"""Progres de la preparacio d'una agrupacio a partir del pistolejat de l'SGA.
+"""Expedicio d'una agrupacio segons el pistolejat de l'SGA (informatiu).
 
-Substitueix el checklist manual: el que diu si un producte esta fet es
-`@SEIOPIC` i les linies de comanda de SAP (vegeu `dades/pistolejat.py`), i el
-resultat es desa a `productes_preparats` perque el llistat de magatzem, el
-Control d'agrupacions i la planificacio continuin funcionant igual.
+Agrupar es per PRODUIR i pistolejar es per EXPEDIR. La produccio es marca a
+ma (`productes_preparats`, `agrupacions_store.marca_producte`); aqui nomes es
+calcula com va el pistolejat (`dades/pistolejat.py:progres_agrupacio`) i se'n
+desa el % (`agrupacions.pct_pistolejat`) per mostrar-lo a les llistes. Aquest
+modul NO toca les marques de produccio.
 
 Ho fan servir l'endpoint `/api/agrupacions/<id>/pistolejat` (pantalla de
 preparacio oberta) i `scripts/sincronitzar_pistolejat.py` (timer).
@@ -39,16 +40,18 @@ def _dades_de(dades: dict, ids: set[int]) -> dict:
     return {
         "comandes": comandes,
         "pistolejats": [p for p in dades.get("pistolejats") or [] if int(p["comanda"]) in docs],
+        "pistolejats_cancelats": [p for p in dades.get("pistolejats_cancelats") or []
+                                  if int(p["comanda"]) in docs],
         "estats": {k: v for k, v in (dades.get("estats") or {}).items() if int(k) in docs},
     }
 
 
 def progres_i_sincronitza(obj: dict) -> dict:
-    """Progres d'una agrupacio. Si no esta tancada a ma, en desa els fets."""
+    """Pistolejat d'una agrupacio. Si no esta tancada a ma, en desa el %."""
     dades = obtenir_dades_pistolejat(ids_carregues(obj), incloure_tancades=True)
     progres = calc.progres_agrupacio(obj.get("resultat") or {}, dades)
     if not obj.get("finalitzada_manual_at"):
-        agrupacions_store.sincronitza_preparats(obj["id"], progres["fets"], progres["percent"])
+        agrupacions_store.desa_pct_pistolejat(obj["id"], progres["percent"])
     return progres
 
 
@@ -78,7 +81,7 @@ def progres_amb_cache(obj: dict) -> dict:
 
 def sincronitza_totes(dies: int = 30) -> dict:
     """Una sola consulta a SAP per a totes les agrupacions vives i, despres,
-    la sincronitzacio de cadascuna. Retorna un resum per al log."""
+    el % pistolejat de cadascuna. Retorna un resum per al log."""
     objs = agrupacions_store.llistar_per_sincronitzar(dies)
     ids = sorted({i for o in objs for i in ids_carregues(o)})
     if not ids:
@@ -87,9 +90,7 @@ def sincronitza_totes(dies: int = 30) -> dict:
     canviades = 0
     for o in objs:
         progres = calc.progres_agrupacio(o["resultat"], _dades_de(dades, set(ids_carregues(o))))
-        canvis = agrupacions_store.sincronitza_preparats(o["id"], progres["fets"], progres["percent"])
-        if canvis and (canvis["afegits"] or canvis["trets"] or canvis["percent_canviat"]):
+        if agrupacions_store.desa_pct_pistolejat(o["id"], progres["percent"]):
             canviades += 1
-            log.info("pistolejat agrupacio=%s afegits=%s trets=%s percent=%s",
-                     o["id"], canvis["afegits"], canvis["trets"], progres["percent"])
+            log.info("pistolejat agrupacio=%s percent=%s", o["id"], progres["percent"])
     return {"agrupacions": len(objs), "canviades": canviades}

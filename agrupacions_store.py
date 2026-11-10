@@ -7,7 +7,9 @@ endpoints Flask no hagin de canviar:
   llistar() -> list[dict]
   obtenir(id_) -> dict | None
   eliminar(id_) -> bool
-  sincronitza_preparats(id_, fets) -> dict | None   (els fets venen del pistolejat de l'SGA)
+  marca_producte(id_, art_codi, preparat, ip=None) -> dict | None   (producció, a mà)
+  reset_preparats(id_, ip=None) -> dict | None
+  desa_pct_pistolejat(id_, percent) -> bool | None   (expedició, informatiu)
   llistar_per_sincronitzar(dies=30) -> list[dict]
   index_carregues_agrupades() -> dict[carrega_id, list[{id, nom, ts, finalitzada}]]
   llistar_plantilles() -> list[dict]
@@ -240,9 +242,8 @@ def llistar_control(origen: str | None = None) -> list[dict]:
         elif completa:
             estat = "acabada"
             prep_finalitzat = r["prep_ultim_ts"]
-        elif n_prep > 0 or (r["pct_pistolejat"] or 0) > 0:
-            # Amb alguna cosa pistolejada ja està en curs, encara que cap
-            # producte estigui acabat (igual que a la pàgina principal).
+        elif n_prep > 0:
+            # Només producció: el pistolejat és expedició i no compta aquí.
             estat = "en_curs"
             prep_finalitzat = None
         else:
@@ -297,7 +298,7 @@ def obtenir(id_: str) -> dict | None:
         return None
     detall_rows = db.fetch_all(
         """
-        SELECT p.art_codi, p.marcat_ts, p.marcat_per_id, up.nom AS marcat_per_nom
+        SELECT p.art_codi, p.marcat_ts, p.marcat_per_id, p.marcat_ip, up.nom AS marcat_per_nom
         FROM productes_preparats p
         LEFT JOIN usuaris up ON up.id = p.marcat_per_id
         WHERE p.agrupacio_id = %s
@@ -309,6 +310,8 @@ def obtenir(id_: str) -> dict | None:
             "ts": _format_ts(row["marcat_ts"]),
             "per_id": row["marcat_per_id"],
             "per_nom": row["marcat_per_nom"],
+            # 'SGA' = marcat per la sincronització del pistolejat (9-11-2026)
+            "sga": row["marcat_ip"] == "SGA",
         }
         for row in detall_rows
     }
@@ -346,28 +349,76 @@ def eliminar(id_: str) -> bool:
 # ---------------------------------------------------------------------------
 # Productes preparats (magatzem)
 # ---------------------------------------------------------------------------
-def sincronitza_preparats(id_: str, fets: set[str] | list[str],
-                          percent: int | None = None) -> dict | None:
-    """Deixa `productes_preparats` igual que `fets`: els productes que el
-    pistolejat de l'SGA dona per fets (vegeu `dades.pistolejat.progres_agrupacio`).
+def marca_producte(id_: str, art_codi: str, preparat: bool, ip: str | None = None,
+                   marcat_per_id: int | None = None) -> dict | None:
+    """Marca (o desmarca) un producte com a PRODUÏT. `productes_preparats` és
+    la producció de l'agrupació i es marca a mà: el pistolejat de l'SGA és
+    expedició i només es mostra (vegeu `desa_pct_pistolejat`)."""
+    try:
+        _valida_id(id_)
+    except ValueError:
+        return None
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            # Comprovem que l'agrupació existeix abans de tocar res
+            cur.execute("SELECT 1 FROM agrupacions WHERE id = %s", (id_,))
+            if not cur.fetchone():
+                return None
+            if preparat:
+                cur.execute(
+                    """
+                    INSERT INTO productes_preparats (agrupacio_id, art_codi, marcat_ip, marcat_per_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (agrupacio_id, art_codi) DO NOTHING
+                    """,
+                    (id_, art_codi, ip, marcat_per_id),
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM productes_preparats WHERE agrupacio_id = %s AND art_codi = %s",
+                    (id_, art_codi),
+                )
+            _bump_version(cur)
+    audit.log(
+        "producte_marcat" if preparat else "producte_desmarcat",
+        target=id_,
+        detall={"art_codi": art_codi},
+    )
+    return obtenir(id_)
 
-    Substitueix el checklist manual: afegeix els que falten (`marcat_ip='SGA'`,
-    sense usuari) i treu els que ja no estan fets (p. ex. un albara cancel·lat),
-    tambe les marques manuals antigues. Nomes toca la versio i l'auditoria si
-    hi ha canvis, perque es crida a cada refresc de la pantalla i des del timer.
-    `percent` es el % de kg pistolejats; es desa a `agrupacions.pct_pistolejat`
-    perque la pagina principal ensenyi l'avanc parcial.
-    Retorna {"afegits", "trets", "percent_canviat"} o None si l'agrupacio no existeix.
+
+def reset_preparats(id_: str, ip: str | None = None) -> dict | None:
+    try:
+        _valida_id(id_)
+    except ValueError:
+        return None
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM agrupacions WHERE id = %s", (id_,))
+            if not cur.fetchone():
+                return None
+            cur.execute("DELETE FROM productes_preparats WHERE agrupacio_id = %s", (id_,))
+            _bump_version(cur)
+    audit.log("preparats_reset", target=id_)
+    return obtenir(id_)
+
+
+def desa_pct_pistolejat(id_: str, percent: int | None) -> bool | None:
+    """Desa el % de kg pistolejats de l'agrupació (expedició, informatiu).
+
+    No toca `productes_preparats`: allò és la producció, que es marca a mà.
+    Només puja la versió si el % canvia (es crida a cada refresc i des del
+    timer). Una agrupació tancada a mà no es toca. Retorna si ha canviat, o
+    None si l'agrupació no existeix.
     """
     try:
         _valida_id(id_)
     except ValueError:
         return None
-    fets = set(fets)
+    if percent is None:
+        return False
     with db.get_conn() as conn:
         with conn.cursor() as cur:
-            # FOR UPDATE: si l'oficina la tanca a ma mentre consultavem SAP
-            # (pot trigar uns segons), aqui ho veiem i no la toquem.
             cur.execute("SELECT pct_pistolejat, finalitzada_manual_at FROM agrupacions "
                         "WHERE id = %s FOR UPDATE", (id_,))
             fila = cur.fetchone()
@@ -377,37 +428,11 @@ def sincronitza_preparats(id_: str, fets: set[str] | list[str],
                 pct_ara, tancada = fila
             else:
                 pct_ara, tancada = fila["pct_pistolejat"], fila["finalitzada_manual_at"]
-            if tancada is not None:
-                return {"afegits": [], "trets": [], "percent_canviat": False}
-            percent_canviat = percent is not None and pct_ara != int(percent)
-            if percent_canviat:
-                cur.execute("UPDATE agrupacions SET pct_pistolejat = %s WHERE id = %s",
-                            (int(percent), id_))
-            cur.execute("SELECT art_codi FROM productes_preparats WHERE agrupacio_id = %s", (id_,))
-            ara = {r[0] if isinstance(r, tuple) else r["art_codi"] for r in cur.fetchall()}
-            afegits = sorted(fets - ara)
-            trets = sorted(ara - fets)
-            for art in afegits:
-                cur.execute(
-                    """
-                    INSERT INTO productes_preparats (agrupacio_id, art_codi, marcat_ip, marcat_per_id)
-                    VALUES (%s, %s, 'SGA', NULL)
-                    ON CONFLICT (agrupacio_id, art_codi) DO NOTHING
-                    """,
-                    (id_, art),
-                )
-            if trets:
-                cur.execute(
-                    "DELETE FROM productes_preparats WHERE agrupacio_id = %s AND art_codi = ANY(%s)",
-                    (id_, trets),
-                )
-            if afegits or trets or percent_canviat:
-                _bump_version(cur)
-    if afegits:
-        audit.log("producte_fet_sga", target=id_, detall={"art_codis": afegits})
-    if trets:
-        audit.log("producte_desfet_sga", target=id_, detall={"art_codis": trets})
-    return {"afegits": afegits, "trets": trets, "percent_canviat": percent_canviat}
+            if tancada is not None or pct_ara == int(percent):
+                return False
+            cur.execute("UPDATE agrupacions SET pct_pistolejat = %s WHERE id = %s", (int(percent), id_))
+            _bump_version(cur)
+    return True
 
 
 def llistar_per_sincronitzar(dies: int = 30) -> list[dict]:

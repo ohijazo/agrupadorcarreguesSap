@@ -36,10 +36,11 @@
     <div class="container mag-toolbar-row">
         <label class="mag-toggle">
             <input type="checkbox" id="mag-ocultar-prep">
-            Amaga els fets
+            Amaga els produïts
         </label>
         <span class="mag-actualitzat" id="mag-actualitzat" aria-live="polite"></span>
         <div class="mag-toolbar-actions">
+            <button type="button" class="btn btn-ghost" id="mag-desfes" aria-label="Desmarca tots els productes produïts" hidden>↶ Desfés</button>
             <button type="button" class="btn btn-ghost" id="mag-imprimir" aria-label="Imprimir l'agrupació">🖨 Imprimir</button>
             <button type="button" class="btn btn-ghost" id="mag-refresca" aria-label="Refresca des del servidor">↻ Refresca</button>
         </div>
@@ -49,7 +50,7 @@
 <div class="print-only mag-print-header" id="mag-print-header"></div>
 
 <main class="container">
-    <p class="mag-pist-info">El que està fet surt del pistolejat de l'SGA: no cal marcar res.</p>
+    <p class="mag-pist-info">Toca ✓ quan un producte estigui produït. El pistolejat de l'SGA (expedició) surt a sota de cada producte.</p>
     <div id="mag-pist-error" class="mag-error" hidden></div>
     <ul id="mag-articles" class="mag-articles"></ul>
     <p id="mag-buit" class="mag-empty" hidden>L'agrupació no té productes.</p>
@@ -60,6 +61,7 @@
 
 <script src="{{ static_url('js/fmt.js') }}"></script>
 <script src="{{ static_url('js/palets.js') }}"></script>
+<script src="{{ static_url('js/dialogs.js') }}"></script>
 <script src="{{ static_url('js/magatzem.js') }}"></script>
 <script src="{{ static_url('js/user-menu.js') }}"></script>
 </body>

@@ -647,7 +647,7 @@ function actualitzarPeuPaginacio() {
 // Resol l'estat d'agrupació d'una càrrega: null o info de l'agrupació.
 // Tres estats possibles:
 //   - "activa"         → agrupada però cap producte preparat encara
-//   - "en_preparacio"  → l'SGA ja ha pistolejat alguna cosa (productes fets o % de kg > 0)
+//   - "en_preparacio"  → ja s'ha produït algun producte (el pistolejat és expedició i no compta)
 //   - "finalitzada"    → tots els productes preparats
 // (una càrrega només pot estar en una agrupació activa al mateix temps)
 function estatAgrupacio(c) {
@@ -655,8 +655,7 @@ function estatAgrupacio(c) {
     if (!ags.length) return null;
     const activa = ags.find(a => !a.finalitzada);
     if (activa) {
-        const tipus = (activa.n_preparats || 0) > 0 || (activa.pct_pistolejat || 0) > 0
-            ? "en_preparacio" : "activa";
+        const tipus = (activa.n_preparats || 0) > 0 ? "en_preparacio" : "activa";
         return { tipus, info: activa, totes: ags };
     }
     return { tipus: "finalitzada", info: ags[0], totes: ags };
@@ -672,18 +671,17 @@ function badgeAgrupacioHTML(estat) {
         cls = "badge-grouped badge-grouped--progress";
         const np = estat.info.n_preparats || 0;
         const nt = estat.info.n_productes || 0;
-        // % de kg pistolejats per l'SGA (preparacio_sga.py); null si encara no s'ha sincronitzat.
+        // Primer la producció (marcada a mà) i després el % pistolejat a l'SGA
+        // (expedició, informatiu; null si encara no s'ha llegit).
         const pct = estat.info.pct_pistolejat;
-        // Mateix llenguatge a totes les pantalles: primer el % pistolejat,
-        // després els productes fets.
-        const parts = [pct != null ? `${pct}%` : "", nt > 0 ? `${np}/${nt} fets` : ""].filter(Boolean);
-        txt = parts.length ? `◐ ${parts.join(" · ")}` : "◐ Preparant";
+        const parts = [nt > 0 ? `${np}/${nt} produïts` : "", pct ? `${pct}% pist.` : ""].filter(Boolean);
+        txt = parts.length ? `◐ ${parts.join(" · ")}` : "◐ Produint";
     } else {
         cls = "badge-grouped";
         txt = "Ja agrupada";
     }
     const tip = `Agrupació "${estat.info.nom}" · ${fmtData(estat.info.ts) || ""}` +
-        (estat.tipus === "en_preparacio" ? " · % de kg pistolejats · productes fets / total" : "") +
+        (estat.tipus === "en_preparacio" ? " · productes produïts / total · % de kg pistolejats (expedició)" : "") +
         " · Toca per obrir-la";
     return ` <button type="button" class="${cls}" title="${escapeHtml(tip)}" data-act="obrir-agrupacio" data-id="${escapeHtml(estat.info.id)}">${txt}</button>`;
 }
