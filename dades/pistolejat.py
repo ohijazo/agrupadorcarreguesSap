@@ -53,8 +53,9 @@ def _linia(l: dict, pist: dict | None) -> dict:
         estat = ESTAT_PENDENT
 
     # Sacs: els de la comanda (PackQty) escalats a la part oberta. Les linies
-    # sense sacs (granel, unitats soltes amb PackQty 0) no en tenen.
-    if sacs > 0 and kg > 0:
+    # sense sacs (granel, unitats soltes amb PackQty 0) no en tenen. Al granel
+    # (propietat 5 o unitat GRA) PackQty son kg: tampoc no son sacs.
+    if sacs > 0 and kg > 0 and not l.get("granel"):
         sacs_oberts = round(kg_oberts * sacs / kg, 2)
         sacs_pend = round(max(sacs_oberts - sacs_pist, 0.0), 2)
     else:
@@ -65,6 +66,7 @@ def _linia(l: dict, pist: dict | None) -> dict:
         "art_codi": l.get("art_codi") or "",
         "art_descrip": l.get("art_descrip") or "",
         "unitat": l.get("unitat") or "",
+        "granel": bool(l.get("granel")),
         "kg_oberts": round(kg_oberts, 3),
         "kg_pistolejats": round(kg_pist, 3),
         "kg_pendents": round(kg_pend, 3),
@@ -214,7 +216,7 @@ def _acumula(acc: dict, l: dict, lc: dict, cancelat: dict | None = None) -> None
     acc["kg_total"] += kg
     acc["kg_fets"] += kg_fets
     acc["kg_pistolejats"] += lc["kg_pistolejats"]
-    if sacs > 0 and kg > 0:
+    if sacs > 0 and kg > 0 and not l.get("granel"):
         acc["sacs_total"] += sacs
         acc["sacs_fets"] += sacs * kg_fets / kg
     else:

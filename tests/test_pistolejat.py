@@ -330,3 +330,20 @@ def test_preparacio_avisa_per_producte_i_per_carrega():
 def test_sense_lectures_cancel_lades_no_hi_ha_avis():
     p = calc.progres_agrupacio(_resultat(("33851", [87])), _dades([_linia(0)]))["productes"]["33851"]
     assert p["cancelat"] is None
+
+
+# --- Granel (propietat 5 "Es Granel" o unitat GRA): en kg, mai en sacs ------
+def test_granel_no_te_sacs():
+    # Cas real: comanda 26600263, 01921 ESPECIFICA VIENA, PackQty = 10000 (kg).
+    l = _linia(0, kg=10000, kg_oberts=10000, sacs=10000, art="01921", unitat="GRA")
+    l["granel"] = True
+    r = calc.construir([_carrega(87)], _dades([l]), nomes_pendents=False)
+    lc = r["carregues"][0]["comandes"][0]["linies"][0]
+    assert lc["granel"] is True and lc["sacs_pendents"] is None and lc["kg_pendents"] == 10000
+
+
+def test_granel_a_la_preparacio_no_suma_sacs():
+    l = _linia(0, kg=10000, kg_oberts=10000, sacs=10000, art="01921", unitat="KG")
+    l["granel"] = True   # propietat 5 encara que la unitat no sigui GRA
+    p = calc.progres_agrupacio(_resultat(("01921", [87])), _dades([l]))["productes"]["01921"]
+    assert p["sacs_total"] is None and p["kg_total"] == 10000

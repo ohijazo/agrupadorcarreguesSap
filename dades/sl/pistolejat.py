@@ -41,6 +41,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "art_codi": (l.get("ItemCode") or "").strip(),
                     "art_descrip": (l.get("ItemDescription") or "").strip(),
                     "unitat": (l.get("MeasureUnit") or "").strip(),
+                    "granel": False,   # es completa a sota amb la propietat 5
                     "sacs": float(l.get("PackageQuantity") or 0),
                     "kg": float(l.get("InventoryQuantity") or 0),
                     # Una linia tancada a ma (sense albara) conserva la
@@ -61,6 +62,18 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                 "cli_nom": (o.get("CardName") or "").strip(),
                 "linies": linies,
             }
+
+    # Granel: propietat 5 de l'article ("Es Granel", Properties5) o unitat
+    # GRA. Les linies de comanda no porten les propietats de l'article.
+    codis = sorted({l["art_codi"] for cm in comandes.values() for l in cm["linies"] if l["art_codi"]})
+    granel: set[str] = set()
+    for tros in od.trossos(codis):
+        for it in c.tot("Items", select="ItemCode,Properties5", filtre=od.qualsevol_de("ItemCode", tros)):
+            if it.get("Properties5") == "tYES":
+                granel.add((it.get("ItemCode") or "").strip())
+    for cm in comandes.values():
+        for l in cm["linies"]:
+            l["granel"] = l["art_codi"] in granel or l["unitat"] == "GRA"
 
     docs = sorted(comandes)
     sumes: dict[tuple[int, int], dict] = {}

@@ -51,7 +51,7 @@ function quantitat(l, camp) {
         const u = l.unitat && l.unitat !== "UNI" ? "sacs" : "u.";
         return `${fmtSacs.format(sacs)} ${u}`;
     }
-    return `${fmtKg.format(l[`kg_${camp}`])} kg`;
+    return `${fmtKg.format(l[`kg_${camp}`])} kg${l.granel ? " granel" : ""}`;
 }
 
 function pintaLinia(l) {
