@@ -39,10 +39,11 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                        l.LineNum, RTRIM(l.ItemCode) AS art_codi,
                        RTRIM(l.Dscription) AS art_descrip, RTRIM(l.unitMsr) AS unitat,
                        l.PackQty, l.InvQty,
-                       -- Granel: propietat 5 de l'article ("Es Granel") o
-                       -- unitat GRA. Es compta en kg, mai en sacs: amb
+                       -- Granel: unitat GRA/KG/KGS (a produccio el granel es
+                       -- 'KGS'), o propietat 5 ("Es Granel") si la unitat no
+                       -- es de sacs. Es compta en kg, mai en sacs: amb
                        -- SalPackUn 1, PackQty son els kg i semblarien sacs.
-                       CASE WHEN i.QryGroup5 = 'Y' OR RTRIM(l.unitMsr) = 'GRA'
+                       CASE WHEN (UPPER(RTRIM(ISNULL(l.unitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(l.unitMsr, ''))) NOT LIKE 'S[0-9]%'))
                             THEN 1 ELSE 0 END AS granel,
                        -- Una linia tancada a ma (sense albara) conserva
                        -- l'OpenInvQty: no queda res per preparar.

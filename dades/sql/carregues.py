@@ -163,6 +163,9 @@ def llistar_carregues(
         where_params.append(art_codi)
 
     # SUB-consultes derivades (num_comandes, palletitzable, is_granel, kg_total).
+    # Granel = unitat GRA/KG/KGS, o propietat 5 ("Es Granel") si la unitat no
+    # es de sacs: a produccio el granel te SalUnitMsr 'KGS', no 'GRA'. Mateix
+    # criteri que preparacioComandesVendaSAP/unitats_sap.py (el motor).
     exists_palletizable_sql = """
         EXISTS (
             SELECT 1
@@ -171,7 +174,8 @@ def llistar_carregues(
             JOIN   OITM i2 WITH (NOLOCK) ON i2.ItemCode = l2.ItemCode
             WHERE  o2.U_SEIOrdCargId = h.DocEntry
               AND  COALESCE(NULLIF(l2.PackQty, 0), l2.Quantity) > 0
-              AND  RTRIM(i2.SalUnitMsr) NOT IN ('UNI', 'GRA')
+              AND  RTRIM(i2.SalUnitMsr) <> 'UNI'
+              AND  NOT (UPPER(RTRIM(ISNULL(i2.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i2.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i2.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
         )
     """
     exists_granel_sql = """
@@ -181,7 +185,7 @@ def llistar_carregues(
             JOIN   RDR1 l3 WITH (NOLOCK) ON l3.DocEntry = o3.DocEntry
             JOIN   OITM i3 WITH (NOLOCK) ON i3.ItemCode = l3.ItemCode
             WHERE  o3.U_SEIOrdCargId = h.DocEntry
-              AND  RTRIM(i3.SalUnitMsr) = 'GRA'
+              AND  (UPPER(RTRIM(ISNULL(i3.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i3.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i3.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
               AND  l3.Quantity > 0
         )
     """
@@ -478,7 +482,8 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
                    RTRIM(l.Dscription) AS art_descrip,
                    COALESCE(NULLIF(l.PackQty, 0), l.Quantity) AS unitats,
                    l.Quantity AS quan,
-                   RTRIM(i.SalUnitMsr) AS tunitat
+                   CASE WHEN (UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
+                        THEN 'GRA' ELSE RTRIM(i.SalUnitMsr) END AS tunitat
             FROM   RDR1 l WITH (NOLOCK)
             LEFT   JOIN OITM i WITH (NOLOCK) ON i.ItemCode = l.ItemCode
             WHERE  l.DocEntry IN ({placeholders})

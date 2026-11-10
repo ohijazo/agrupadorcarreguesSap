@@ -10,6 +10,8 @@ oberta i les sumes es fan en Python.
 """
 from __future__ import annotations
 
+import re
+
 from sl_lectura import odata as od
 from sl_lectura.client import client
 
@@ -73,7 +75,10 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                 granel.add((it.get("ItemCode") or "").strip())
     for cm in comandes.values():
         for l in cm["linies"]:
-            l["granel"] = l["art_codi"] in granel or l["unitat"] == "GRA"
+            u = l["unitat"].upper()
+            # Mateix criteri que preparacioComandesVendaSAP/unitats_sap.py.
+            l["granel"] = u in ("GRA", "KG", "KGS") or (
+                l["art_codi"] in granel and not re.match(r"^S\d+$", u))
 
     docs = sorted(comandes)
     sumes: dict[tuple[int, int], dict] = {}

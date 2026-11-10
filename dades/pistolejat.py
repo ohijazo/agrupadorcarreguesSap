@@ -54,7 +54,7 @@ def _linia(l: dict, pist: dict | None) -> dict:
 
     # Sacs: els de la comanda (PackQty) escalats a la part oberta. Les linies
     # sense sacs (granel, unitats soltes amb PackQty 0) no en tenen. Al granel
-    # (propietat 5 o unitat GRA) PackQty son kg: tampoc no son sacs.
+    # (propietat 5 o unitat GRA/KG/KGS) PackQty son kg: tampoc no son sacs.
     if sacs > 0 and kg > 0 and not l.get("granel"):
         sacs_oberts = round(kg_oberts * sacs / kg, 2)
         sacs_pend = round(max(sacs_oberts - sacs_pist, 0.0), 2)
