@@ -417,9 +417,9 @@
         <span class="mockup-badge" style="background:#ebf4ff; color:#1e4e8c; border:1px solid #90b4e0;">◐ 35% pist.</span>
         quan l'SGA ha començat a pistolejar-la (el % són els kg de tota la càrrega ja pistolejats o amb albarà), i
         <span class="mockup-badge" style="background:#f0fff4; color:#22543d; border:1px solid #68d391;">✓ Pistolejada</span>
-        quan està tota. Es torna a llegir de SAP cada 30 segons. Al <strong>Calendari</strong> també surt a cada càrrega (<em>◐ 35%</em> o <em>✓</em>), i es refresca cada minut. Al costat, la pastilla lila diu el <strong>número d'albarà</strong>: <em>Alb. 7001</em> (ple) vol dir que totes les comandes
-        de la càrrega ja tenen albarà, i <em>Alb. 7001 · 1/3</em> (en contorn) que només en té una de tres. Si n'hi ha més de dos surt <em>+N</em>;
-        el detall complet (comanda → albarà) és al requadre en passar-hi el ratolí, i al detall de la càrrega cada comanda porta el seu número d'albarà. Per veure-ho article per article, ves a <strong>Preparació de comanda</strong>.
+        quan està tota. Es torna a llegir de SAP cada 30 segons. Al <strong>Calendari</strong> també surt a cada càrrega (<em>◐ 35%</em> o <em>✓</em>), i es refresca cada minut. Al costat, la pastilla lila <em>Albarà</em> (plena) vol dir que totes les comandes de la càrrega ja tenen albarà,
+        i <em>Albarà 1/3</em> (en contorn) que només en té una de tres. Si cliques la càrrega, al detall cada comanda amb albarà porta
+        el seu <strong>número d'albarà</strong> (per exemple <em>Albarà 26700182</em>). Per veure-ho article per article, ves a <strong>Preparació de comanda</strong>.
     </div>
 
     <h3>2.3 Seleccionar càrregues</h3>
@@ -456,11 +456,11 @@
         <div class="step-num">3</div>
         <div class="step-text">A la barra del fons, prem <strong>Agrupar selecció</strong>.</div>
         <div class="step-num">4</div>
-        <div class="step-text">S'obre el modal <strong>Resultat de l'agrupació</strong> amb el càlcul de palets.</div>
+        <div class="step-text">S'obre el modal <strong>Resultat de l'agrupació</strong> amb el càlcul de palets. L'agrupació <strong>ja queda desada</strong> (amb un nom automàtic, "Agrupació dd-mm-aaaa hh:mm") i el magatzem ja la veu: no cal prémer res més.</div>
     </div>
 
     <div class="help-tip">
-        <strong>💡 Plantilles recurrents:</strong> si una agrupació es repeteix sovint amb els mateixos transportistes, marca-la com a plantilla al desar. L'app et suggerirà aplicar-la automàticament a futures cerques (mira la secció 5).
+        <strong>💡 Plantilles recurrents:</strong> si una agrupació es repeteix sovint amb els mateixos transportistes, marca-la com a plantilla amb <strong>✎ Nom / plantilla</strong>. L'app et suggerirà aplicar-la automàticament a futures cerques (mira la secció 5).
     </div>
 
     <div class="help-warn">
@@ -493,7 +493,7 @@
     <ul>
         <li><strong>📋 Checklist preparació</strong> — visible només quan l'agrupació ja és desada. Obre la pantalla de magatzem amb l'estat del pistolejat de cada producte.</li>
         <li><strong>🖨 Imprimir</strong> — genera un full A4 amb el layout del magatzem (per portar a la pista).</li>
-        <li><strong>⭐ Desa</strong> — guarda l'agrupació amb un nom. Pots marcar-la com a plantilla recurrent.</li>
+        <li><strong>✎ Nom / plantilla</strong> — l'agrupació ja s'ha desat sola; aquí li pots canviar el nom o marcar-la com a plantilla recurrent. (Si per un error no s'ha pogut desar, el botó diu <strong>⭐ Desa</strong> i la desa a mà.)</li>
         <li><strong>Exportar CSV</strong> — fitxer descarregable per importar a Excel o un altre sistema.</li>
         <li><strong>×</strong> — tanca el modal. Si l'agrupació venia d'una desada, recuperes la cerca que tenies abans.</li>
     </ul>
@@ -502,12 +502,19 @@
     <h2 id="desar">5. Desar agrupacions i plantilles recurrents</h2>
 
     <h3>Desar una agrupació</h3>
-    <p>Al modal, clica <strong>⭐ Desa</strong>:</p>
+    <p>
+        Es desa <strong>sola</strong> en prémer <strong>Agrupar</strong>, al servidor (no només al teu navegador), amb el nom
+        "Agrupació" i la data i hora. Si vols un nom més clar o fer-ne una plantilla, al modal clica <strong>✎ Nom / plantilla</strong>:
+    </p>
     <ol>
         <li>Posa un nom curt i identificatiu (e.g. <code>Mascó dilluns matí</code>).</li>
         <li>Si l'agrupació es repetirà sovint, marca <strong>⭐ Plantilla recurrent</strong>.</li>
-        <li>Prem <strong>Desa</strong>. Es desa al servidor (no només al teu navegador).</li>
+        <li>Prem <strong>Desa</strong>.</li>
     </ol>
+    <p class="muted">
+        Com que queda desada, les seves càrregues ja surten com a <em>Ja agrupada</em>. Per tornar-les a agrupar d'una altra
+        manera, elimina primer l'agrupació (l'app t'ho proposa).
+    </p>
 
     <h3>Què són les plantilles recurrents?</h3>
     <p>

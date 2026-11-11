@@ -65,6 +65,7 @@ const state = {
     filtresAvancats: { estat: null, art_codi: null, art_descrip: "" },
     resultat: null,
     agrupacioActualId: null,    // id de l'agrupació desada que estem mirant (null si és nova)
+    agrupacioActual: null,      // {nom, plantilla} de l'agrupació desada, per canviar-los
     colorsCarrega: new Map(),  // carrega_id -> {color, bg}
     abortCerca: null,
     abortAgrupar: null,
@@ -1131,9 +1132,9 @@ function actualitzarBotoMagatzem() {
     if (desa) {
         desa.classList.toggle("btn-primary", !desada);
         desa.classList.toggle("btn-ghost", desada);
-        desa.textContent = desada ? "✓ Desada" : "⭐ Desa";
-        desa.title = desada ? "Ja està desada. Torna-la a desar amb un altre nom si cal."
-                            : "Desa-la perquè el magatzem la pugui preparar";
+        desa.textContent = desada ? "✎ Nom / plantilla" : "⭐ Desa";
+        desa.title = desada ? "Ja està desada. Canvia'n el nom o marca-la com a plantilla recurrent."
+                            : "No s'ha pogut desar sola: desa-la perquè el magatzem la pugui preparar";
     }
 }
 
@@ -1185,6 +1186,7 @@ async function agrupar() {
         state.resultat = resultat;
         state.productesPreparats = new Set();  // agrupació nova: cap producte preparat encara
         state.agrupacioActualId = null;   // resultat nou, encara no desat
+        state.agrupacioActual = null;
         state.modalDesAgrupacioDesada = false;
         state.backupAbansAgrupacio = null;
         renderResultat(resultat);
@@ -1193,8 +1195,14 @@ async function agrupar() {
         const palets = resultat.total_palets_fisics || 0;
         const resumPalets = (resultat.tipus_palets || []).slice(0, 3)
             .map(t => `${t.quantitat} ${t.tipus_palet_descrip}`).join(", ");
-        showToast("success", "Agrupació completada",
-            `${resultat.carregues.length} càrregues, ${resultat.productes.length} productes, ${palets} palets físics${resumPalets ? ` (${resumPalets})` : ""}.`);
+        const resum = `${resultat.carregues.length} càrregues, ${resultat.productes.length} productes, ${palets} palets físics${resumPalets ? ` (${resumPalets})` : ""}.`;
+        // Es desa sola: el magatzem la veu de seguida sense prémer "Desa".
+        const nom = await desarAutomatic(sel, resultat);
+        if (nom) {
+            showToast("success", "Agrupació feta i desada", `"${nom}": ${resum}`);
+        } else {
+            showToast("success", "Agrupació completada", resum);
+        }
     } catch (e) {
         if (e.name === "AbortError") {
             showToast("info", "Agrupació cancel·lada", "Has aturat el procés.");
@@ -1542,6 +1550,7 @@ function restaurarBackupSiCal() {
     state.backupAbansAgrupacio = null;
     state.modalDesAgrupacioDesada = false;
     state.agrupacioActualId = null;
+    state.agrupacioActual = null;
     state.resultat = null;
     actualitzarBotoMagatzem();
     const filtreInput = $("#filtre-taula");
@@ -2026,8 +2035,67 @@ function setupAutocompleteArticle() {
 // ============================================================
 // Agrupacions desades
 // ============================================================
+// En agrupar, l'agrupació es desa sola amb un nom automàtic. Retorna el nom,
+// o null si no s'ha pogut desar (aleshores el botó "Desa" ho deixa fer a mà).
+async function desarAutomatic(carregues, resultat) {
+    const nom = `Agrupació ${fmtDataHora(new Date())}`;
+    try {
+        const info = await fetchJson("/api/agrupacions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nom, carregues, resultat, plantilla: false }),
+        });
+        if (state.resultat !== resultat || !info?.id) return null;   // ja se n'ha fet una altra
+        state.agrupacioActualId = info.id;
+        state.agrupacioActual = { nom: info.nom || nom, plantilla: false };
+        actualitzarBotoMagatzem();
+        return state.agrupacioActual.nom;
+    } catch (e) {
+        showToast("warning", "No s'ha pogut desar", `${e.message}. Prem "Desa" per tornar-ho a provar.`);
+        return null;
+    }
+}
+
+// Ja desada: canvia el nom i la marca de plantilla.
+async function reanomenarAgrupacioActual() {
+    const actual = state.agrupacioActual || { nom: "", plantilla: false };
+    const resp = await window.mostrarInput({
+        titol: "Nom de l'agrupació",
+        etiqueta: "Nom de l'agrupació",
+        defecte: actual.nom,
+        placeholder: "Ex: Càrregues dilluns matí",
+        btnOk: "Desa",
+        checkbox: {
+            label: "⭐ Plantilla recurrent (l'app suggerirà aplicar-la quan trobi càrregues similars)",
+            checked: actual.plantilla,
+            tooltip: "Marca-ho si aquesta agrupació es repeteix sovint amb els mateixos transportistes",
+        },
+    });
+    if (resp === null) return;
+    const nom = (resp.valor || "").trim();
+    if (!nom) {
+        showToast("warning", "Cal un nom", "Posa un nom per identificar l'agrupació.");
+        return;
+    }
+    const plantilla = !!resp.marcat;
+    try {
+        const info = await fetchJson(`/api/agrupacions/${encodeURIComponent(state.agrupacioActualId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nom, plantilla }),
+        });
+        state.agrupacioActual = { nom: info.nom, plantilla: info.plantilla };
+        showToast("success", "Agrupació actualitzada",
+            plantilla ? `"${info.nom}" és una plantilla recurrent.` : `Ara es diu "${info.nom}".`);
+        if (plantilla !== actual.plantilla) await carregarPlantilles();
+    } catch (e) {
+        showToast("error", "Error desant", e.message);
+    }
+}
+
 async function desarAgrupacioActual() {
     if (!state.resultat) return;
+    if (state.agrupacioActualId) return reanomenarAgrupacioActual();
     const resp = await window.mostrarInput({
         titol: "Desa l'agrupació",
         etiqueta: "Nom de l'agrupació",
@@ -2055,6 +2123,7 @@ async function desarAgrupacioActual() {
             body: JSON.stringify({ nom, carregues, resultat: state.resultat, plantilla }),
         });
         state.agrupacioActualId = info?.id || null;
+        state.agrupacioActual = info?.id ? { nom: info.nom || nom, plantilla } : null;
         actualitzarBotoMagatzem();
         showToast("success", "Agrupació desada",
             plantilla ? `"${nom}" guardada com a plantilla recurrent.` : `"${nom}" guardada correctament.`);
@@ -2084,6 +2153,7 @@ async function carregarAgrupacioDesada(id) {
         state.resultat = obj.resultat;
         state.productesPreparats = new Set(obj.productes_preparats || []);
         state.agrupacioActualId = id;
+        state.agrupacioActual = { nom: obj.nom || "", plantilla: !!obj.plantilla };
         renderLlistaCarregues();
         renderResultat(state.resultat);
         actualitzarBotoMagatzem();

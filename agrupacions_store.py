@@ -331,6 +331,34 @@ def obtenir(id_: str) -> dict | None:
     }
 
 
+def reanomenar(id_: str, nom: str, plantilla: bool) -> dict | None:
+    """Canvia el nom i la marca de plantilla d'una agrupacio ja desada (les
+    agrupacions es desen soles en agrupar). None si no existeix."""
+    try:
+        _valida_id(id_)
+    except ValueError:
+        return None
+    nom = (nom or "").strip()[:80]
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT carregues FROM agrupacions WHERE id = %s", (id_,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            meta = _calcular_plantilla_meta(row["carregues"] or []) if plantilla else None
+            cur.execute(
+                """
+                UPDATE agrupacions
+                SET nom = %s, plantilla = %s, plantilla_meta = %s
+                WHERE id = %s
+                """,
+                (nom, plantilla, json.dumps(meta) if meta else None, id_),
+            )
+            _bump_version(cur)
+    audit.log("agrupacio_reanomenada", target=id_, detall={"nom": nom, "plantilla": plantilla})
+    return {"id": id_, "nom": nom, "plantilla": plantilla}
+
+
 def eliminar(id_: str) -> bool:
     try:
         _valida_id(id_)

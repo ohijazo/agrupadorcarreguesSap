@@ -97,6 +97,28 @@ def test_eliminar_agrupacio(client):
     assert r.status_code == 404
 
 
+def test_reanomenar_agrupacio_i_fer_plantilla(client):
+    id_ = client.post("/api/agrupacions", json={
+        "nom": "Agrupació auto", "carregues": [_carrega()], "resultat": _resultat(),
+    }).get_json()["id"]
+    r = client.patch(f"/api/agrupacions/{id_}", json={"nom": "Mascó dilluns", "plantilla": True})
+    assert r.status_code == 200
+    assert r.get_json() == {"id": id_, "nom": "Mascó dilluns", "plantilla": True}
+    d = client.get(f"/api/agrupacions/{id_}").get_json()
+    assert d["nom"] == "Mascó dilluns" and d["plantilla"] is True
+    assert any(p["id"] == id_ for p in client.get("/api/plantilles").get_json())
+
+
+def test_reanomenar_sense_nom_es_400(client):
+    r = client.patch("/api/agrupacions/" + "a" * 32, json={"nom": " "})
+    assert r.status_code == 400
+
+
+def test_reanomenar_inexistent_es_404(client):
+    r = client.patch("/api/agrupacions/" + "a" * 32, json={"nom": "X"})
+    assert r.status_code == 404
+
+
 def test_eliminar_inexistent(client):
     r = client.delete("/api/agrupacions/" + "b" * 32)
     assert r.status_code == 404

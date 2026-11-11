@@ -1264,6 +1264,29 @@ def api_agrupacions_eliminar(id_):
     return jsonify({"error": "Agrupació no trobada."}), 404
 
 
+@app.route("/api/agrupacions/<id_>", methods=["PATCH"])
+@auth.requires_rol("admin", "oficina")
+def api_agrupacions_reanomenar(id_):
+    """Nom i plantilla d'una agrupacio ja desada: en agrupar es desa sola amb
+    un nom automatic i aqui es pot canviar."""
+    body = request.get_json(silent=True) or {}
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        return _err_validacio("'nom' és obligatori.")
+    if len(nom) > 80:
+        return _err_validacio("'nom' té un format invàlid (màx 80 caràcters).")
+    try:
+        info = agrupacions_store.reanomenar(id_, nom, bool(body.get("plantilla")))
+    except Exception:
+        log.exception("agrupacions reanomenar")
+        return _err_genèric()
+    if info is None:
+        return jsonify({"error": "Agrupació no trobada."}), 404
+    log.info("audit reanomenar agrupacio=%s nom=%s plantilla=%s ip=%s",
+             id_, info["nom"], info["plantilla"], request.remote_addr)
+    return jsonify(info)
+
+
 @app.route("/api/agrupacions/version")
 def api_agrupacions_version():
     """Versió actual de l'índex d'agrupacions (per a polling lleuger des
