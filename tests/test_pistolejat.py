@@ -433,7 +433,7 @@ def test_progres_per_carrega_comandes_amb_albara():
     }
     r = calc.progres_per_carrega(dades)
     assert r[87]["n_comandes"] == 3
-    assert r[87]["comandes_albara"] == [502]
+    assert r[87]["comandes_albara"] == [{"comanda": 502, "albarans": [7001]}]
 
 
 def test_progres_per_carrega_no_arrodoneix_a_100_si_falta():
@@ -496,7 +496,7 @@ def test_sense_lots_llegits_la_linia_no_en_porta():
 # --- Calendari (public) ----------------------------------------------------
 def _progres_87(ids):
     return {87: {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250,
-                 "n_comandes": 3, "comandes_albara": [502]}}
+                 "n_comandes": 3, "comandes_albara": [{"comanda": 502, "albarans": [7001]}]}}
 
 
 def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
@@ -506,7 +506,7 @@ def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
     r = c.get("/api/carregues/pistolejat?ids=87")      # sense sessio
     assert r.status_code == 200
     assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25,
-                                                 "n_comandes": 3, "comandes_albara": [502]}}}
+                                                 "n_comandes": 3, "comandes_albara": [{"comanda": 502, "albarans": [7001]}]}}}
 
 
 def test_calendari_pistolejat_comparteix_cache(client, monkeypatch):

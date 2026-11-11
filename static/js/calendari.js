@@ -377,7 +377,7 @@
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
             `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
-            ` · <span class="cal-evt-alb">Albarà 1/3</span> comandes amb albarà</span>`;
+            ` · <span class="cal-evt-alb">Alb. 7001 · 1/3</span> albarà (comandes amb albarà / total)</span>`;
     }
 
     function renderStats() {
@@ -629,16 +629,26 @@
         el.setAttribute("aria-label", complet ? "Pistolejada" : `Pistolejat ${p.percent}%`);
     }
 
-    // Albarans de la càrrega (se'n fa un per comanda): {n, total, docnums} o
-    // null si cap comanda en té. Ve amb el pistolejat.
+    // Albarans de la càrrega (se'n fa un per comanda): {n, total, perComanda,
+    // albarans} o null si cap comanda en té. `perComanda`: DocNum de la
+    // comanda -> DocNum dels seus albarans. Ve amb el pistolejat.
     function albaransDe(c) {
         const p = state.pistolejat.get(String(c.car_numero || ""));
-        const docnums = (p && p.comandes_albara) || [];
-        if (!docnums.length) return null;
-        return { n: docnums.length, total: p.n_comandes || docnums.length, docnums };
+        const llista = (p && p.comandes_albara) || [];
+        if (!llista.length) return null;
+        const perComanda = new Map(llista.map(x => [String(x.comanda), x.albarans || []]));
+        const albarans = [...new Set(llista.flatMap(x => x.albarans || []))].sort((a, b) => a - b);
+        return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans };
     }
 
-    // Pastilla "Albarà" (totes les comandes en tenen) o "Albarà 1/3".
+    // "7001", "7001, 7002" o "7001, 7002 +3": a la cel·la no hi cap més.
+    function textAlbarans(albarans, max = 2) {
+        const resta = albarans.length - max;
+        return albarans.slice(0, max).join(", ") + (resta > 0 ? ` +${resta}` : "");
+    }
+
+    // Pastilla amb el número d'albarà: "Alb. 7001" (totes les comandes en
+    // tenen, ple) o "Alb. 7001 · 1/3" (només algunes, en contorn).
     function posaPastillaAlbara(li, c) {
         const a = albaransDe(c);
         let el = li.querySelector(".cal-evt-alb");
@@ -651,10 +661,9 @@
         }
         const totes = a.n >= a.total;
         el.classList.toggle("is-totes", totes);
-        el.textContent = totes ? "Albarà" : `Albarà ${a.n}/${a.total}`;
-        el.setAttribute("aria-label", totes
-            ? "Totes les comandes tenen albarà"
-            : `${a.n} de ${a.total} comandes tenen albarà`);
+        el.textContent = `Alb. ${textAlbarans(a.albarans)}` + (totes ? "" : ` · ${a.n}/${a.total}`);
+        el.setAttribute("aria-label", `Albarà ${a.albarans.join(", ")}: `
+            + (totes ? "totes les comandes en tenen" : `${a.n} de ${a.total} comandes en tenen`));
     }
 
     function pintaPistolejat() {
@@ -736,7 +745,8 @@
             (() => {
                 const a = albaransDe(c);
                 if (!a) return "";
-                return `<div class="cal-tt-row"><span class="muted">Albarà:</span> <strong>${a.n} de ${a.total} comandes</strong> (${escapeHtml(a.docnums.join(", "))})</div>`;
+                const detall = [...a.perComanda].map(([com, albs]) => `comanda ${com} → ${albs.join(", ")}`).join(" · ");
+                return `<div class="cal-tt-row"><span class="muted">Albarà:</span> <strong>${a.n} de ${a.total} comandes</strong> (${escapeHtml(detall)})</div>`;
             })(),
             `<div class="cal-tt-hint muted">Clica per veure el detall complet</div>`,
         ].filter(Boolean).join("");
@@ -940,18 +950,18 @@
         const body = $("#cal-modal-body");
         if (!c || !body) return;
         const a = albaransDe(c);
-        const amb = new Set(a ? a.docnums.map(String) : []);
         body.querySelectorAll(".comanda-block[data-comanda]").forEach(b => {
             const docnum = String(b.dataset.comanda).split("/").pop();
+            const albs = a ? a.perComanda.get(docnum) : null;
             let el = b.querySelector(".cal-evt-alb");
-            if (!amb.has(docnum)) { if (el) el.remove(); return; }
+            if (!albs || !albs.length) { if (el) el.remove(); return; }
             if (!el) {
                 el = document.createElement("span");
                 el.className = "cal-evt-alb is-totes";
-                el.textContent = "Albarà";
                 el.title = "Aquesta comanda ja té albarà";
                 b.querySelector("h4 > span")?.appendChild(el);
             }
+            el.textContent = `Albarà ${albs.join(", ")}`;
         });
     }
 

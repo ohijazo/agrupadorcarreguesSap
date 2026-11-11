@@ -295,9 +295,10 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
     `dades`: `obtenir_dades_pistolejat(ids, incloure_tancades=True)`. Les
     linies amb albara compten com a fetes, aixi que el % es sobre tota la
     carrega. Retorna {docentry_carrega: {estat, percent, kg_total, kg_fets,
-    n_comandes, comandes_albara}} (`comandes_albara`: DocNum de les comandes
-    amb albara no cancel·lat); les carregues sense cap linia no hi surten. El % no arriba a 100 mentre
-    falti algun kg (l'arrodoniment no ho ha d'amagar).
+    n_comandes, comandes_albara}} (`comandes_albara`: [{comanda, albarans}]
+    amb el DocNum de cada comanda amb albara no cancel·lat i els DocNum dels
+    seus albarans); les carregues sense cap linia no hi surten. El % no
+    arriba a 100 mentre falti algun kg (l'arrodoniment no ho ha d'amagar).
     """
     pist = _suma_pistolejats(dades)
     albarans = _albarans_per_comanda(dades)
@@ -317,8 +318,10 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
         out[car] = {"estat": t["estat"], "percent": percent,
                     "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
                     "n_comandes": len(cms),
-                    "comandes_albara": sorted(int(c.get("docnum") or 0) for c in cms
-                                              if albarans.get(int(c["docentry"])))}
+                    "comandes_albara": sorted(
+                        ({"comanda": int(c.get("docnum") or 0), "albarans": albarans[int(c["docentry"])]}
+                         for c in cms if albarans.get(int(c["docentry"]))),
+                        key=lambda x: x["comanda"])}
     return out
 
 
