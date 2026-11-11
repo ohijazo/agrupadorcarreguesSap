@@ -706,17 +706,15 @@ def _cache_desa(cache: dict, clau, valor) -> None:
 MAX_CARREGUES_PISTOLEJAT = 300
 
 
-@app.route("/api/pistolejat/carregues")
-@auth.requires_rol("admin", "oficina", "magatzem")
-def api_pistolejat_carregues():
-    """% pistolejat de cada carrega (?ids=DocEntry,...), agrupada o no, per a
-    la pagina principal: {docentry: {estat, percent, kg_total, kg_fets}}. Les
-    carregues sense comandes no hi surten."""
+def _pistolejat_carregues():
+    """{docentry: {estat, percent, kg_total, kg_fets}} de les carregues de
+    `?ids=`, o una resposta d'error. Comu a la pagina principal i al
+    calendari; la cache de 8 s es compartida."""
     ids = _ids_url("ids")
     if ids is None or len(ids) > MAX_CARREGUES_PISTOLEJAT:
-        return _err_validacio(f"Cal una llista de fins a {MAX_CARREGUES_PISTOLEJAT} càrregues.")
+        return None, _err_validacio(f"Cal una llista de fins a {MAX_CARREGUES_PISTOLEJAT} càrregues.")
     if not ids:
-        return jsonify({"carregues": {}})
+        return {}, None
     clau = tuple(sorted(ids))
     r = _cache_llegeix(_cache_pist_carregues, clau)
     if r is None:
@@ -724,12 +722,37 @@ def api_pistolejat_carregues():
             r = {str(k): v for k, v in progres_carregues(list(clau)).items()}
         except backend_dades.ERRORS_DADES:
             log.exception("DB error al pistolejat de les carregues")
-            return _err_db()
+            return None, _err_db()
         except Exception:
             log.exception("pistolejat de les carregues")
-            return _err_genèric()
+            return None, _err_genèric()
         _cache_desa(_cache_pist_carregues, clau, r)
-    return jsonify({"carregues": r})
+    return r, None
+
+
+@app.route("/api/pistolejat/carregues")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_pistolejat_carregues():
+    """% pistolejat de cada carrega (?ids=DocEntry,...), agrupada o no, per a
+    la pagina principal: {docentry: {estat, percent, kg_total, kg_fets}}. Les
+    carregues sense comandes no hi surten."""
+    r, err = _pistolejat_carregues()
+    return err or jsonify({"carregues": r})
+
+
+@app.route("/api/carregues/pistolejat")
+def api_carregues_pistolejat():
+    """El mateix per al calendari, que es public (l'app germana l'incrusta
+    sense sessio): penja del prefix public /api/carregues i nomes dona
+    {estat, percent}. Va a SAP: limit de crides per IP."""
+    ip = request.remote_addr or "?"
+    if not _rate_limit(f"pist_cal:{ip}", max_req=30, window_sec=60):
+        return jsonify({"error": "Massa peticions. Torna-ho a provar d'aquí a un minut."}), 429
+    r, err = _pistolejat_carregues()
+    if err:
+        return err
+    return jsonify({"carregues": {k: {"estat": v["estat"], "percent": v["percent"]}
+                                  for k, v in r.items()}})
 
 
 def _afegeix_agrupacio(carregues: list[dict]) -> None:

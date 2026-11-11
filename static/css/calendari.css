@@ -634,6 +634,34 @@
     opacity: .85;
 }
 
+/* Pistolejat a l'SGA: blau mentre va, verd quan està tot (com a la pàgina
+   principal). Fons propi perquè es llegeixi sobre qualsevol color d'event. */
+.cal-evt-pist {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 .3rem;
+    height: 1rem;
+    font-size: .62rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+    color: #1e4e8c;
+    background: #ebf4ff;
+    border: 1px solid #90b4e0;
+    border-radius: 3px;
+}
+.cal-evt-pist.is-complet { color: #22543d; background: #f0fff4; border-color: #68d391; }
+.cal-legend-pist {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    margin-left: auto;
+    font-size: .75rem;
+    color: var(--gray-600, #4a5568);
+}
+
 .cal-evt.is-no-palletitzable {
     background: var(--gray-100);
     color: var(--gray-700);
@@ -996,6 +1024,7 @@
     .cal-evt { padding: .2rem .35rem; font-size: .72rem; border-left-width: 2px; }
     .cal-evt-kg { display: none; }
     .cal-evt-tag { font-size: .46rem; height: .85rem; padding: 0 .18rem; }
+    .cal-evt-pist { font-size: .5rem; height: .85rem; padding: 0 .18rem; }
     .cal-evt:hover { transform: none; }
     .cal-grid-head > div { font-size: .7rem; padding: .4rem .15rem; }
     .cal-d-long { display: none; }

@@ -202,6 +202,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies; capçaleres sense derivats (`llistar_carregues(derivats=False)`); cache de 8 s per (dates, tots); temps per part al log (`pendents: … ms`); cada línia porta `lots` (`obtenir_dades_pistolejat(amb_lots=True)`: `@SEIOPIC.U_MdAbsEntry` → `OBTN.DistNumber`, sense els d'albarans cancel·lats) |
 | `GET` | `/api/pistolejat/carregues?ids=…` | tots auth | % pistolejat de cada càrrega sencera (màx. 300; `dades.pistolejat.progres_per_carrega`); la pàgina principal el llegeix cada 30 s; cache de 8 s |
+| `GET` | `/api/carregues/pistolejat?ids=…` | **pública** (prefix `/api/carregues`) | el mateix per al calendari (incrustat a l'app germana sense sessió), només `{estat, percent}`; 30/min per IP; comparteix la cache |
 | `GET` | `/api/agrupacions/<id>/pistolejat` | tots auth | progrés de la preparació segons el pistolejat de l'SGA; desa els fets a `productes_preparats` |
 | `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
 | `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |

@@ -460,3 +460,40 @@ def test_lots_per_linia_primer_els_d_albara():
 def test_sense_lots_llegits_la_linia_no_en_porta():
     r = calc.construir([_carrega(87)], _dades([_linia(0)]))
     assert "lots" not in r["carregues"][0]["comandes"][0]["linies"][0]
+
+
+# --- Calendari (public) ----------------------------------------------------
+def _progres_87(ids):
+    return {87: {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250}}
+
+
+def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
+    c, app_module = client
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
+    r = c.get("/api/carregues/pistolejat?ids=87")      # sense sessio
+    assert r.status_code == 200
+    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25}}}
+
+
+def test_calendari_pistolejat_comparteix_cache(client, monkeypatch):
+    c, app_module = client
+    crides = []
+    monkeypatch.setattr(app_module, "progres_carregues", lambda ids: crides.append(ids) or _progres_87(ids))
+    c.get("/api/pistolejat/carregues?ids=87")
+    c.get("/api/carregues/pistolejat?ids=87")
+    assert len(crides) == 1
+
+
+@pytest.mark.parametrize("qs", ["ids=abc", "ids=" + ",".join(str(i) for i in range(1, 302))])
+def test_calendari_pistolejat_valida(client, monkeypatch, qs):
+    c, app_module = client
+    monkeypatch.setattr(app_module, "progres_carregues", lambda ids: pytest.fail("no s'havia de consultar SAP"))
+    assert c.get(f"/api/carregues/pistolejat?{qs}").status_code == 400
+
+
+def test_calendari_pistolejat_limit_de_crides(client, monkeypatch):
+    c, app_module = client
+    monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
+    codis = [c.get("/api/carregues/pistolejat?ids=87").status_code for _ in range(31)]
+    assert codis[:30] == [200] * 30 and codis[30] == 429

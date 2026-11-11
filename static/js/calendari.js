@@ -148,7 +148,15 @@
         abortCtrl: null,
         modalAbort: null,
         scrollPendent: true,   // primer render: scrolla a la setmana actual
+        // % pistolejat a l'SGA per DocEntry: {estat, percent}. Ve a part de la
+        // llista (/api/carregues/pistolejat) perquè va a SAP i es refresca
+        // més sovint.
+        pistolejat: new Map(),
+        pistolejatAbort: null,
     };
+
+    const PISTOLEJAT_MAX_IDS = 300;          // el límit del servidor
+    const PISTOLEJAT_REFRESH_MS = 60 * 1000;
 
     // ---------------------------------------------------------------
     // Fetch llista de càrregues
@@ -174,6 +182,7 @@
             renderGrid();
             renderCapSetmana();
             renderStats();
+            refrescaPistolejat();
         } catch (e) {
             if (e.name === "AbortError") return;
             console.error(e);
@@ -363,7 +372,9 @@
         const clear = state.filtreTra
             ? `<button type="button" class="cal-legend-clear" id="cal-legend-clear">✕ Treu filtre</button>`
             : "";
-        el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}`;
+        el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
+            `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
+            `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada</span>`;
     }
 
     function renderStats() {
@@ -554,6 +565,73 @@
         }
     }
 
+    // ---------------------------------------------------------------
+    // Pistolejat a l'SGA de cada càrrega (expedició, informatiu)
+    // ---------------------------------------------------------------
+    function totesLesCarregues() {
+        const out = [];
+        for (const llista of state.carreguesPerDiaTotes.values()) out.push(...llista);
+        for (const x of state.capSetmanaTotes) out.push(x.c);   // DS/DG: {data, c}
+        return out;
+    }
+
+    async function refrescaPistolejat() {
+        if (document.hidden) return;
+        const ids = [...new Set(totesLesCarregues()
+            .map(c => String(c.car_numero || ""))
+            .filter(id => /^\d+$/.test(id)))];
+        if (!ids.length) return;
+        if (state.pistolejatAbort) state.pistolejatAbort.abort();
+        const ctrl = new AbortController();
+        state.pistolejatAbort = ctrl;
+        try {
+            const nou = new Map();
+            for (let i = 0; i < ids.length; i += PISTOLEJAT_MAX_IDS) {
+                const tros = ids.slice(i, i + PISTOLEJAT_MAX_IDS).join(",");
+                const resp = await fetch(`/api/carregues/pistolejat?ids=${tros}`,
+                    { signal: ctrl.signal, credentials: "same-origin" });
+                if (!resp.ok) return;   // informatiu: el calendari funciona igual
+                const data = await resp.json();
+                for (const [k, v] of Object.entries(data.carregues || {})) nou.set(k, v);
+            }
+            state.pistolejat = nou;
+            pintaPistolejat();
+        } catch (e) {
+            if (e.name !== "AbortError") console.warn("pistolejat:", e);
+        } finally {
+            if (state.pistolejatAbort === ctrl) state.pistolejatAbort = null;
+        }
+    }
+
+    function pistolejatDe(c) {
+        const p = state.pistolejat.get(String(c.car_numero || ""));
+        return p && (p.estat === "parcial" || p.estat === "complet") ? p : null;
+    }
+
+    // Pastilla "◐ 35%" / "✓" a l'element d'una càrrega (la crea, l'actualitza
+    // o la treu). No redibuixa la graella.
+    function posaPastillaPistolejat(li, c) {
+        const p = pistolejatDe(c);
+        let el = li.querySelector(".cal-evt-pist");
+        if (!p) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement("span");
+            el.className = "cal-evt-pist";
+            const kg = li.querySelector(".cal-evt-kg");
+            li.insertBefore(el, kg || null);
+        }
+        const complet = p.estat === "complet";
+        el.classList.toggle("is-complet", complet);
+        el.textContent = complet ? "✓" : `◐ ${p.percent}%`;
+        el.setAttribute("aria-label", complet ? "Pistolejada" : `Pistolejat ${p.percent}%`);
+    }
+
+    function pintaPistolejat() {
+        document.querySelectorAll("li.cal-evt").forEach(li => {
+            if (li._cal) posaPastillaPistolejat(li, li._cal);
+        });
+    }
+
     function renderEvent(c, isoData) {
         const li = document.createElement("li");
         li.className = "cal-evt";
@@ -590,6 +668,7 @@
             sKg.textContent = `${fmtKg0.format(kg)} kg`;
             li.appendChild(sKg);
         }
+        posaPastillaPistolejat(li, c);
         return li;
     }
 
@@ -611,6 +690,13 @@
             transp ? `<div class="cal-tt-row"><span class="muted">Transportista:</span> ${escapeHtml(transp)}</div>` : "",
             matricula ? `<div class="cal-tt-row"><span class="muted">Matrícula:</span> ${escapeHtml(matricula)}</div>` : "",
             kg > 0 ? `<div class="cal-tt-row"><span class="muted">Pes:</span> <strong>${escapeHtml(fmtKg2.format(kg))} kg</strong></div>` : "",
+            (() => {
+                const p = pistolejatDe(c);
+                if (!p) return "";
+                return p.estat === "complet"
+                    ? `<div class="cal-tt-row"><span class="muted">SGA:</span> <strong>pistolejada del tot</strong></div>`
+                    : `<div class="cal-tt-row"><span class="muted">SGA:</span> <strong>${p.percent}% pistolejat</strong></div>`;
+            })(),
             `<div class="cal-tt-hint muted">Clica per veure el detall complet</div>`,
         ].filter(Boolean).join("");
         return rows;
@@ -1041,6 +1127,12 @@
             if (dlg.hasAttribute("open")) return;
             carregaMes();
         }, REFRESH_MS);
+        // El pistolejat canvia mentre l'SGA carrega: es llegeix més sovint
+        // que la llista (que es refresca cada 10 min).
+        setInterval(() => {
+            if (document.hidden || dlg.hasAttribute("open")) return;
+            refrescaPistolejat();
+        }, PISTOLEJAT_REFRESH_MS);
         // En tornar a la pestanya després d'estar a un altre tab, refresca un
         // cop perquè els kg/càrregues del dia reflecteixin canvis recents.
         document.addEventListener("visibilitychange", () => {
