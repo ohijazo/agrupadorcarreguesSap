@@ -20,7 +20,18 @@
     min-height: 44px; padding: 0 .6rem; font: inherit; font-weight: 600;
     border: 1px solid #cbd5e0; border-radius: 8px; background: #fff; text-transform: uppercase;
 }
+.etq-carrega input[type=number] {
+    min-height: 44px; padding: 0 .4rem; font: inherit; font-weight: 600;
+    border: 1px solid #cbd5e0; border-radius: 8px; background: #fff;
+}
 .etq-carrega input.etq-num { width: 5rem; text-align: center; }
+/* Sacs de cada palet del client, sota la seva fila. */
+.etq-clients tr.etq-fila-palets td { padding-top: 0; }
+.etq-palets { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .75rem; }
+.etq-palet { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; font-weight: 600; color: #4a5568; }
+.etq-palet input[type=number] { width: 4.5rem; text-align: center; }
+.etq-total-sacs { font-size: .9rem; font-weight: 600; color: #2d3748; }
+.etq-avis-sacs { color: #b7791f; font-weight: 600; }
 .etq-carrega input[type=checkbox] { width: 26px; height: 26px; }
 .etq-clients { width: 100%; border-collapse: collapse; }
 .etq-clients th { text-align: left; font-size: .85rem; color: #4a5568; padding: .35rem .5rem; border-bottom: 1px solid #e2e8f0; }

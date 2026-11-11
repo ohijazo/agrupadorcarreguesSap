@@ -417,7 +417,8 @@
         <span class="mockup-badge" style="background:#ebf4ff; color:#1e4e8c; border:1px solid #90b4e0;">◐ 35% pist.</span>
         quan l'SGA ha començat a pistolejar-la (el % són els kg de tota la càrrega ja pistolejats o amb albarà), i
         <span class="mockup-badge" style="background:#f0fff4; color:#22543d; border:1px solid #68d391;">✓ Pistolejada</span>
-        quan està tota. Es torna a llegir de SAP cada 30 segons. Al <strong>Calendari</strong> també surt a cada càrrega (<em>◐ 35%</em> o <em>✓</em>), i es refresca cada minut. Per veure-ho article per article, ves a <strong>Preparació de comanda</strong>.
+        quan està tota. Es torna a llegir de SAP cada 30 segons. Al <strong>Calendari</strong> també surt a cada càrrega (<em>◐ 35%</em> o <em>✓</em>), i es refresca cada minut. Al costat, <em>Albarà</em> vol dir que totes les comandes de la càrrega ja tenen albarà,
+        i <em>Albarà 1/3</em> que només en té una de tres; al detall de la càrrega, cada comanda amb albarà porta la mateixa marca. Per veure-ho article per article, ves a <strong>Preparació de comanda</strong>.
     </div>
 
     <h3>2.3 Seleccionar càrregues</h3>
@@ -553,6 +554,7 @@
         <strong>Preparació de comanda</strong> és una altra cosa: hi surten <em>totes</em> les càrregues que surten avui, demà o aquesta setmana,
         estiguin agrupades o no, amb el que queda per pistolejar de cada comanda. Cada càrrega porta l'etiqueta de la seva agrupació
         (toca-la per anar a la preparació) o <strong>Sense agrupar</strong>.
+        Es fa <strong>un sol albarà per comanda</strong>: quan una comanda ja té albarà, deixa de sortir-hi encara que li quedin línies obertes.
         Sota cada article surten els <strong>lots</strong> que l'SGA hi ha pistolejat, amb els sacs de cada lot:
         en <span style="color:#744210;">taronja</span> els que encara no tenen albarà i en <span style="color:#22543d;">verd</span> els que ja hi són.
     </p>
@@ -577,7 +579,10 @@
         S'obre una pantalla amb un client per fila. El <strong>destí</strong> es proposa amb la població d'entrega de la comanda
         i el <strong>Nº client</strong> amb la posició del client dins la càrrega: es poden canviar, i si deixes el Nº client en blanc
         no s'imprimeix. El <strong>transport</strong> es pot escurçar (per exemple "ESCAPA"). Desmarca un client per no treure'n etiquetes.
-        Els palets i els sacs són els que calcula l'app, els mateixos que a l'agrupació.
+        El nombre de <strong>palets</strong> i els <strong>sacs</strong> de cada palet surten calculats (els mateixos que a l'agrupació),
+        però es poden canviar: si la comanda dona 3 palets i se'n fan 4, posa-hi 4 i sortiran 4 etiquetes ("Palet 1 de 4"…).
+        Els palets nous copien els sacs de l'últim; retoca'ls a sota del client. Si el total no quadra amb el calculat, ho avisa
+        (però deixa imprimir), i <strong>Restaura</strong> torna al càlcul. Els canvis no es desen.
     </p>
 
     <!-- 7. Magatzem -->

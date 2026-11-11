@@ -28,7 +28,8 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     de lot a `BatchNumberDetails`."""
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
-        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {}}
+        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {},
+                "albarans": []}
 
     c = client()
     comandes: dict[int, dict] = {}
@@ -144,15 +145,26 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         for (com, lin), v in sorted(sumes.items())
     ]
 
-    # Dels albarans que tenen lectures, nomes els cancel·lats (CANCELED = 'Y').
+    # Els albarans que tenen lectures: els cancel·lats (CANCELED = 'Y') van a
+    # l'avis; els vius (CANCELED = 'N') diuen quines comandes ja tenen albara.
+    # Un document de cancel·lacio (csCancellation) no te lectures.
     cancelats_docnum: dict[int, int] = {}
+    vius_docnum: dict[int, int] = {}
     for tros in od.trossos(sorted({alb for (_, _, alb) in amb_albara})):
         for d in c.tot(
             "DeliveryNotes",
-            select="DocEntry,DocNum",
-            filtre=od.i(od.qualsevol_num("DocEntry", tros), "CancelStatus eq 'csYes'"),
+            select="DocEntry,DocNum,CancelStatus",
+            filtre=od.qualsevol_num("DocEntry", tros),
         ):
-            cancelats_docnum[int(d["DocEntry"])] = int(d["DocNum"])
+            estat = d.get("CancelStatus")
+            if estat == "csYes":
+                cancelats_docnum[int(d["DocEntry"])] = int(d["DocNum"])
+            elif estat == "csNo":
+                vius_docnum[int(d["DocEntry"])] = int(d["DocNum"])
+    albarans = [
+        {"comanda": com, "albara": alb, "docnum": vius_docnum[alb]}
+        for com, alb in sorted({(com, alb) for (com, _, alb) in amb_albara if alb in vius_docnum})
+    ]
     pistolejats_cancelats = [
         {"comanda": com, "linia": lin, "albara": alb, "docnum": cancelats_docnum[alb],
          "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
@@ -164,6 +176,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         "pistolejats": pistolejats,
         "pistolejats_cancelats": pistolejats_cancelats,
         "estats": estats,
+        "albarans": albarans,
     }
     if amb_lots:
         out["lots"] = _lots(c, per_lot, cancelats_docnum)

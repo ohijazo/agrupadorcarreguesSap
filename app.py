@@ -744,14 +744,17 @@ def api_pistolejat_carregues():
 def api_carregues_pistolejat():
     """El mateix per al calendari, que es public (l'app germana l'incrusta
     sense sessio): penja del prefix public /api/carregues i nomes dona
-    {estat, percent}. Va a SAP: limit de crides per IP."""
+    {estat, percent, n_comandes, comandes_albara}. Va a SAP: limit de crides
+    per IP."""
     ip = request.remote_addr or "?"
     if not _rate_limit(f"pist_cal:{ip}", max_req=30, window_sec=60):
         return jsonify({"error": "Massa peticions. Torna-ho a provar d'aquí a un minut."}), 429
     r, err = _pistolejat_carregues()
     if err:
         return err
-    return jsonify({"carregues": {k: {"estat": v["estat"], "percent": v["percent"]}
+    return jsonify({"carregues": {k: {"estat": v["estat"], "percent": v["percent"],
+                                      "n_comandes": v.get("n_comandes", 0),
+                                      "comandes_albara": v.get("comandes_albara", [])}
                                   for k, v in r.items()}})
 
 

@@ -147,8 +147,10 @@
         traOrdre: [],          // tra_codi en l'ordre del top usats
         abortCtrl: null,
         modalAbort: null,
+        modalCarrega: null,   // càrrega del detall obert (per marcar-hi els albarans)
         scrollPendent: true,   // primer render: scrolla a la setmana actual
-        // % pistolejat a l'SGA per DocEntry: {estat, percent}. Ve a part de la
+        // % pistolejat a l'SGA per DocEntry: {estat, percent, n_comandes,
+        // comandes_albara}. Ve a part de la
         // llista (/api/carregues/pistolejat) perquè va a SAP i es refresca
         // més sovint.
         pistolejat: new Map(),
@@ -374,7 +376,8 @@
             : "";
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
-            `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada</span>`;
+            `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
+            ` · <span class="cal-evt-alb">Albarà 1/3</span> comandes amb albarà</span>`;
     }
 
     function renderStats() {
@@ -626,10 +629,42 @@
         el.setAttribute("aria-label", complet ? "Pistolejada" : `Pistolejat ${p.percent}%`);
     }
 
+    // Albarans de la càrrega (se'n fa un per comanda): {n, total, docnums} o
+    // null si cap comanda en té. Ve amb el pistolejat.
+    function albaransDe(c) {
+        const p = state.pistolejat.get(String(c.car_numero || ""));
+        const docnums = (p && p.comandes_albara) || [];
+        if (!docnums.length) return null;
+        return { n: docnums.length, total: p.n_comandes || docnums.length, docnums };
+    }
+
+    // Pastilla "Albarà" (totes les comandes en tenen) o "Albarà 1/3".
+    function posaPastillaAlbara(li, c) {
+        const a = albaransDe(c);
+        let el = li.querySelector(".cal-evt-alb");
+        if (!a) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement("span");
+            el.className = "cal-evt-alb";
+            const kg = li.querySelector(".cal-evt-kg");
+            li.insertBefore(el, kg || null);
+        }
+        const totes = a.n >= a.total;
+        el.classList.toggle("is-totes", totes);
+        el.textContent = totes ? "Albarà" : `Albarà ${a.n}/${a.total}`;
+        el.setAttribute("aria-label", totes
+            ? "Totes les comandes tenen albarà"
+            : `${a.n} de ${a.total} comandes tenen albarà`);
+    }
+
     function pintaPistolejat() {
         document.querySelectorAll("li.cal-evt").forEach(li => {
-            if (li._cal) posaPastillaPistolejat(li, li._cal);
+            if (!li._cal) return;
+            posaPastillaPistolejat(li, li._cal);
+            posaPastillaAlbara(li, li._cal);
         });
+        // El detall obert marca les comandes amb albarà quan arriben les dades.
+        marcaAlbaransModal();
     }
 
     function renderEvent(c, isoData) {
@@ -669,6 +704,7 @@
             li.appendChild(sKg);
         }
         posaPastillaPistolejat(li, c);
+        posaPastillaAlbara(li, c);
         return li;
     }
 
@@ -696,6 +732,11 @@
                 return p.estat === "complet"
                     ? `<div class="cal-tt-row"><span class="muted">SGA:</span> <strong>pistolejada del tot</strong></div>`
                     : `<div class="cal-tt-row"><span class="muted">SGA:</span> <strong>${p.percent}% pistolejat</strong></div>`;
+            })(),
+            (() => {
+                const a = albaransDe(c);
+                if (!a) return "";
+                return `<div class="cal-tt-row"><span class="muted">Albarà:</span> <strong>${a.n} de ${a.total} comandes</strong> (${escapeHtml(a.docnums.join(", "))})</div>`;
             })(),
             `<div class="cal-tt-hint muted">Clica per veure el detall complet</div>`,
         ].filter(Boolean).join("");
@@ -807,6 +848,8 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             $("#cal-modal-body").innerHTML = renderDetallCarrega(data);
+            state.modalCarrega = localItem;
+            marcaAlbaransModal();
         } catch (e) {
             if (e.name === "AbortError") return;
             $("#cal-modal-body").innerHTML = `<div class="cal-error">Error carregant detall: ${escapeHtml(e.message)}</div>`;
@@ -876,7 +919,7 @@
                 ? `<span class="comanda-pobla" title="Població d'enviament"><span aria-hidden="true">📍</span> ${escapeHtml(a.pobla)}</span>`
                 : "";
             return `
-                <div class="comanda-block">
+                <div class="comanda-block" data-comanda="${escapeHtml(a.comanda)}">
                     <h4>
                         <span><code>${escapeHtml(a.comanda)}</code> ${tipoBadge} · ${escapeHtml(a.cli_codi)} ${escapeHtml(a.cli_nom)}${poblaHtml ? " · " + poblaHtml : ""}</span>
                         <span class="muted">${fmtNum.format(a.total_sacs)} sacs · ${fmtKg0.format(a.total_kg)} kg</span>
@@ -890,11 +933,34 @@
         return `<div class="detall-resum muted">${data.comandes.length} comandes · <strong>${fmtNum.format(data.total_sacs)}</strong> sacs · <strong>${fmtKg0.format(data.total_kg)}</strong> kg</div>${blocks}`;
     }
 
+    // Al detall obert, la pastilla "Albarà" a les comandes que en tenen. La
+    // comanda del detall és "Sèrie/DocNum"; l'albarà ve per DocNum.
+    function marcaAlbaransModal() {
+        const c = state.modalCarrega;
+        const body = $("#cal-modal-body");
+        if (!c || !body) return;
+        const a = albaransDe(c);
+        const amb = new Set(a ? a.docnums.map(String) : []);
+        body.querySelectorAll(".comanda-block[data-comanda]").forEach(b => {
+            const docnum = String(b.dataset.comanda).split("/").pop();
+            let el = b.querySelector(".cal-evt-alb");
+            if (!amb.has(docnum)) { if (el) el.remove(); return; }
+            if (!el) {
+                el = document.createElement("span");
+                el.className = "cal-evt-alb is-totes";
+                el.textContent = "Albarà";
+                el.title = "Aquesta comanda ja té albarà";
+                b.querySelector("h4 > span")?.appendChild(el);
+            }
+        });
+    }
+
     function tancarModal() {
         const dlg = $("#cal-modal");
         if (typeof dlg.close === "function") dlg.close();
         else dlg.removeAttribute("open");
         if (state.modalAbort) { state.modalAbort.abort(); state.modalAbort = null; }
+        state.modalCarrega = null;
     }
 
     // ---------------------------------------------------------------

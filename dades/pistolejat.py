@@ -113,6 +113,15 @@ def _suma_cancelats(dades: dict) -> dict[tuple[int, int], dict]:
     return out
 
 
+def _albarans_per_comanda(dades: dict) -> dict[int, list[int]]:
+    """{docentry_comanda: [docnum dels albarans no cancel·lats]}. Nomes es
+    fa un albara per comanda: si en te, la comanda ja no es pendent."""
+    out: dict[int, set[int]] = {}
+    for a in dades.get("albarans") or []:
+        out.setdefault(int(a["comanda"]), set()).add(int(a.get("docnum") or a.get("albara") or 0))
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def _avis_cancelat(acc: dict | None) -> dict | None:
     if not acc or acc["kg"] <= _EPSILON:
         return None
@@ -138,17 +147,24 @@ def construir(
         estats:      {docentry_comanda: ultim estat de @SEIESTATSCOM}
         pistolejats_cancelats (opcional): lectures d'albarans cancel·lats;
                      cada linia en porta l'avis a `cancelat` (o None).
+        albarans (opcional): [{comanda, albara, docnum}] albarans no
+                     cancel·lats de cada comanda; van a `albarans` de la comanda.
 
-    Amb `nomes_pendents`, es treuen les linies completes, les comandes i
-    carregues que queden buides, i les carregues ja sortides.
+    Amb `nomes_pendents`, es treuen les linies completes, les comandes que ja
+    tenen albara (se'n fa un per comanda, encara que en quedin linies obertes),
+    les comandes i carregues que queden buides, i les carregues ja sortides.
     """
     pist = _suma_pistolejats(dades)
     canc = _suma_cancelats(dades)
     estats = dades.get("estats") or {}
     lots = _lots_per_linia(dades)
+    albarans = _albarans_per_comanda(dades)
 
     per_carrega: dict[int, list[dict]] = {}
     for c in dades.get("comandes") or []:
+        alb = albarans.get(int(c["docentry"]), [])
+        if nomes_pendents and alb:
+            continue
         linies = []
         for l in sorted(c.get("linies") or [], key=lambda x: int(x.get("linia") or 0)):
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
@@ -167,6 +183,7 @@ def construir(
             "cli_codi": c.get("cli_codi") or "",
             "cli_nom": c.get("cli_nom") or "",
             "estat_comanda": estats.get(int(c["docentry"])) or "",
+            "albarans": alb,
             "linies": linies,
             "totals": _totals(linies),
         })
@@ -277,13 +294,18 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
 
     `dades`: `obtenir_dades_pistolejat(ids, incloure_tancades=True)`. Les
     linies amb albara compten com a fetes, aixi que el % es sobre tota la
-    carrega. Retorna {docentry_carrega: {estat, percent, kg_total, kg_fets}};
-    les carregues sense cap linia no hi surten. El % no arriba a 100 mentre
+    carrega. Retorna {docentry_carrega: {estat, percent, kg_total, kg_fets,
+    n_comandes, comandes_albara}} (`comandes_albara`: DocNum de les comandes
+    amb albara no cancel·lat); les carregues sense cap linia no hi surten. El % no arriba a 100 mentre
     falti algun kg (l'arrodoniment no ho ha d'amagar).
     """
     pist = _suma_pistolejats(dades)
+    albarans = _albarans_per_comanda(dades)
     accs: dict[int, dict] = {}
+    comandes: dict[int, list] = {}
     for c in dades.get("comandes") or []:
+        if c.get("linies"):
+            comandes.setdefault(int(c["carrega"]), []).append(c)
         for l in c.get("linies") or []:
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
             _acumula(accs.setdefault(int(c["carrega"]), _nou_acc()), l, _linia(l, pist.get(clau)))
@@ -291,8 +313,12 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
     for car, acc in accs.items():
         t = _tanca(acc)
         percent = 100 if t["estat"] == ESTAT_COMPLET else min(t["percent"], 99)
+        cms = comandes.get(car, [])
         out[car] = {"estat": t["estat"], "percent": percent,
-                    "kg_total": t["kg_total"], "kg_fets": t["kg_fets"]}
+                    "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
+                    "n_comandes": len(cms),
+                    "comandes_albara": sorted(int(c.get("docnum") or 0) for c in cms
+                                              if albarans.get(int(c["docentry"])))}
     return out
 
 

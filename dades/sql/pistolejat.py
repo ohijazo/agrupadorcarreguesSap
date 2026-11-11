@@ -24,14 +24,19 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     Amb `amb_lots` hi ha tambe `lots`: els lots pistolejats de cada linia
     (amb albara o sense; no els d'albarans cancel·lats), per a "Preparacio de
     comanda". Es una lectura mes de `@SEIOPIC`: nomes qui la necessita.
+
+    `albarans`: els albarans no cancel·lats de cada comanda ({comanda,
+    albara, docnum}), via les lectures de `@SEIOPIC` que hi apunten.
     """
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
-        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {}}
+        return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {},
+                "albarans": []}
 
     comandes: dict[int, dict] = {}
     pistolejats: list[dict] = []
     cancelats: list[dict] = []
+    albarans: list[dict] = []
     lots: list[dict] = []
     estats: dict[int, str] = {}
 
@@ -126,6 +131,23 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "kg": round(float(r.kg or 0), 6),
                 })
 
+            # Albarans vius de cada comanda (nomes se'n fa un per comanda):
+            # una comanda amb albara ja no es pendent de pistolejar.
+            for r in conn.execute(f"""
+                SELECT DISTINCT p.U_BaseEntry AS comanda, d.DocEntry AS albara, d.DocNum AS docnum
+                FROM   [@SEIOPIC] p WITH (NOLOCK)
+                JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = p.U_TargetEntry
+                WHERE  p.U_BaseObject = 17
+                  AND  p.U_TargetType = 15
+                  AND  d.CANCELED = 'N'
+                  AND  p.U_BaseEntry IN ({ph})
+            """, *tros).fetchall():
+                albarans.append({
+                    "comanda": int(r.comanda),
+                    "albara": int(r.albara),
+                    "docnum": int(r.docnum),
+                })
+
             # Lots (U_ManagedBy 10000044 = per lots, OBTN). Les lectures d'un
             # albara cancel·lat no hi son: ja surten a l'avis de cancel·lat.
             if amb_lots:
@@ -176,6 +198,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         "pistolejats": sorted(pistolejats, key=lambda p: (p["comanda"], p["linia"])),
         "pistolejats_cancelats": sorted(cancelats, key=lambda p: (p["comanda"], p["linia"], p["albara"])),
         "estats": estats,
+        "albarans": sorted(albarans, key=lambda a: (a["comanda"], a["albara"])),
         **({"lots": sorted(lots, key=lambda p: (p["comanda"], p["linia"], p["albara"], p["lot"]))}
            if amb_lots else {}),
     }

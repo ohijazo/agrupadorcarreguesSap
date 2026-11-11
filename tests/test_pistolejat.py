@@ -101,6 +101,21 @@ def test_carrega_sortida_nomes_amb_tots():
     assert len(calc.construir([_carrega(87, estat=2)], dades, nomes_pendents=False)["carregues"]) == 1
 
 
+def test_comanda_amb_albara_no_es_pendent():
+    # Un sol albara per comanda: amb albara (parcial) ja no surt a pendents,
+    # encara que li quedin linies obertes. Si es mostra tot, porta l'albara.
+    dades = _dades([_linia(0), _linia(1)])
+    dades["albarans"] = [{"comanda": 279, "albara": 900, "docnum": 7001}]
+    assert calc.construir([_carrega(87)], dades)["carregues"] == []
+    r = calc.construir([_carrega(87)], dades, nomes_pendents=False)
+    assert r["carregues"][0]["comandes"][0]["albarans"] == [7001]
+
+
+def test_comanda_sense_albara_porta_llista_buida():
+    r = calc.construir([_carrega(87)], _dades([_linia(0)]))
+    assert r["carregues"][0]["comandes"][0]["albarans"] == []
+
+
 def test_carregues_ordenades_per_sortida_i_sense_comandes_fora():
     dades = {
         "comandes": [
@@ -400,9 +415,25 @@ def test_progres_per_carrega_parcial_complet_i_amb_albara():
         "estats": {},
     }
     r = calc.progres_per_carrega(dades)
-    assert r[87] == {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250}
+    assert r[87] == {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250,
+                     "n_comandes": 1, "comandes_albara": []}
     assert r[98]["estat"] == "complet" and r[98]["percent"] == 100
     assert r[99]["estat"] == "pendent" and r[99]["percent"] == 0
+
+
+def test_progres_per_carrega_comandes_amb_albara():
+    dades = {
+        "comandes": [
+            {"docentry": 1, "docnum": 501, "carrega": 87, "linies": [_linia(0)]},
+            {"docentry": 2, "docnum": 502, "carrega": 87, "linies": [_linia(0, kg_oberts=0)]},
+            {"docentry": 3, "docnum": 503, "carrega": 87, "linies": [_linia(0)]},
+        ],
+        "pistolejats": [], "estats": {},
+        "albarans": [{"comanda": 2, "albara": 900, "docnum": 7001}],
+    }
+    r = calc.progres_per_carrega(dades)
+    assert r[87]["n_comandes"] == 3
+    assert r[87]["comandes_albara"] == [502]
 
 
 def test_progres_per_carrega_no_arrodoneix_a_100_si_falta():
@@ -464,7 +495,8 @@ def test_sense_lots_llegits_la_linia_no_en_porta():
 
 # --- Calendari (public) ----------------------------------------------------
 def _progres_87(ids):
-    return {87: {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250}}
+    return {87: {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250,
+                 "n_comandes": 3, "comandes_albara": [502]}}
 
 
 def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
@@ -473,7 +505,8 @@ def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
     monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
     r = c.get("/api/carregues/pistolejat?ids=87")      # sense sessio
     assert r.status_code == 200
-    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25}}}
+    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25,
+                                                 "n_comandes": 3, "comandes_albara": [502]}}}
 
 
 def test_calendari_pistolejat_comparteix_cache(client, monkeypatch):
