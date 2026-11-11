@@ -673,6 +673,14 @@
 }
 .cal-evt-alb.is-totes { color: #fff; background: #6b46c1; border: 1px solid #6b46c1; }
 .comanda-block h4 .cal-evt-alb { margin-left: .4rem; vertical-align: middle; }
+/* Columna "Pistolejat" del detall: barreta + sacs (o kg) fets / total. */
+.cal-pist-cel { white-space: nowrap; font-size: .8rem; }
+.cal-pist-art { display: inline-flex; align-items: center; gap: .35rem; font-variant-numeric: tabular-nums; }
+.cal-pist-barra { width: 3rem; height: .4rem; background: #edf2f7; border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.cal-pist-barra > span { display: block; height: 100%; background: #4a7fc1; }
+.cal-pist-art.is-complet { color: #22543d; font-weight: 600; }
+.cal-pist-art.is-complet .cal-pist-barra > span { background: #38a169; }
+.cal-pist-art.is-pendent { color: #718096; }
 .cal-legend-pist {
     display: inline-flex;
     align-items: center;

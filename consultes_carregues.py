@@ -175,3 +175,9 @@ def progres_carregues(ids: list[int]) -> dict[int, dict]:
     if not ids:
         return {}
     return _pistolejat.progres_per_carrega(obtenir_dades_pistolejat(ids, incloure_tancades=True))
+
+
+def progres_articles_carrega(docentry: int) -> dict[str, dict]:
+    """Pistolejat de cada article de cada comanda d'una carrega (DocEntry),
+    per al detall del calendari; vegeu `dades.pistolejat.progres_per_article`."""
+    return _pistolejat.progres_per_article(obtenir_dades_pistolejat([docentry], incloure_tancades=True))

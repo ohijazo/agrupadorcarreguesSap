@@ -137,6 +137,7 @@ def client(monkeypatch):
     app_module._rate_buckets.clear()
     app_module._cache_pendents.clear()
     app_module._cache_pist_carregues.clear()
+    app_module._cache_pist_detall.clear()
     with app_module.app.test_client() as c:
         yield c, app_module
 
@@ -530,3 +531,45 @@ def test_calendari_pistolejat_limit_de_crides(client, monkeypatch):
     monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
     codis = [c.get("/api/carregues/pistolejat?ids=87").status_code for _ in range(31)]
     assert codis[:30] == [200] * 30 and codis[30] == 429
+
+
+# --- Detall de carrega del calendari (public) --------------------------------
+def test_progres_per_article_suma_linies_i_compta_albara_com_fet():
+    dades = {
+        "comandes": [
+            {"docentry": 279, "docnum": 26600279, "carrega": 87, "linies": [
+                _linia(0, art="A"),                    # 1000 kg, 250 pistolejats
+                _linia(1, art="A"),                    # 1000 kg, res
+                _linia(2, art="B", kg_oberts=0),       # ja amb albara
+            ]},
+        ],
+        "pistolejats": [{"comanda": 279, "linia": 0, "sacs": 10, "kg": 250}],
+        "estats": {},
+        "albarans": [{"comanda": 279, "albara": 900, "docnum": 7001}],
+    }
+    r = calc.progres_per_article(dades)
+    com = r["26600279"]
+    assert com["albarans"] == [7001]
+    assert com["articles"]["A"] == {"estat": "parcial", "percent": 12, "kg_total": 2000,
+                                    "kg_fets": 250, "sacs_total": 80, "sacs_fets": 10}
+    assert com["articles"]["B"]["estat"] == "complet" and com["articles"]["B"]["percent"] == 100
+
+
+def test_calendari_pistolejat_detall_public(client, monkeypatch):
+    c, app_module = client
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    crides = []
+    monkeypatch.setattr(app_module, "progres_articles_carrega",
+                        lambda car: crides.append(car) or {"1": {"albarans": [], "articles": {}}})
+    r = c.get("/api/carregues/pistolejat-detall?car=87")       # sense sessio
+    assert r.status_code == 200
+    assert r.get_json() == {"comandes": {"1": {"albarans": [], "articles": {}}}}
+    c.get("/api/carregues/pistolejat-detall?car=87")           # cache
+    assert crides == [87]
+
+
+@pytest.mark.parametrize("qs", ["", "car=abc", "car=-1", "car=1234567890"])
+def test_calendari_pistolejat_detall_valida(client, monkeypatch, qs):
+    c, app_module = client
+    monkeypatch.setattr(app_module, "progres_articles_carrega", lambda car: pytest.fail("no s'havia de consultar SAP"))
+    assert c.get(f"/api/carregues/pistolejat-detall?{qs}").status_code == 400

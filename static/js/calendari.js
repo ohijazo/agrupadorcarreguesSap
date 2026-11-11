@@ -856,6 +856,7 @@
             $("#cal-modal-body").innerHTML = renderDetallCarrega(data);
             state.modalCarrega = localItem;
             marcaAlbaransModal();
+            carregaPistolejatDetall((localItem && localItem.car_numero) || car, ctrl);
         } catch (e) {
             if (e.name === "AbortError") return;
             $("#cal-modal-body").innerHTML = `<div class="cal-error">Error carregant detall: ${escapeHtml(e.message)}</div>`;
@@ -910,12 +911,13 @@
                 const np = l.palletitzable === false;
                 const cls = np ? ' class="not-palletitzable"' : '';
                 const tip = np ? ' title="No palletitzable: el motor d&apos;embalatges ignora aquesta línia"' : '';
-                return `<tr${cls}${tip}>
+                return `<tr${cls}${tip} data-art="${escapeHtml(l.art_codi)}">
                     <td><code>${escapeHtml(l.art_codi)}</code></td>
                     <td>${escapeHtml(l.art_descrip)}</td>
                     <td>${escapeHtml(l.tunitat)}</td>
                     <td class="num">${fmtNum.format(l.sacs)}</td>
                     <td class="num">${fmtKg0.format(l.kg)}</td>
+                    <td class="cal-pist-cel muted">…</td>
                 </tr>`;
             }).join("");
             const tipoBadge = a.det_tipo === "P"
@@ -931,8 +933,8 @@
                         <span class="muted">${fmtNum.format(a.total_sacs)} sacs · ${fmtKg0.format(a.total_kg)} kg</span>
                     </h4>
                     <table class="data-table data-table-mini">
-                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th></tr></thead>
-                        <tbody>${linies || `<tr><td colspan="5" class="muted">Sense línies</td></tr>`}</tbody>
+                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th><th title="Pistolejat a l'SGA (expedició). El que ja té albarà compta com a fet.">Pistolejat</th></tr></thead>
+                        <tbody>${linies || `<tr><td colspan="6" class="muted">Sense línies</td></tr>`}</tbody>
                     </table>
                 </div>`;
         }).join("");
@@ -959,6 +961,46 @@
             }
             el.textContent = `Albarà ${albs.join(", ")}`;
         });
+    }
+
+    // Pistolejat de cada article del detall obert. Va a SAP a part: el detall
+    // surt de seguida i la columna "Pistolejat" s'omple quan arriba.
+    async function carregaPistolejatDetall(docentry, ctrl) {
+        const body = $("#cal-modal-body");
+        let comandes = null;
+        try {
+            if (!/^\d+$/.test(String(docentry || ""))) throw new Error("sense DocEntry");
+            const resp = await fetch(`/api/carregues/pistolejat-detall?car=${encodeURIComponent(docentry)}`,
+                                     { signal: ctrl.signal, credentials: "same-origin" });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            comandes = (await resp.json()).comandes || {};
+        } catch (e) {
+            if (e.name === "AbortError") return;
+            console.warn("pistolejat del detall:", e);
+        }
+        body.querySelectorAll(".comanda-block[data-comanda]").forEach(b => {
+            const docnum = String(b.dataset.comanda).split("/").pop();
+            const articles = comandes && comandes[docnum] ? comandes[docnum].articles || {} : null;
+            b.querySelectorAll("tr[data-art] .cal-pist-cel").forEach(td => {
+                const art = td.closest("tr").dataset.art;
+                td.className = "cal-pist-cel";
+                if (!comandes) { td.textContent = "—"; td.classList.add("muted"); td.title = "No s'ha pogut llegir el pistolejat"; return; }
+                const a = articles && articles[art];
+                if (!a) { td.textContent = "—"; td.classList.add("muted"); td.title = "Sense dades de pistolejat"; return; }
+                td.innerHTML = htmlPistolejatArticle(a);
+            });
+        });
+    }
+
+    function htmlPistolejatArticle(a) {
+        const fet = a.estat === "complet";
+        const quant = a.sacs_total != null
+            ? `${fmtNum.format(Math.round(a.sacs_fets))}/${fmtNum.format(Math.round(a.sacs_total))} sacs`
+            : `${fmtKg0.format(a.kg_fets)}/${fmtKg0.format(a.kg_total)} kg`;
+        const cls = fet ? "is-complet" : (a.estat === "parcial" ? "is-parcial" : "is-pendent");
+        return `<span class="cal-pist-art ${cls}" title="${fet ? "Pistolejat del tot" : `${a.percent}% pistolejat`}">`
+            + `<span class="cal-pist-barra" aria-hidden="true"><span style="width:${fet ? 100 : a.percent}%"></span></span>`
+            + `${fet ? "✓ " : ""}${escapeHtml(quant)}</span>`;
     }
 
     function tancarModal() {

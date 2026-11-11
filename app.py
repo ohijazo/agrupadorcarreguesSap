@@ -56,7 +56,7 @@ from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
     FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_dates,
     llistar_carregues, llistar_estats_carregues, llistar_pendents_pistolejar,
-    llistar_transportistes, progres_carregues, resum_carrega,
+    llistar_transportistes, progres_articles_carrega, progres_carregues, resum_carrega,
 )
 from dades import backend as backend_dades  # noqa: E402
 # Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
@@ -685,6 +685,7 @@ def api_pendents_pistolejar():
 _CACHE_PISTOLEJAT_S = 8
 _cache_pendents: dict = {}
 _cache_pist_carregues: dict = {}
+_cache_pist_detall: dict = {}
 _cache_pist_lock = Lock()
 
 
@@ -756,6 +757,33 @@ def api_carregues_pistolejat():
                                       "n_comandes": v.get("n_comandes", 0),
                                       "comandes_albara": v.get("comandes_albara", [])}
                                   for k, v in r.items()}})
+
+
+@app.route("/api/carregues/pistolejat-detall")
+def api_carregues_pistolejat_detall():
+    """Pistolejat de cada article de cada comanda d'una carrega (?car=DocEntry)
+    per al detall del calendari. Public com el calendari (decisio de l'Oscar,
+    11-11-2026): nomes estat, % i sacs/kg fets, sense lots. Va a SAP: limit
+    de crides per IP."""
+    ip = request.remote_addr or "?"
+    if not _rate_limit(f"pist_det:{ip}", max_req=30, window_sec=60):
+        return jsonify({"error": "Massa peticions. Torna-ho a provar d'aquí a un minut."}), 429
+    car = (request.args.get("car") or "").strip()
+    if not car.isdigit() or len(car) > 9:
+        return _err_validacio("Cal el DocEntry de la càrrega ('car').")
+    clau = int(car)
+    r = _cache_llegeix(_cache_pist_detall, clau)
+    if r is None:
+        try:
+            r = progres_articles_carrega(clau)
+        except backend_dades.ERRORS_DADES:
+            log.exception("DB error al pistolejat del detall de carrega")
+            return _err_db()
+        except Exception:
+            log.exception("pistolejat del detall de carrega")
+            return _err_genèric()
+        _cache_desa(_cache_pist_detall, clau, r)
+    return jsonify({"comandes": r})
 
 
 def _afegeix_agrupacio(carregues: list[dict]) -> None:

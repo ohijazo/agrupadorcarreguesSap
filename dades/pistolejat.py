@@ -325,6 +325,42 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
     return out
 
 
+def progres_per_article(dades: dict) -> dict[str, dict]:
+    """Pistolejat de cada article de cada comanda, per al detall de la
+    carrega del calendari.
+
+    `dades`: `obtenir_dades_pistolejat([carrega], incloure_tancades=True)`.
+    Com a `progres_per_carrega`, el que ja te albara compta com a fet.
+    Retorna {docnum_comanda: {albarans: [docnum], articles: {art_codi:
+    {estat, percent, kg_total, kg_fets, sacs_total, sacs_fets}}}}: per
+    article perque el detall no porta el numero de linia (si un article surt
+    en dues linies, se sumen). Sense lots: es public.
+    """
+    pist = _suma_pistolejats(dades)
+    albarans = _albarans_per_comanda(dades)
+    out: dict[str, dict] = {}
+    for c in dades.get("comandes") or []:
+        accs: dict[str, dict] = {}
+        for l in c.get("linies") or []:
+            clau = (int(c["docentry"]), int(l.get("linia") or 0))
+            lc = _linia(l, pist.get(clau))
+            _acumula(accs.setdefault(lc["art_codi"], _nou_acc()), l, lc)
+        articles = {}
+        for art, acc in accs.items():
+            t = _tanca(acc)
+            articles[art] = {
+                "estat": t["estat"],
+                "percent": 100 if t["estat"] == ESTAT_COMPLET else min(t["percent"], 99),
+                "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
+                "sacs_total": t["sacs_total"], "sacs_fets": t["sacs_fets"],
+            }
+        out[str(c.get("docnum"))] = {
+            "albarans": albarans.get(int(c["docentry"]), []),
+            "articles": articles,
+        }
+    return out
+
+
 def _docentry_carrega(carrega_id) -> int | None:
     """`SAP/{Series}/{DocEntry}` -> DocEntry."""
     try:
