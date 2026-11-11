@@ -377,7 +377,7 @@
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
             `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
-            ` · <span class="cal-evt-alb">Albarà 1/3</span> comandes amb albarà</span>`;
+            ` · <span class="cal-evt-alb">ALB.1/3</span> comandes amb albarà</span>`;
     }
 
     function renderStats() {
@@ -641,7 +641,7 @@
         return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans };
     }
 
-    // Pastilla "Albarà" (totes les comandes en tenen, ple) o "Albarà 1/3"
+    // Pastilla "ALB." (totes les comandes en tenen, ple) o "ALB.1/3"
     // (només algunes, en contorn). El número d'albarà va al detall de la
     // càrrega, a cada comanda: a la cel·la no hi cap.
     function posaPastillaAlbara(li, c) {
@@ -656,7 +656,7 @@
         }
         const totes = a.n >= a.total;
         el.classList.toggle("is-totes", totes);
-        el.textContent = totes ? "Albarà" : `Albarà ${a.n}/${a.total}`;
+        el.textContent = totes ? "ALB." : `ALB.${a.n}/${a.total}`;
         el.setAttribute("aria-label", totes
             ? "Totes les comandes tenen albarà"
             : `${a.n} de ${a.total} comandes tenen albarà`);
