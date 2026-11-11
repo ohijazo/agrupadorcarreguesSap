@@ -1,12 +1,15 @@
 // Pantalla "Gestió d'albarans" (oficina). Llista els albarans de l'SGA per
-// dates (/api/albarans), obre el PDF del Crystal de SAP i, si està activat,
-// els cancel·la a SAP. No fa polling: cada consulta va a SAP.
+// dates (/api/albarans), obre el PDF del Crystal de SAP (un o diversos de cop,
+// seleccionats, en un sol PDF) i, si està activat, els cancel·la a SAP. No fa
+// polling: cada consulta va a SAP.
 "use strict";
 
 const RANG_KEY = "alb-rang";
 const MAX_DIES = 31;
+const MAX_PDF = 40;   // el mateix límit que /albarans/pdf (MAX_ALBARANS_PDF)
 
-const albState = { rang: "avui", albarans: [], pdf: false, peticio: 0 };
+// `sel`: DocEntry dels albarans seleccionats per imprimir.
+const albState = { rang: "avui", albarans: [], pdf: false, peticio: 0, sel: new Set() };
 
 function escA(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => (
@@ -91,8 +94,16 @@ function pintaFila(a) {
                    data-docentry="${a.docentry}" data-docnum="${escA(a.docnum)}"
                    aria-label="Cancel·la l'albarà ${escA(a.docnum)} a SAP">✖ Cancel·la</button>`
         : "";
+    const sel = albState.sel.has(a.docentry);
+    const check = imprimible(a)
+        ? `<label class="alb-check">
+               <input type="checkbox" data-act="sel-alb" data-docentry="${a.docentry}" ${sel ? "checked" : ""}
+                      aria-label="Selecciona l'albarà ${escA(a.docnum)} per imprimir">
+           </label>`
+        : "";
     return `
-        <tr class="${a.cancelat ? "is-cancelat" : ""}">
+        <tr class="${a.cancelat ? "is-cancelat" : ""} ${sel ? "is-sel" : ""}">
+            <td class="alb-sel">${check}</td>
             <td data-lbl="Data">${escA(a.data ? fmtData(a.data) : "")}</td>
             <td data-lbl="Albarà" class="alb-num">${escA(a.docnum)}</td>
             <td data-lbl="Càrrega">#${escA(a.carrega)}</td>
@@ -105,15 +116,25 @@ function pintaFila(a) {
         </tr>`;
 }
 
+// Només es poden imprimir els albarans no cancel·lats, si el PDF està activat.
+function imprimible(a) {
+    return albState.pdf && !a.cancelat;
+}
+
 function normalitza(s) {
     return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-function pinta() {
+function visibles() {
     const q = normalitza(document.getElementById("alb-cerca").value.trim());
-    const files = q
+    return q
         ? albState.albarans.filter(a => normalitza(`${a.docnum} ${a.carrega} ${a.cli_codi} ${a.cli_nom}`).includes(q))
         : albState.albarans;
+}
+
+function pinta() {
+    const q = document.getElementById("alb-cerca").value.trim();
+    const files = visibles();
     document.getElementById("alb-files").innerHTML = files.map(pintaFila).join("");
     document.getElementById("alb-taula").hidden = files.length === 0;
     const buit = document.getElementById("alb-buit");
@@ -121,6 +142,48 @@ function pinta() {
     buit.textContent = albState.albarans.length && q
         ? "Cap albarà coincideix amb la cerca."
         : "No hi ha albarans en aquestes dates.";
+    pintaSeleccio();
+}
+
+// Casella "Tots" (dels visibles amb la cerca) i barra d'impressió.
+function pintaSeleccio() {
+    const imprimibles = visibles().filter(imprimible);
+    const tots = document.getElementById("alb-sel-tots");
+    const n = imprimibles.filter(a => albState.sel.has(a.docentry)).length;
+    tots.closest("label").hidden = !albState.pdf;
+    tots.disabled = imprimibles.length === 0;
+    tots.checked = imprimibles.length > 0 && n === imprimibles.length;
+    tots.indeterminate = n > 0 && n < imprimibles.length;
+
+    const total = albState.sel.size;
+    const barra = document.getElementById("alb-barra");
+    barra.hidden = total === 0;
+    const txt = document.getElementById("alb-barra-n");
+    const massa = total > MAX_PDF;
+    txt.textContent = massa
+        ? `${total} seleccionats · màxim ${MAX_PDF} per cop`
+        : `${total} ${total === 1 ? "albarà seleccionat" : "albarans seleccionats"}`;
+    txt.classList.toggle("is-massa", massa);
+    document.getElementById("alb-imprimeix").disabled = massa;
+}
+
+function marcaAlbara(docentry, on) {
+    if (on) albState.sel.add(docentry); else albState.sel.delete(docentry);
+}
+
+// Un sol PDF amb tots els seleccionats, en l'ordre de la llista, en una
+// pestanya nova: s'imprimeix d'una vegada des del visor del navegador.
+function imprimeixSeleccionats() {
+    const tria = albState.albarans.filter(a => albState.sel.has(a.docentry) && imprimible(a));
+    if (!tria.length || tria.length > MAX_PDF) return;
+    const qs = new URLSearchParams({
+        ids: tria.map(a => a.docentry).join(","),
+        nums: tria.map(a => a.docnum).join(","),
+    });
+    window.open(`/albarans/pdf?${qs}`, "_blank", "noopener");
+    toast("success", tria.length === 1
+        ? "S'obre l'albarà en una pestanya nova."
+        : `Generant ${tria.length} albarans en un sol PDF. S'obrirà en una pestanya nova d'aquí a uns segons.`);
 }
 
 function datesValides() {
@@ -150,6 +213,9 @@ async function refrescar() {
         if (num !== albState.peticio) return;
         albState.albarans = j.albarans || [];
         albState.pdf = !!j.pdf;
+        // La selecció es manté pels albarans que encara hi són i es poden imprimir.
+        const ara = new Set(albState.albarans.filter(imprimible).map(a => a.docentry));
+        for (const d of [...albState.sel]) if (!ara.has(d)) albState.sel.delete(d);
         pinta();
         errBox.hidden = true;
         document.getElementById("alb-actualitzat").textContent =
@@ -195,6 +261,7 @@ async function cancelaAlbara(btn) {
 
 function posaRang(rang) {
     albState.rang = rang;
+    albState.sel.clear();
     const [d, f] = rangDates(rang);
     document.getElementById("alb-desde").value = isoLocal(d);
     document.getElementById("alb-fins").value = isoLocal(f);
@@ -220,6 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const id of ["alb-desde", "alb-fins"]) {
         document.getElementById(id).addEventListener("change", () => {
             albState.rang = "";
+            albState.sel.clear();
             marcaRang();
             refrescar();
         });
@@ -230,6 +298,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const btn = ev.target.closest('[data-act="cancel-alb"]');
         if (btn && !btn.disabled) cancelaAlbara(btn);
     });
+    document.getElementById("alb-files").addEventListener("change", ev => {
+        const cb = ev.target.closest('[data-act="sel-alb"]');
+        if (!cb) return;
+        marcaAlbara(Number(cb.dataset.docentry), cb.checked);
+        cb.closest("tr").classList.toggle("is-sel", cb.checked);
+        pintaSeleccio();
+    });
+    document.getElementById("alb-sel-tots").addEventListener("change", ev => {
+        for (const a of visibles().filter(imprimible)) marcaAlbara(a.docentry, ev.target.checked);
+        pinta();
+    });
+    document.getElementById("alb-sel-treu").addEventListener("click", () => {
+        albState.sel.clear();
+        pinta();
+    });
+    document.getElementById("alb-imprimeix").addEventListener("click", imprimeixSeleccionats);
 
     refrescar();
 });

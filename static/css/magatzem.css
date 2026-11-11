@@ -1091,8 +1091,45 @@
 .alb-cancel { color: #9b2c2c; }
 .alb-cancel:hover:not(:disabled) { background: #fff5f5; border-color: #feb2b2; }
 
+/* Selecció per imprimir de cop: tota la cel·la és la zona de toc (guants). */
+.alb-taula th.alb-sel,
+.alb-taula td.alb-sel { width: 3.5rem; padding: 0; text-align: center; }
+.alb-check {
+    display: flex; align-items: center; justify-content: center;
+    min-width: 56px; min-height: 56px;
+    cursor: pointer;
+}
+.alb-check input { width: 26px; height: 26px; margin: 0; cursor: pointer; accent-color: var(--primary, #2b6cb0); }
+.alb-taula tr.is-sel td { background: #ebf8ff; }
+
+/* Barra d'acció enganxada a baix mentre hi ha albarans seleccionats. */
+.alb-barra {
+    position: sticky; bottom: 0; z-index: 20;
+    margin-top: 1rem;
+    background: #fff;
+    border-top: 2px solid #90cdf4;
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, .08);
+}
+.alb-barra-in {
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    padding-top: .6rem; padding-bottom: .6rem;
+}
+.alb-barra-n { flex: 1 1 12rem; font-weight: 700; font-size: 1.05rem; }
+.alb-barra-n.is-massa { color: #9b2c2c; }
+.alb-barra .btn { min-height: 52px; }
+.alb-imprimeix { font-size: 1.05rem; padding-left: 1.4rem; padding-right: 1.4rem; }
+
 @media (max-width: 720px) {
-    .alb-taula thead { display: none; }
+    /* De la capçalera només queda la casella "Tots". */
+    .alb-taula thead { display: block; }
+    .alb-taula thead tr { display: flex; }
+    .alb-taula thead th:not(.alb-sel) { display: none; }
+    .alb-taula th.alb-sel { flex: 1; width: auto; padding-left: .5rem; }
+    .alb-taula th.alb-sel .alb-check { justify-content: flex-start; }
+    .alb-taula th.alb-sel .alb-check::after { content: "Tots"; margin-left: .5rem; font-size: 1rem; color: #2d3748; }
+    .alb-taula tr { position: relative; }
+    .alb-taula td.alb-sel { position: absolute; top: 0; right: 0; width: auto; }
+    .alb-barra-in .btn { flex: 1; justify-content: center; }
     .alb-taula,
     .alb-taula tbody,
     .alb-taula tr,

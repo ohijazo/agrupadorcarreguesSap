@@ -54,6 +54,11 @@
     <table class="alb-taula" id="alb-taula" hidden>
         <thead>
             <tr>
+                <th class="alb-sel" id="alb-sel-cap">
+                    <label class="alb-check" title="Selecciona tots els albarans de la llista">
+                        <input type="checkbox" id="alb-sel-tots" aria-label="Selecciona tots els albarans de la llista">
+                    </label>
+                </th>
                 <th>Data</th>
                 <th>Albarà</th>
                 <th>Càrrega</th>
@@ -66,6 +71,14 @@
     </table>
     <p id="alb-buit" class="mag-empty" hidden>No hi ha albarans en aquestes dates.</p>
 </main>
+
+<div class="alb-barra" id="alb-barra" hidden>
+    <div class="container alb-barra-in">
+        <span class="alb-barra-n" id="alb-barra-n" aria-live="polite"></span>
+        <button type="button" class="btn btn-ghost" id="alb-sel-treu">Treu la selecció</button>
+        <button type="button" class="btn btn-primary alb-imprimeix" id="alb-imprimeix">🖨 Imprimeix els seleccionats</button>
+    </div>
+</div>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
 

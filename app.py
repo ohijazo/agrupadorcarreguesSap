@@ -12,12 +12,15 @@ import secrets
 import sys
 import time
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from contextlib import contextmanager
+from io import BytesIO
 from threading import Lock
 
 import requests
+from pypdf import PdfReader, PdfWriter
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 # --- Bootstrap .env i sys.path ABANS d'importar agregador ----------------
@@ -754,13 +757,24 @@ def _text(msg: str, status: int):
     return msg, status, {"Content-Type": "text/plain; charset=utf-8"}
 
 
-@app.route("/albarans/<int:doc_entry>/pdf")
-@auth.requires_rol("admin", "oficina")
-def albara_pdf(doc_entry: int):
-    """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
-    url = _crystal_pdf_url()
-    if not url:
-        return _text("La impressió d'albarans no està activada.", 404)
+_NO_RESPON_PDF = ("El servei d'impressió d'albarans no respon. Torna-ho a provar d'aquí a una "
+                  "estona i, si continua, avisa administració.")
+
+# Albarans per PDF conjunt: el servei crystal-pdf en fa 2 alhora (MaxJobs) i
+# Gunicorn talla als 120 s; 40 queden lluny del límit.
+MAX_ALBARANS_PDF = 40
+
+
+class _ErrorPdf(Exception):
+    """El servei crystal-pdf no ha pogut fer el PDF. `status`: 404 si l'albara
+    no existeix, 503 si el servei no respon o falla."""
+    def __init__(self, status: int, msg: str):
+        super().__init__(msg)
+        self.status = status
+
+
+def _crystal_pdf(url: str, doc_entry: int) -> tuple[bytes, str]:
+    """PDF d'un albara (layout per defecte de SAP) i el seu DocNum."""
     try:
         r = requests.get(
             f"{url}/pdf",
@@ -770,23 +784,110 @@ def albara_pdf(doc_entry: int):
         )
     except requests.RequestException:
         log.exception("crystal-pdf no respon (albara %s)", doc_entry)
-        return _text("El servei d'impressió d'albarans no respon. Torna-ho a provar d'aquí a una "
-                     "estona i, si continua, avisa administració.", 503)
+        raise _ErrorPdf(503, _NO_RESPON_PDF)
     if r.status_code == 404:
-        return _text("Aquest albarà no existeix a SAP.", 404)
+        raise _ErrorPdf(404, "Aquest albarà no existeix a SAP.")
     if r.status_code != 200 or not r.headers.get("Content-Type", "").startswith("application/pdf"):
         log.error("crystal-pdf ha respost %s per a l'albara %s: %s",
                   r.status_code, doc_entry, r.text[:300])
-        return _text("No s'ha pogut generar el PDF de l'albarà. Avisa administració.", 503)
-
+        raise _ErrorPdf(503, "No s'ha pogut generar el PDF de l'albarà. Avisa administració.")
     num = r.headers.get("X-DocNum", "")
-    num = num if num.isdigit() else str(doc_entry)
-    audit.log("imprimir_albara", target=num, detall={"docentry": doc_entry})
-    resp = make_response(r.content)
+    return r.content, (num if num.isdigit() else str(doc_entry))
+
+
+def _resposta_pdf(contingut: bytes, nom: str):
+    resp = make_response(contingut)
     resp.headers["Content-Type"] = "application/pdf"
-    resp.headers["Content-Disposition"] = f'inline; filename="Albara_{num}.pdf"'
+    resp.headers["Content-Disposition"] = f'inline; filename="{nom}"'
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@app.route("/albarans/<int:doc_entry>/pdf")
+@auth.requires_rol("admin", "oficina")
+def albara_pdf(doc_entry: int):
+    """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
+    url = _crystal_pdf_url()
+    if not url:
+        return _text("La impressió d'albarans no està activada.", 404)
+    try:
+        contingut, num = _crystal_pdf(url, doc_entry)
+    except _ErrorPdf as e:
+        return _text(str(e), e.status)
+    audit.log("imprimir_albara", target=num, detall={"docentry": doc_entry})
+    return _resposta_pdf(contingut, f"Albara_{num}.pdf")
+
+
+def _ids_url(param: str) -> list[int] | None:
+    """`12,15,18` -> [12, 15, 18] sense repetits; None si n'hi ha cap de no vàlid."""
+    ids: list[int] = []
+    for tros in (request.args.get(param) or "").split(","):
+        tros = tros.strip()
+        if not tros:
+            continue
+        if not tros.isdigit() or int(tros) <= 0:
+            return None
+        if int(tros) not in ids:
+            ids.append(int(tros))
+    return ids
+
+
+@app.route("/albarans/pdf")
+@auth.requires_rol("admin", "oficina")
+def albarans_pdf():
+    """Diversos albarans (?ids=12,15,18, DocEntry) en un sol PDF, en l'ordre
+    demanat, per imprimir-los de cop. Cada un amb el layout de SAP. Si en falla
+    algun no es dona un PDF a mitges (no se sabria quins falten): es diu quins.
+    `nums` (opcional, mateix ordre) són els números d'albarà per al missatge."""
+    url = _crystal_pdf_url()
+    if not url:
+        return _text("La impressió d'albarans no està activada.", 404)
+    ids = _ids_url("ids")
+    if ids is None:
+        return _text("La selecció d'albarans no és vàlida.", 400)
+    if not ids:
+        return _text("No hi ha cap albarà seleccionat.", 400)
+    if len(ids) > MAX_ALBARANS_PDF:
+        return _text(f"Com a màxim es poden imprimir {MAX_ALBARANS_PDF} albarans de cop.", 400)
+    if not _rate_limit(f"pdf_alb:{session.get('user_id') or request.remote_addr}",
+                       max_req=10, window_sec=60):
+        return _text("Massa impressions seguides. Espera un minut i torna-ho a provar.", 429)
+    nums = [n.strip() for n in (request.args.get("nums") or "").split(",")]
+    nom = {d: (nums[i] if len(nums) == len(ids) and nums[i].isdigit() else str(d))
+           for i, d in enumerate(ids)}
+
+    def un(doc_entry):
+        try:
+            return _crystal_pdf(url, doc_entry)
+        except _ErrorPdf as e:
+            return e
+
+    with ThreadPoolExecutor(max_workers=2) as ex:   # el MaxJobs del servei
+        resultats = list(ex.map(un, ids))           # en l'ordre demanat
+
+    errors = {d: r for d, r in zip(ids, resultats) if isinstance(r, _ErrorPdf)}
+    if errors:
+        if all(str(e) == _NO_RESPON_PDF for e in errors.values()):
+            return _text(_NO_RESPON_PDF, 503)
+        return _text("No s'han pogut generar aquests albarans: "
+                     + ", ".join(nom[d] for d in errors)
+                     + ".\nTreu-los de la selecció o torna-ho a provar; si continua, avisa administració.",
+                     503)
+
+    writer = PdfWriter()
+    try:
+        for contingut, _ in resultats:
+            writer.append(PdfReader(BytesIO(contingut)))
+        sortida = BytesIO()
+        writer.write(sortida)
+    except Exception:
+        log.exception("No s'han pogut unir els PDF dels albarans %s", ids)
+        return _text("No s'han pogut unir els albarans en un sol PDF. Avisa administració.", 500)
+
+    docnums = [num for _, num in resultats]
+    audit.log("imprimir_albarans", target=f"{len(docnums)} albarans",
+              detall={"docnums": docnums, "docentries": ids})
+    return _resposta_pdf(sortida.getvalue(), f"Albarans_{date.today():%Y%m%d}_{len(docnums)}.pdf")
 
 
 @app.route("/api/albarans/<int:doc_entry>/cancelar", methods=["POST"])

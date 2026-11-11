@@ -135,6 +135,102 @@ def test_pdf_docentry_no_numeric_no_arriba_al_servei(client, monkeypatch):
     assert crides == []
 
 
+# --- Diversos albarans en un sol PDF --------------------------------------
+def _pdf_real(amplada: int) -> bytes:
+    """PDF d'una pàgina en blanc; l'amplada identifica l'albarà."""
+    from io import BytesIO
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    w.add_blank_page(width=amplada, height=842)
+    b = BytesIO()
+    w.write(b)
+    return b.getvalue()
+
+
+def _mock_per_albara(monkeypatch, app_module, respostes):
+    """`respostes`: {docentry: _Resp | Exception}."""
+    crides = []
+
+    def fals(url, params=None, headers=None, timeout=None):
+        crides.append(params["docentry"])
+        r = respostes[params["docentry"]]
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(app_module.requests, "get", fals)
+    return crides
+
+
+def test_pdf_diversos_un_sol_pdf_en_ordre(client, monkeypatch):
+    from io import BytesIO
+    from pypdf import PdfReader
+    c, app_module, auditats = client
+    crides = _mock_per_albara(monkeypatch, app_module, {
+        15: _Resp(content=_pdf_real(300), docnum="26700015"),
+        12: _Resp(content=_pdf_real(400), docnum="26700012"),
+        18: _Resp(content=_pdf_real(500), docnum="26700018"),
+    })
+    r = c.get("/albarans/pdf?ids=15,12,18,12")
+    assert r.status_code == 200
+    assert r.headers["Content-Type"] == "application/pdf"
+    assert r.headers["Content-Disposition"].startswith('inline; filename="Albarans_')
+    assert r.headers["Content-Disposition"].endswith('_3.pdf"')
+    assert r.headers["Cache-Control"] == "no-store"
+    pagines = PdfReader(BytesIO(r.data)).pages
+    assert [round(float(p.mediabox.width)) for p in pagines] == [300, 400, 500]
+    assert sorted(crides) == [12, 15, 18]           # el 12 repetit, un cop
+    assert auditats == [("imprimir_albarans", "3 albarans",
+                         {"docnums": ["26700015", "26700012", "26700018"],
+                          "docentries": [15, 12, 18]})]
+
+
+def test_pdf_diversos_si_un_falla_diu_quin(client, monkeypatch):
+    c, app_module, auditats = client
+    _mock_per_albara(monkeypatch, app_module, {
+        12: _Resp(content=_pdf_real(400)),
+        15: _Resp(404, b"no existeix", "text/plain", None),
+    })
+    r = c.get("/albarans/pdf?ids=12,15&nums=26700012,26700015")
+    assert r.status_code == 503
+    text = r.get_data(as_text=True)
+    assert "26700015" in text and "26700012" not in text
+    assert auditats == []
+
+
+def test_pdf_diversos_servei_caigut(client, monkeypatch):
+    c, app_module, auditats = client
+    _mock_get(monkeypatch, app_module, requests.ConnectionError("refused"))
+    r = c.get("/albarans/pdf?ids=12,15")
+    assert r.status_code == 503
+    assert "no respon" in r.get_data(as_text=True)
+    assert auditats == []
+
+
+@pytest.mark.parametrize("qs", ["", "ids=", "ids=12,abc", "ids=12,-3", "ids=0",
+                                "ids=" + ",".join(str(i) for i in range(1, 42))])
+def test_pdf_diversos_valida(client, monkeypatch, qs):
+    c, app_module, _ = client
+    crides = _mock_get(monkeypatch, app_module, _Resp())
+    assert c.get(f"/albarans/pdf?{qs}").status_code == 400
+    assert crides == []
+
+
+def test_pdf_diversos_40_es_el_maxim(client, monkeypatch):
+    c, app_module, _ = client
+    _mock_get(monkeypatch, app_module, _Resp(content=_pdf_real(300)))
+    r = c.get("/albarans/pdf?ids=" + ",".join(str(i) for i in range(1, 41)))
+    assert r.status_code == 200
+
+
+def test_pdf_diversos_apagat(client, monkeypatch):
+    c, app_module, _ = client
+    monkeypatch.setenv("CRYSTAL_PDF_URL", "")
+    crides = _mock_get(monkeypatch, app_module, _Resp())
+    assert c.get("/albarans/pdf?ids=12").status_code == 404
+    assert crides == []
+
+
 # --- Llista ---------------------------------------------------------------
 def test_api_albarans(client, monkeypatch):
     c, app_module, _ = client
@@ -199,7 +295,7 @@ def amb_rol(client, monkeypatch):
 
 
 @pytest.mark.parametrize("url", ["/albarans", "/api/albarans?desde=2026-11-09&fins=2026-11-09",
-                                 "/albarans/148/pdf"])
+                                 "/albarans/148/pdf", "/albarans/pdf?ids=148"])
 def test_magatzem_no_hi_te_acces(amb_rol, url):
     assert amb_rol("magatzem").get(url).status_code == 403
 

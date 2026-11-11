@@ -205,6 +205,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
 | `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |
 | `GET` | `/albarans/<docentry>/pdf` | admin, oficina | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
+| `GET` | `/albarans/pdf?ids=…&nums=…` | admin, oficina | diversos albarans (màx. 40) en un sol PDF, en l'ordre demanat; 2 peticions alhora a `crystal-pdf` (el seu `MaxJobs`) i unió amb `pypdf`; si en falla algun, 503 amb els números; 10/min per usuari; audit `imprimir_albarans` |
 | `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina | CSRF; `{"motiu"}` obligatori; només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
