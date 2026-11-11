@@ -134,8 +134,10 @@ def _casos_pistolejat() -> list[dict]:
         ids, incloure_tancades=True)["comandes"]})
     return ([{"carregues": ids}, {"carregues": []}, {"carregues": [999999]},
              {"carregues": ids[:3] * 2},
-             {"carregues": ids, "incloure_tancades": True}]
+             {"carregues": ids, "incloure_tancades": True},
+             {"carregues": ids, "amb_lots": True}]
             + [{"carregues": [i]} for i in amb_comandes]
+            + [{"carregues": [i], "amb_lots": True} for i in amb_comandes]
             + [{"carregues": [i], "incloure_tancades": True} for i in tancades])
 
 

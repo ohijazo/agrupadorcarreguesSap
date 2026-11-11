@@ -200,7 +200,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/` | admin, oficina | (magatzem → redirigit a `/magatzem`) |
 | `GET` | `/calendari` | tots auth | |
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
-| `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies; capçaleres sense derivats (`llistar_carregues(derivats=False)`); cache de 8 s per (dates, tots); temps per part al log (`pendents: … ms`) |
+| `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies; capçaleres sense derivats (`llistar_carregues(derivats=False)`); cache de 8 s per (dates, tots); temps per part al log (`pendents: … ms`); cada línia porta `lots` (`obtenir_dades_pistolejat(amb_lots=True)`: `@SEIOPIC.U_MdAbsEntry` → `OBTN.DistNumber`, sense els d'albarans cancel·lats) |
 | `GET` | `/api/pistolejat/carregues?ids=…` | tots auth | % pistolejat de cada càrrega sencera (màx. 300; `dades.pistolejat.progres_per_carrega`); la pàgina principal el llegeix cada 30 s; cache de 8 s |
 | `GET` | `/api/agrupacions/<id>/pistolejat` | tots auth | progrés de la preparació segons el pistolejat de l'SGA; desa els fets a `productes_preparats` |
 | `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |

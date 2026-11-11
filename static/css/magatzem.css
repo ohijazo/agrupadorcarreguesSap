@@ -987,6 +987,19 @@
     border-left-width: 8px;
     border-radius: 10px;
 }
+/* Lots pistolejats d'una línia: xips amb el número de lot ben llegible. */
+.pend-lots { list-style: none; display: flex; flex-wrap: wrap; gap: .3rem; margin: .35rem 0 0; padding: 0; }
+.pend-lot {
+    padding: .1rem .5rem;
+    font-size: .85rem;
+    color: #744210;
+    background: #fffaf0;
+    border: 1px solid #f6ad55;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.pend-lot.is-albara { color: #22543d; background: #f0fff4; border-color: #9ae6b4; }
+.pend-lot-num { font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .pend-linia.is-pendent { border-left-color: #c53030; }
 .pend-linia.is-parcial { border-left-color: #d69e2e; background: #fffbeb; }
 .pend-linia.is-complet { border-left-color: #38a169; background: #f0fff4; }

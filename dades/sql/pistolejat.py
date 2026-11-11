@@ -12,13 +12,18 @@ def _trossos(valors: list[int]):
         yield valors[n:n + _TROS]
 
 
-def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False) -> dict:
+def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False,
+                             amb_lots: bool = False) -> dict:
     """Linies obertes de les comandes obertes d'aquestes carregues, les
     lectures de `@SEIOPIC` encara sense albara, i l'ultim estat de cada comanda.
 
     `carregues` son DocEntry de `@SEI_ORDENCARGA`. Amb `incloure_tancades`
     tambe hi surten les comandes i linies tancades (no les cancel·lades): una
     linia amb albara te `kg_oberts = 0` i per tant es dona per feta.
+
+    Amb `amb_lots` hi ha tambe `lots`: els lots pistolejats de cada linia
+    (amb albara o sense; no els d'albarans cancel·lats), per a "Preparacio de
+    comanda". Es una lectura mes de `@SEIOPIC`: nomes qui la necessita.
     """
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
@@ -27,6 +32,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     comandes: dict[int, dict] = {}
     pistolejats: list[dict] = []
     cancelats: list[dict] = []
+    lots: list[dict] = []
     estats: dict[int, str] = {}
 
     conn = connectar()
@@ -120,6 +126,34 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "kg": round(float(r.kg or 0), 6),
                 })
 
+            # Lots (U_ManagedBy 10000044 = per lots, OBTN). Les lectures d'un
+            # albara cancel·lat no hi son: ja surten a l'avis de cancel·lat.
+            if amb_lots:
+                for r in conn.execute(f"""
+                    SELECT p.U_BaseEntry AS comanda, p.U_BaseLine AS linia,
+                           RTRIM(b.DistNumber) AS lot,
+                           CASE WHEN p.U_TargetEntry IS NULL THEN 0 ELSE 1 END AS albara,
+                           SUM(p.U_Quantity) AS sacs, SUM(p.U_InvQty) AS kg
+                    FROM   [@SEIOPIC] p WITH (NOLOCK)
+                    JOIN   OBTN b WITH (NOLOCK) ON b.AbsEntry = p.U_MdAbsEntry
+                    LEFT   JOIN ODLN d WITH (NOLOCK)
+                           ON d.DocEntry = p.U_TargetEntry AND p.U_TargetType = 15
+                    WHERE  p.U_BaseObject = 17
+                      AND  p.U_ManagedBy = 10000044
+                      AND  ISNULL(d.CANCELED, 'N') <> 'Y'
+                      AND  p.U_BaseEntry IN ({ph})
+                    GROUP  BY p.U_BaseEntry, p.U_BaseLine, b.DistNumber,
+                              CASE WHEN p.U_TargetEntry IS NULL THEN 0 ELSE 1 END
+                """, *tros).fetchall():
+                    lots.append({
+                        "comanda": int(r.comanda),
+                        "linia": int(r.linia),
+                        "lot": r.lot or "",
+                        "albara": bool(r.albara),
+                        "sacs": round(float(r.sacs or 0), 6),
+                        "kg": round(float(r.kg or 0), 6),
+                    })
+
             # Ultim estat = la fila amb el Code mes alt (autoincremental). Code
             # es text: s'ordena com a numero ("10" despres de "9"), com fa el
             # Service Layer, i en una sola passada (sense subconsulta per fila).
@@ -142,4 +176,6 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         "pistolejats": sorted(pistolejats, key=lambda p: (p["comanda"], p["linia"])),
         "pistolejats_cancelats": sorted(cancelats, key=lambda p: (p["comanda"], p["linia"], p["albara"])),
         "estats": estats,
+        **({"lots": sorted(lots, key=lambda p: (p["comanda"], p["linia"], p["albara"], p["lot"]))}
+           if amb_lots else {}),
     }

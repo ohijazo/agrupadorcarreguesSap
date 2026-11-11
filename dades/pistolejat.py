@@ -145,6 +145,7 @@ def construir(
     pist = _suma_pistolejats(dades)
     canc = _suma_cancelats(dades)
     estats = dades.get("estats") or {}
+    lots = _lots_per_linia(dades)
 
     per_carrega: dict[int, list[dict]] = {}
     for c in dades.get("comandes") or []:
@@ -153,6 +154,8 @@ def construir(
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
             lc = _linia(l, pist.get(clau))
             lc["cancelat"] = _avis_cancelat(canc.get(clau))
+            if "lots" in dades:
+                lc["lots"] = lots.get(clau, [])
             linies.append(lc)
         if nomes_pendents:
             linies = [l for l in linies if l["estat"] != ESTAT_COMPLET]
@@ -198,6 +201,19 @@ def construir(
                             x["hora_sortida"] or "99:99", x["docentry"]))
     totes = [l for c in out for cm in c["comandes"] for l in cm["linies"]]
     return {"carregues": out, "totals": _totals(totes)}
+
+
+def _lots_per_linia(dades: dict) -> dict[tuple[int, int], list[dict]]:
+    """Els lots pistolejats de cada linia ({lot, kg, sacs, albara}), si el
+    backend els ha llegit (`amb_lots`): primer els que ja tenen albara."""
+    out: dict[tuple[int, int], list[dict]] = {}
+    for p in dades.get("lots") or []:
+        out.setdefault((int(p["comanda"]), int(p["linia"])), []).append(
+            {"lot": p["lot"], "kg": round(float(p["kg"]), 3),
+             "sacs": round(float(p["sacs"]), 2), "albara": bool(p["albara"])})
+    for v in out.values():
+        v.sort(key=lambda x: (not x["albara"], x["lot"]))
+    return out
 
 
 ESTAT_SENSE_DADES = "sense_dades"

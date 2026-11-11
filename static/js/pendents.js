@@ -56,6 +56,23 @@ function quantitat(l, camp) {
     return `${fmtKg.format(l[`kg_${camp}`])} kg${l.granel ? " granel" : ""}`;
 }
 
+// Lots pistolejats de la línia (amb albarà o encara sense). En sacs si la
+// línia en té (els sacs que l'operari ha entrat a l'SGA), si no en kg.
+function pintaLots(l) {
+    if (!l.lots || !l.lots.length) return "";
+    const ambSacs = l.sacs_oberts != null && !l.granel;
+    const xips = l.lots.map(x => {
+        const q = ambSacs
+            ? `${fmtSacs.format(x.sacs)} ${l.unitat && l.unitat !== "UNI" ? "sacs" : "u."}`
+            : `${fmtKg.format(x.kg)} kg`;
+        const tip = x.albara ? "Ja és a l'albarà" : "Pistolejat, encara sense albarà";
+        return `<li class="pend-lot${x.albara ? " is-albara" : ""}" title="${tip}">
+                    <span class="pend-lot-num">${escP(x.lot)}</span> · ${escP(q)}${x.albara ? " · albarà" : ""}
+                </li>`;
+    }).join("");
+    return `<ul class="pend-lots" aria-label="Lots pistolejats">${xips}</ul>`;
+}
+
 function pintaLinia(l) {
     const fet = l.kg_oberts > 0 ? Math.min(100, Math.round(100 * l.kg_pistolejats / l.kg_oberts)) : 100;
     // Els kg només diuen alguna cosa als sacs; en unitats (palets) són soroll.
@@ -65,6 +82,7 @@ function pintaLinia(l) {
             <div class="pend-art">
                 <div class="pend-art-descrip">${escP(l.art_descrip)}</div>
                 <div class="pend-art-codi">${escP(l.art_codi)}</div>
+                ${pintaLots(l)}
                 ${l.cancelat ? `<div class="avis-cancelat" role="note">⚠ ${fmtKg.format(l.cancelat.kg)} kg ja pistolejats per a l'albarà ${escP((l.cancelat.albarans || []).join(", "))}, cancel·lat. Poden ser al palet: torna'ls a pistolejar a l'SGA.</div>` : ""}
             </div>
             <div class="pend-qtat">

@@ -161,7 +161,7 @@ def llistar_pendents_pistolejar(desde: str, fins: str, nomes_pendents: bool = Tr
     carregues = llistar_carregues(desde, fins, limit=1000, derivats=False)["items"]
     t1 = time.monotonic()
     ids = [int(c["car_numero"]) for c in carregues if str(c.get("car_numero", "")).isdigit()]
-    dades = obtenir_dades_pistolejat(ids)
+    dades = obtenir_dades_pistolejat(ids, amb_lots=True)
     t2 = time.monotonic()
     r = _pistolejat.construir(carregues, dades, nomes_pendents)
     _log.info("pendents: %d carregues · capcaleres %d ms · pistolejat %d ms · calcul %d ms",

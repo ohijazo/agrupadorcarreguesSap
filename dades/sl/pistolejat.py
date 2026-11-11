@@ -20,9 +20,12 @@ PISTOLEJATS = "U_SEIOPIC"
 ESTATS = "U_SEIESTATSCOM"
 
 
-def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False) -> dict:
+def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False,
+                             amb_lots: bool = False) -> dict:
     """Vegeu la versio SQL. Una crida per tros de 40 carregues a `Orders`, i
-    una per tros de 40 comandes a cadascuna de les dues UDT."""
+    una per tros de 40 comandes a cadascuna de les dues UDT. Amb `amb_lots`,
+    les lectures porten el lot (`U_MdAbsEntry`) i despres es demana el numero
+    de lot a `BatchNumberDetails`."""
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
         return {"comandes": [], "pistolejats": [], "pistolejats_cancelats": [], "estats": {}}
@@ -83,15 +86,28 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     docs = sorted(comandes)
     sumes: dict[tuple[int, int], dict] = {}
     amb_albara: dict[tuple[int, int, int], dict] = {}
+    # (comanda, linia, AbsEntry del lot, albara o None) -> sumes; nomes amb_lots.
+    per_lot: dict[tuple, dict] = {}
+    camps_lot = ",U_ManagedBy,U_MdAbsEntry" if amb_lots else ""
+
+    def suma_lot(p, albara):
+        if not amb_lots or p.get("U_ManagedBy") != 10000044 or p.get("U_MdAbsEntry") is None:
+            return
+        acc = per_lot.setdefault((int(p["U_BaseEntry"]), int(p["U_BaseLine"]),
+                                  int(p["U_MdAbsEntry"]), albara), {"sacs": 0.0, "kg": 0.0})
+        acc["sacs"] += float(p.get("U_Quantity") or 0)
+        acc["kg"] += float(p.get("U_InvQty") or 0)
+
     estats: dict[int, str] = {}
     ultim_code: dict[int, int] = {}
     for tros in od.trossos(docs):
         for p in c.tot(
             PISTOLEJATS,
-            select="U_BaseEntry,U_BaseLine,U_Quantity,U_InvQty",
+            select="U_BaseEntry,U_BaseLine,U_Quantity,U_InvQty" + camps_lot,
             filtre=od.i("U_BaseObject eq 17", "U_TargetEntry eq null",
                         od.qualsevol_num("U_BaseEntry", tros)),
         ):
+            suma_lot(p, None)
             acc = sumes.setdefault((int(p["U_BaseEntry"]), int(p["U_BaseLine"])),
                                    {"sacs": 0.0, "kg": 0.0})
             acc["sacs"] += float(p.get("U_Quantity") or 0)
@@ -101,10 +117,11 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         # estan cancel·lats (el Service Layer no pot fer el JOIN amb ODLN).
         for p in c.tot(
             PISTOLEJATS,
-            select="U_BaseEntry,U_BaseLine,U_TargetEntry,U_Quantity,U_InvQty",
+            select="U_BaseEntry,U_BaseLine,U_TargetEntry,U_Quantity,U_InvQty" + camps_lot,
             filtre=od.i("U_BaseObject eq 17", "U_TargetType eq 15", "U_TargetEntry ne null",
                         od.qualsevol_num("U_BaseEntry", tros)),
         ):
+            suma_lot(p, int(p["U_TargetEntry"]))
             acc = amb_albara.setdefault(
                 (int(p["U_BaseEntry"]), int(p["U_BaseLine"]), int(p["U_TargetEntry"])),
                 {"sacs": 0.0, "kg": 0.0})
@@ -142,9 +159,34 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         for (com, lin, alb), v in sorted(amb_albara.items())
         if alb in cancelats_docnum
     ]
-    return {
+    out = {
         "comandes": [comandes[d] for d in docs],
         "pistolejats": pistolejats,
         "pistolejats_cancelats": pistolejats_cancelats,
         "estats": estats,
     }
+    if amb_lots:
+        out["lots"] = _lots(c, per_lot, cancelats_docnum)
+    return out
+
+
+def _lots(c, per_lot: dict, cancelats_docnum: dict) -> list[dict]:
+    """Lots per linia, com el SQL: sense els d'albarans cancel·lats i amb el
+    numero de lot (`BatchNumberDetails.Batch` = `OBTN.DistNumber`)."""
+    noms: dict[int, str] = {}
+    for tros in od.trossos(sorted({k[2] for k in per_lot})):
+        for b in c.tot("BatchNumberDetails", select="DocEntry,Batch",
+                       filtre=od.qualsevol_num("DocEntry", tros)):
+            noms[int(b["DocEntry"])] = (b.get("Batch") or "").strip()
+    sumes: dict[tuple, dict] = {}
+    for (com, lin, abs_, alb), v in per_lot.items():
+        if alb in cancelats_docnum or abs_ not in noms:
+            continue
+        acc = sumes.setdefault((com, lin, alb is not None, noms[abs_]), {"sacs": 0.0, "kg": 0.0})
+        acc["sacs"] += v["sacs"]
+        acc["kg"] += v["kg"]
+    return [
+        {"comanda": com, "linia": lin, "lot": lot, "albara": alb,
+         "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
+        for (com, lin, alb, lot), v in sorted(sumes.items())
+    ]

@@ -375,7 +375,7 @@ def test_pendents_demana_capcaleres_sense_derivats(monkeypatch):
         return {"items": [_carrega(87)]}
 
     monkeypatch.setattr(cc, "llistar_carregues", llistar)
-    monkeypatch.setattr(cc, "obtenir_dades_pistolejat", lambda ids: _dades([_linia(0)]))
+    monkeypatch.setattr(cc, "obtenir_dades_pistolejat", lambda ids, **kw: _dades([_linia(0)]))
     r = cc.llistar_pendents_pistolejar("2026-10-28", "2026-10-28")
     assert rebut == {"limit": 1000, "derivats": False}
     assert r["carregues"][0]["docentry"] == 87
@@ -441,3 +441,22 @@ def test_pistolejat_carregues_no_es_public(client, monkeypatch):
     monkeypatch.setattr(app_module, "progres_carregues", lambda ids: pytest.fail("sense sessio"))
     r = c.get("/api/pistolejat/carregues?ids=87")
     assert r.status_code in (302, 401)
+
+
+# --- Lots pistolejats a "Preparacio de comanda" ----------------------------
+def test_lots_per_linia_primer_els_d_albara():
+    dades = _dades([_linia(0), _linia(1)])
+    dades["lots"] = [
+        {"comanda": 279, "linia": 0, "lot": "26010320", "albara": False, "sacs": 10, "kg": 250},
+        {"comanda": 279, "linia": 0, "lot": "26010318", "albara": True, "sacs": 20, "kg": 500},
+    ]
+    r = calc.construir([_carrega(87)], dades, nomes_pendents=False)
+    linies = r["carregues"][0]["comandes"][0]["linies"]
+    assert [x["lot"] for x in linies[0]["lots"]] == ["26010318", "26010320"]
+    assert linies[0]["lots"][0] == {"lot": "26010318", "kg": 500, "sacs": 20, "albara": True}
+    assert linies[1]["lots"] == []
+
+
+def test_sense_lots_llegits_la_linia_no_en_porta():
+    r = calc.construir([_carrega(87)], _dades([_linia(0)]))
+    assert "lots" not in r["carregues"][0]["comandes"][0]["linies"][0]
