@@ -160,7 +160,7 @@ Vanilla JS sense framework. Tres "modes":
   - Dades de `/api/agrupacions` → `llistar_control`: estat, % pistolejat, temps de preparació, plantilles i origen.
   - Targetes grans per a la tablet, amb filtre per estat (per defecte, les actives) i "només d'avui". Refresc cada 30 s.
   - Accions: **Preparació**, per a tothom. Per a admin i oficina també **Reimprimir** (`/?agrupacio=<id>`: la pàgina principal fa la cerca i després obre el resultat), **Finalitza / Reobrir** i **Elimina**.
-  - "Pendents del dia" (`/magatzem/pendents`) és una altra cosa: totes les càrregues que surten, agrupades o no, amb l'etiqueta de la seva agrupació o "Sense agrupar".
+  - "Preparació de comanda" (`/magatzem/pendents`) és una altra cosa: totes les càrregues que surten, agrupades o no, amb l'etiqueta de la seva agrupació o "Sense agrupar".
 
 - **Etiquetes de palet (`/etiquetes`, `etiquetes.py`, `static/js/etiquetes.js`, `static/css/etiquetes.css`)**: substitueixen l'etiqueta de Word del magatzem. N'hi ha una per palet físic, en A5 apaïsat (dues per A4).
   - Els palets surten del motor: `ResultatAgrupacio.palets`, un per embalatge no propi, amb la comanda i el total de sacs. No es desen amb l'agrupació.
@@ -200,7 +200,8 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/` | admin, oficina | (magatzem → redirigit a `/magatzem`) |
 | `GET` | `/calendari` | tots auth | |
 | `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
-| `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies |
+| `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies; capçaleres sense derivats (`llistar_carregues(derivats=False)`); cache de 8 s per (dates, tots); temps per part al log (`pendents: … ms`) |
+| `GET` | `/api/pistolejat/carregues?ids=…` | tots auth | % pistolejat de cada càrrega sencera (màx. 300; `dades.pistolejat.progres_per_carrega`); la pàgina principal el llegeix cada 30 s; cache de 8 s |
 | `GET` | `/api/agrupacions/<id>/pistolejat` | tots auth | progrés de la preparació segons el pistolejat de l'SGA; desa els fets a `productes_preparats` |
 | `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
 | `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |

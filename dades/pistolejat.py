@@ -256,6 +256,30 @@ def _tanca(acc: dict | None) -> dict:
     }
 
 
+def progres_per_carrega(dades: dict) -> dict[int, dict]:
+    """Progres del pistolejat de cada carrega sencera (pagina principal).
+
+    `dades`: `obtenir_dades_pistolejat(ids, incloure_tancades=True)`. Les
+    linies amb albara compten com a fetes, aixi que el % es sobre tota la
+    carrega. Retorna {docentry_carrega: {estat, percent, kg_total, kg_fets}};
+    les carregues sense cap linia no hi surten. El % no arriba a 100 mentre
+    falti algun kg (l'arrodoniment no ho ha d'amagar).
+    """
+    pist = _suma_pistolejats(dades)
+    accs: dict[int, dict] = {}
+    for c in dades.get("comandes") or []:
+        for l in c.get("linies") or []:
+            clau = (int(c["docentry"]), int(l.get("linia") or 0))
+            _acumula(accs.setdefault(int(c["carrega"]), _nou_acc()), l, _linia(l, pist.get(clau)))
+    out: dict[int, dict] = {}
+    for car, acc in accs.items():
+        t = _tanca(acc)
+        percent = 100 if t["estat"] == ESTAT_COMPLET else min(t["percent"], 99)
+        out[car] = {"estat": t["estat"], "percent": percent,
+                    "kg_total": t["kg_total"], "kg_fets": t["kg_fets"]}
+    return out
+
+
 def _docentry_carrega(carrega_id) -> int | None:
     """`SAP/{Series}/{DocEntry}` -> DocEntry."""
     try:

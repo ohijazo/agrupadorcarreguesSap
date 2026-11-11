@@ -264,7 +264,7 @@ let magState = {
 
 const INTERACCIO_MS = 1200;
 
-// Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Pendents del dia").
+// Cada refresc va a SAP: cada 15 s n'hi ha prou (com a "Preparació de comanda").
 const POLL_PREP_MS = 15_000;
 
 // Estat d'EXPEDICIÓ (pistolejat), no de producció.

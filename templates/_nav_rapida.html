@@ -2,7 +2,7 @@
     Pensats per a la tablet del magatzem: icona a sobre, nom a sota.
     Mateixa visibilitat per rol que el menú d'usuari (_user_menu.html).
     "Agrupacions" és l'única llista de les agrupacions desades (preparar-les
-    i, per a l'oficina, reimprimir, tancar o eliminar). "Pendents del dia" és
+    i, per a l'oficina, reimprimir, tancar o eliminar). "Preparació de comanda" és
     una altra cosa: totes les càrregues que surten, agrupades o no (n'hi ha
     que es preparen sense agrupar). -#}
 {% set rol = current_user.rol if current_user else None %}
@@ -22,7 +22,7 @@
     </a>
     <a href="/magatzem/pendents" class="nav-tile"{{ actiu('/magatzem/pendents') }}>
         {% include '_icona_pda.html' %}
-        <span>Pendents del dia</span>
+        <span>Preparació de comanda</span>
     </a>
     {% if oficina and (pdf_albarans or cancelar_albarans) %}
     <a href="/albarans" class="nav-tile"{{ actiu('/albarans') }}>

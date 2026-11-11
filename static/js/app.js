@@ -82,7 +82,16 @@ const state = {
     agrupacionsVersion: null,
     agrupacionsPollId: null,
     agrupacionsRefreshInFlight: false,
+    // % pistolejat a l'SGA de cada càrrega pendent (agrupada o no), per
+    // DocEntry: {estat, percent, kg_total, kg_fets}. Ve de
+    // /api/pistolejat/carregues, a part de la llista perquè va a SAP.
+    pistolejat: new Map(),
+    pistolejatInFlight: false,
 };
+
+// Cada quant es torna a llegir el pistolejat de les càrregues de la llista.
+const PISTOLEJAT_POLL_MS = 30_000;
+const PISTOLEJAT_MAX_IDS = 300;   // el mateix límit que el servidor
 
 const PLANTILLA_MIN_COMPATIBLES = 2;  // llindar per mostrar el banner
 
@@ -551,6 +560,7 @@ async function buscarCarregues(append = false) {
         if (!append) state.plantillesTancades.clear();
         renderLlistaCarregues();
         actualitzarBannerPlantilles();
+        refrescaPistolejat();
         if (!append) aplicaFocusPendent();
         // Prefetch del detall de les primeres N visibles en idle (només si
         // és cerca nova, no append: l'append típicament afegeix files fora
@@ -686,6 +696,19 @@ function badgeAgrupacioHTML(estat) {
     return ` <button type="button" class="${cls}" title="${escapeHtml(tip)}" data-act="obrir-agrupacio" data-id="${escapeHtml(estat.info.id)}">${txt}</button>`;
 }
 
+// Etiqueta del pistolejat a l'SGA (expedició) d'una càrrega pendent, estigui
+// agrupada o no. Res si encara no s'ha pistolejat res.
+function badgePistolejatHTML(c) {
+    const p = state.pistolejat.get(String(c.car_numero));
+    if (!p || p.estat === "pendent" || p.estat === "sense_dades") return "";
+    const complet = p.estat === "complet";
+    const txt = complet ? "✓ Pistolejada" : `◐ ${p.percent}% pist.`;
+    const tip = complet
+        ? "L'SGA ja ha pistolejat (o fet l'albarà de) tota la càrrega"
+        : `Pistolejat a l'SGA: ${p.percent}% dels kg de la càrrega`;
+    return ` <span class="badge-pist${complet ? " badge-pist--done" : ""}" title="${escapeHtml(tip)}">${txt}</span>`;
+}
+
 function crearFilaCarrega(c) {
     const tr = document.createElement("tr");
     tr.dataset.carregaId = c.carrega_id;
@@ -718,7 +741,7 @@ function crearFilaCarrega(c) {
 
     const estat = estatAgrupacio(c);
     tr.insertAdjacentHTML("beforeend", `
-        <td data-col="carrega_id">${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}</td>
+        <td data-col="carrega_id">${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}${badgePistolejatHTML(c)}</td>
         <td data-col="car_descripcion" class="cell-truncate" title="${escapeHtml(c.car_descripcion)}">${escapeHtml(c.car_descripcion || "—")}</td>
         <td data-col="car_fecsalida" class="col-data">${escapeHtml(((fmtData(c.car_fecsalida || c.car_fecha) || "") + (c.car_fecsalida_hora ? " " + c.car_fecsalida_hora : "")) || "—")}</td>
         <td data-col="transportista" class="cell-truncate" title="${escapeHtml(c.transportista || c.tra_codi)}">${escapeHtml(c.transportista || c.tra_codi)}</td>
@@ -761,7 +784,7 @@ function actualitzaFilaCarrega(tr, c, idx) {
     // Refresca el badge d'agrupació (3a td) i la cel·la d'agrupació (última td)
     // — necessari perquè quan refresquem via polling, l'estat (n_preparats,
     // finalitzada) pot haver canviat i el badge "(4/15)" hauria de reflectir-ho.
-    const novaBadgeTd = `${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}`;
+    const novaBadgeTd = `${codiCarregaHTML(c.carrega_id)}${badgeAgrupacioHTML(estat)}${badgePistolejatHTML(c)}`;
     const novaAgrupTd = cellAgrupacioHTML(estat);
     const tdBadge = tr.children[2];
     const tdAgrup = tr.children[tr.children.length - 1];
@@ -2316,6 +2339,7 @@ async function refrescarLlistaSilenciosament() {
         state.paginacio.offset = items.length;
         renderLlistaCarregues();
         actualitzarBannerPlantilles();
+        refrescaPistolejat();
         // Refresc silenciós — l'usuari veu només el canvi de color/estat
         // a les files afectades (groc → ambar → verd).
     } catch { /* silent */ }
@@ -2324,14 +2348,42 @@ async function refrescarLlistaSilenciosament() {
     }
 }
 
+// % pistolejat de les càrregues pendents de la llista. Va a SAP (el servidor
+// ho reaprofita uns segons), així que no frena la cerca: es pinta quan arriba.
+async function refrescaPistolejat() {
+    if (state.pistolejatInFlight || document.hidden) return;
+    const ids = [...new Set(state.carregues
+        .filter(c => c.car_estat === 1 && /^\d+$/.test(String(c.car_numero)))
+        .map(c => String(c.car_numero)))].slice(0, PISTOLEJAT_MAX_IDS);
+    if (!ids.length) return;
+    state.pistolejatInFlight = true;
+    try {
+        const j = await fetchJson(`/api/pistolejat/carregues?ids=${ids.join(",")}`);
+        const nou = new Map(Object.entries(j.carregues || {}));
+        const canvia = nou.size !== state.pistolejat.size ||
+            [...nou].some(([k, v]) => {
+                const a = state.pistolejat.get(k);
+                return !a || a.estat !== v.estat || a.percent !== v.percent;
+            });
+        state.pistolejat = nou;
+        if (canvia) renderLlistaCarregues();
+    } catch { /* informatiu: si SAP no respon, la llista funciona igual */ }
+    finally {
+        state.pistolejatInFlight = false;
+    }
+}
+
 function iniciaPollingAgrupacions() {
     if (state.agrupacionsPollId) clearInterval(state.agrupacionsPollId);
     state.agrupacionsPollId = setInterval(comprovaVersionAgrupacions, 5000);
+    // El pistolejat no mou la versió de les agrupacions (i hi ha càrregues
+    // sense agrupar): es llegeix a part, cada 30 s amb la pestanya visible.
+    setInterval(refrescaPistolejat, PISTOLEJAT_POLL_MS);
     // Primera comprovació immediata per inicialitzar la versió de referència
     setTimeout(comprovaVersionAgrupacions, 300);
     // En tornar a la pestanya, comprovem un cop de seguida (sense esperar 5s)
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) comprovaVersionAgrupacions();
+        if (!document.hidden) { comprovaVersionAgrupacions(); refrescaPistolejat(); }
     });
 }
 

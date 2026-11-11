@@ -56,7 +56,7 @@ from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
     FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_dates,
     llistar_carregues, llistar_estats_carregues, llistar_pendents_pistolejar,
-    llistar_transportistes, resum_carrega,
+    llistar_transportistes, progres_carregues, resum_carrega,
 )
 from dades import backend as backend_dades  # noqa: E402
 # Power BI es queda a SQL directe a proposit: pagina fins a 5000 files i per
@@ -206,6 +206,9 @@ def secure_headers(resp):
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self'; "
         "img-src 'self' data:; "
+        # blob: per imprimir els albarans des d'un iframe amagat sense obrir
+        # cap pestanya (static/js/albarans.js).
+        "frame-src 'self' blob:; "
         "frame-ancestors 'self' http://comandes.agrienergia.local "
         "http://comandessap.agrienergia.local "
         # Transitori: mentre comandessap.agrienergia.local no resolgui al DNS,
@@ -659,21 +662,78 @@ def api_pendents_pistolejar():
     if (fins_d - desde_d).days > 31:
         return _err_validacio("El rang màxim és de 31 dies.")
     nomes_pendents = request.args.get("tots") != "1"
-    try:
-        r = llistar_pendents_pistolejar(
-            desde_d.isoformat(), fins_d.isoformat(), nomes_pendents=nomes_pendents)
-    except backend_dades.ERRORS_DADES:
-        log.exception("DB error a pendents de pistolejar")
-        return _err_db()
-    except Exception:
-        log.exception("pendents de pistolejar")
-        return _err_genèric()
-    _afegeix_agrupacio(r.get("carregues") or [])
+    clau = (desde_d.isoformat(), fins_d.isoformat(), nomes_pendents)
+    r = _cache_llegeix(_cache_pendents, clau)
+    if r is None:
+        try:
+            r = llistar_pendents_pistolejar(
+                desde_d.isoformat(), fins_d.isoformat(), nomes_pendents=nomes_pendents)
+        except backend_dades.ERRORS_DADES:
+            log.exception("DB error a pendents de pistolejar")
+            return _err_db()
+        except Exception:
+            log.exception("pendents de pistolejar")
+            return _err_genèric()
+        _afegeix_agrupacio(r.get("carregues") or [])
+        _cache_desa(_cache_pendents, clau, r)
     return jsonify(r)
 
 
+# Diverses tablets a "Preparacio de comanda" (i la pagina principal) refresquen
+# cada pocs segons: el resultat es reaprofita uns segons i SAP es consulta un
+# cop per finestra, no un cop per tablet. Es per proces (2 workers de Gunicorn).
+_CACHE_PISTOLEJAT_S = 8
+_cache_pendents: dict = {}
+_cache_pist_carregues: dict = {}
+_cache_pist_lock = Lock()
+
+
+def _cache_llegeix(cache: dict, clau):
+    with _cache_pist_lock:
+        hit = cache.get(clau)
+        return hit[1] if hit and time.monotonic() - hit[0] < _CACHE_PISTOLEJAT_S else None
+
+
+def _cache_desa(cache: dict, clau, valor) -> None:
+    ara = time.monotonic()
+    with _cache_pist_lock:
+        cache[clau] = (ara, valor)
+        for k in [k for k, (t, _) in cache.items() if ara - t > 10 * _CACHE_PISTOLEJAT_S]:
+            del cache[k]
+
+
+# Maxim de carregues per consulta del % pistolejat de la pagina principal.
+MAX_CARREGUES_PISTOLEJAT = 300
+
+
+@app.route("/api/pistolejat/carregues")
+@auth.requires_rol("admin", "oficina", "magatzem")
+def api_pistolejat_carregues():
+    """% pistolejat de cada carrega (?ids=DocEntry,...), agrupada o no, per a
+    la pagina principal: {docentry: {estat, percent, kg_total, kg_fets}}. Les
+    carregues sense comandes no hi surten."""
+    ids = _ids_url("ids")
+    if ids is None or len(ids) > MAX_CARREGUES_PISTOLEJAT:
+        return _err_validacio(f"Cal una llista de fins a {MAX_CARREGUES_PISTOLEJAT} càrregues.")
+    if not ids:
+        return jsonify({"carregues": {}})
+    clau = tuple(sorted(ids))
+    r = _cache_llegeix(_cache_pist_carregues, clau)
+    if r is None:
+        try:
+            r = {str(k): v for k, v in progres_carregues(list(clau)).items()}
+        except backend_dades.ERRORS_DADES:
+            log.exception("DB error al pistolejat de les carregues")
+            return _err_db()
+        except Exception:
+            log.exception("pistolejat de les carregues")
+            return _err_genèric()
+        _cache_desa(_cache_pist_carregues, clau, r)
+    return jsonify({"carregues": r})
+
+
 def _afegeix_agrupacio(carregues: list[dict]) -> None:
-    """A cada carrega de "Pendents del dia", l'agrupacio on es (la no
+    """A cada carrega de "Preparació de comanda", l'agrupacio on es (la no
     tancada mes recent) o None si no esta agrupada: hi ha carregues que es
     preparen sense agrupar. Si PostgreSQL falla no es posa la clau i la
     pantalla funciona igual, sense l'etiqueta."""

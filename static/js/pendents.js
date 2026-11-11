@@ -1,9 +1,11 @@
-// Pantalla "Pendents del dia" (tablet de magatzem): totes les càrregues que
+// Pantalla "Preparació de comanda" (tablet de magatzem): totes les càrregues que
 // surten, agrupades o no, amb el que queda per pistolejar de cada comanda. Només lectura:
-// llegeix /api/pistolejat/pendents i refresca cada 15 s amb la pestanya visible.
+// llegeix /api/pistolejat/pendents i refresca cada 10 s amb la pestanya visible.
 "use strict";
 
-const POLL_MS = 15_000;
+// Comptats des de l'INICI de la peticio anterior: si SAP triga, el refresc
+// no s'endarrereix. El servidor reaprofita el resultat uns segons entre tablets.
+const POLL_MS = 10_000;
 const RANG_KEY = "pend-rang";
 const TOTS_KEY = "pend-tots";
 
@@ -158,10 +160,14 @@ async function refrescar() {
     }
 }
 
-function programa() {
+function programa(espera = POLL_MS) {
     clearTimeout(pendState.timer);
     if (document.hidden) return;
-    pendState.timer = setTimeout(async () => { await refrescar(); programa(); }, POLL_MS);
+    pendState.timer = setTimeout(async () => {
+        const inici = Date.now();
+        await refrescar();
+        programa(Math.max(1000, POLL_MS - (Date.now() - inici)));
+    }, espera);
 }
 
 function marcaRang() {

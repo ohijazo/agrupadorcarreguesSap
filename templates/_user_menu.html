@@ -15,7 +15,7 @@
             <span aria-hidden="true">📦</span> Agrupacions
         </a>
         <a href="/magatzem/pendents" class="user-menu-item" role="menuitem">
-            {% include '_icona_pda.html' %} Pendents del dia
+            {% include '_icona_pda.html' %} Preparació de comanda
         </a>
         {% if current_user.rol in ('admin', 'oficina') %}
         {% if pdf_albarans or cancelar_albarans %}

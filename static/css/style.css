@@ -825,6 +825,26 @@ body {
     color: #fff;
 }
 
+/* Pistolejat a l'SGA (expedició) d'una càrrega, agrupada o no. Contorn i
+   no ple: és informatiu i no s'ha de confondre amb el botó d'agrupació. */
+.badge-pist {
+    display: inline-block;
+    margin-left: .4rem;
+    padding: .1rem .5rem;
+    border-radius: 10px;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    vertical-align: middle;
+    line-height: 1.5;
+    white-space: nowrap;
+    color: #1e4e8c;
+    background: #ebf4ff;
+    border: 1px solid #90b4e0;
+}
+.badge-pist--done { color: #22543d; background: #f0fff4; border-color: #68d391; }
+
 /* Cel·la dedicada "Agrupació" al final de la taula */
 .col-agrupacio { max-width: 240px; }
 .cell-agrupacio {

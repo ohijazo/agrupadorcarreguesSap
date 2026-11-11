@@ -1118,6 +1118,9 @@
 .alb-barra-n.is-massa { color: #9b2c2c; }
 .alb-barra .btn { min-height: 52px; }
 .alb-imprimeix { font-size: 1.05rem; padding-left: 1.4rem; padding-right: 1.4rem; }
+/* Iframe on es carrega el PDF per imprimir-lo sense obrir cap pestanya. No
+   pot ser display:none: alguns navegadors no hi carreguen el visor de PDF. */
+.alb-print-frame { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
 
 @media (max-width: 720px) {
     /* De la capçalera només queda la casella "Tots". */

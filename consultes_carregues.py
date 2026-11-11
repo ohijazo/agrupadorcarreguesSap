@@ -10,8 +10,10 @@ la documentacio de les variables `SAP_BACKEND*`.
 """
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import time
 
 # --- Carrega .env local -------------------------------------------------
 # Es manté aqui (i no nomes a app.py) perque hi ha scripts que importen
@@ -38,6 +40,8 @@ if _PREP and os.path.isdir(_PREP) and _PREP not in sys.path:
     sys.path.append(_PREP)
 
 from dades import backend as _b  # noqa: E402
+
+_log = logging.getLogger(__name__)
 from dades import pistolejat as _pistolejat  # noqa: E402
 from dades.sql import carregues as _sql  # noqa: E402
 from dades.sql import albarans as _sql_alb  # noqa: E402
@@ -151,6 +155,23 @@ def llistar_pendents_pistolejar(desde: str, fins: str, nomes_pendents: bool = Tr
     `desde` i `fins`. No es una funcio de dades mes, sino la composicio de dues
     que ja passen pel commutador (capcaleres i linies); el calcul es a
     `dades/pistolejat.py`."""
-    carregues = llistar_carregues(desde, fins, limit=1000)["items"]
+    t0 = time.monotonic()
+    # Nomes capcaleres: els 4 camps derivats no calen aqui i al SQL son 4
+    # subconsultes per carrega.
+    carregues = llistar_carregues(desde, fins, limit=1000, derivats=False)["items"]
+    t1 = time.monotonic()
     ids = [int(c["car_numero"]) for c in carregues if str(c.get("car_numero", "")).isdigit()]
-    return _pistolejat.construir(carregues, obtenir_dades_pistolejat(ids), nomes_pendents)
+    dades = obtenir_dades_pistolejat(ids)
+    t2 = time.monotonic()
+    r = _pistolejat.construir(carregues, dades, nomes_pendents)
+    _log.info("pendents: %d carregues · capcaleres %d ms · pistolejat %d ms · calcul %d ms",
+              len(ids), (t1 - t0) * 1000, (t2 - t1) * 1000, (time.monotonic() - t2) * 1000)
+    return r
+
+
+def progres_carregues(ids: list[int]) -> dict[int, dict]:
+    """% pistolejat de cada carrega sencera (DocEntry), agrupada o no. Per a
+    la pagina principal; vegeu `dades.pistolejat.progres_per_carrega`."""
+    if not ids:
+        return {}
+    return _pistolejat.progres_per_carrega(obtenir_dades_pistolejat(ids, incloure_tancades=True))

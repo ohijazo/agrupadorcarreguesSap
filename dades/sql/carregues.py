@@ -111,11 +111,17 @@ def llistar_carregues(
     art_codi: str | None = None,
     limit: int = 500,
     offset: int = 0,
+    derivats: bool = True,
 ) -> dict:
     """Llista carregues filtrant per rang de data i criteris addicionals.
 
     Retorna {"items": [...], "total": N, "limit": L, "offset": O}.
     Signatura i format identics als de la variant KAIS per no trencar l'app.
+
+    `derivats=False` es salta les 4 subconsultes per carrega (palletitzable,
+    is_granel, kg_total, num_comandes, que surten a False/0) i el COUNT
+    (`total` = files retornades): per a qui nomes vol les capcaleres, com
+    "Preparacio de comanda", que es refresca cada pocs segons.
     """
     desde_d = datetime.strptime(desde, "%Y-%m-%d").date()
     fins_d = datetime.strptime(fins, "%Y-%m-%d").date() + timedelta(days=1)
@@ -205,6 +211,10 @@ def llistar_carregues(
         ), 0)
     """
 
+    if not derivats:
+        exists_palletizable_sql = exists_granel_sql = "1 = 0"
+        kg_total_sql = num_comandes_sql = "0"
+
     sql_items = f"""
         SELECT h.DocEntry, h.DocNum, h.Series, h.CreateDate,
                h.U_SEINomCarg, h.U_SEIDataS, h.U_SEIHoraS,
@@ -236,8 +246,9 @@ def llistar_carregues(
 
     conn = connectar()
     try:
-        total = conn.execute(sql_count, *where_params).fetchone().n
         rows = conn.execute(sql_items, *where_params, offset, limit).fetchall()
+        total = (conn.execute(sql_count, *where_params).fetchone().n if derivats
+                 else offset + len(rows))
     finally:
         conn.close()
 

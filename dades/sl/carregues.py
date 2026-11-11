@@ -457,8 +457,12 @@ def llistar_carregues(
     art_codi: str | None = None,
     limit: int = 500,
     offset: int = 0,
+    derivats: bool = True,  # noqa: ARG001 - aqui els derivats surten de la taula d'agregats i son barats
 ) -> dict:
     """Llista carregues. Dues crides al Service Layer i una consulta a PostgreSQL.
+
+    `derivats` existeix per tenir la mateixa signatura que el SQL, on
+    `derivats=False` estalvia 4 subconsultes per carrega; aqui s'ignora.
 
     Tres coses no es poden fer al Service Layer i es fan aqui:
 

@@ -262,6 +262,22 @@ Després cal reiniciar l'app. Els albarans es gestionen des de **Gestió d'albar
 botó de PDF no surt; si a més la cancel·lació està apagada, tampoc no surt l'entrada
 del menú.
 
+### 9.1 Índexs proposats a SAP per al pistolejat (pendent d'aprovar)
+
+"Preparació de comanda" i la pàgina principal llegeixen el pistolejat cada pocs
+segons. Les taules d'usuari de l'SGA només tenen la clau `Code`, així que cada
+lectura recorre tot l'històric de `@SEIOPIC`, que creix cada dia. Els temps de
+cada part surten al journal (`pendents: N carregues · capcaleres X ms ·
+pistolejat Y ms`). Si `pistolejat` puja, cal proposar a SEIDOR / l'administrador
+de SAP (toquen la BD de SAP: **no els creem nosaltres**):
+
+```sql
+CREATE INDEX IX_SEIOPIC_BASE ON [@SEIOPIC] (U_BaseObject, U_BaseEntry)
+    INCLUDE (U_BaseLine, U_TargetEntry, U_TargetType, U_Quantity, U_InvQty);
+CREATE INDEX IX_SEIESTATSCOM_DOC ON [@SEIESTATSCOM] (U_SEIDocEntry);
+-- i ORDR(U_SEIOrdCargId) si encara no en té
+```
+
 ## 10. Cancel·lar albarans de l'SGA
 
 És la primera funció que **escriu a SAP**: fa `POST DeliveryNotes(N)/Cancel` pel

@@ -120,13 +120,18 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "kg": round(float(r.kg or 0), 6),
                 })
 
-            # Ultim estat = la fila amb el Code mes alt (autoincremental).
+            # Ultim estat = la fila amb el Code mes alt (autoincremental). Code
+            # es text: s'ordena com a numero ("10" despres de "9"), com fa el
+            # Service Layer, i en una sola passada (sense subconsulta per fila).
             for r in conn.execute(f"""
-                SELECT e.U_SEIDocEntry AS comanda, RTRIM(e.U_SEIEstado) AS estat
-                FROM   [@SEIESTATSCOM] e WITH (NOLOCK)
-                WHERE  e.Code = (SELECT MAX(e2.Code) FROM [@SEIESTATSCOM] e2 WITH (NOLOCK)
-                                 WHERE e2.U_SEIDocEntry = e.U_SEIDocEntry)
-                  AND  e.U_SEIDocEntry IN ({ph})
+                SELECT comanda, estat FROM (
+                    SELECT e.U_SEIDocEntry AS comanda, RTRIM(e.U_SEIEstado) AS estat,
+                           ROW_NUMBER() OVER (PARTITION BY e.U_SEIDocEntry
+                                              ORDER BY TRY_CAST(e.Code AS bigint) DESC, e.Code DESC) AS n
+                    FROM   [@SEIESTATSCOM] e WITH (NOLOCK)
+                    WHERE  e.U_SEIDocEntry IN ({ph})
+                ) x
+                WHERE n = 1
             """, *tros).fetchall():
                 estats[int(r.comanda)] = r.estat or ""
     finally:

@@ -120,6 +120,8 @@ def client(monkeypatch):
     monkeypatch.setenv("AUTH_ENABLED", "false")
     import app as app_module
     app_module._rate_buckets.clear()
+    app_module._cache_pendents.clear()
+    app_module._cache_pist_carregues.clear()
     with app_module.app.test_client() as c:
         yield c, app_module
 
@@ -158,7 +160,7 @@ def test_pagina_no_la_tapa_la_ruta_d_agrupacio(client, monkeypatch):
                         lambda _id: pytest.fail("ha entrat a magatzem_prep"))
     r = c.get("/magatzem/pendents")
     assert r.status_code == 200
-    assert b"Pendents del dia" in r.data
+    assert "Preparació de comanda" in r.get_data(as_text=True)
 
 
 # --- Progres d'una agrupacio (substitueix el checklist manual) -------------
@@ -276,7 +278,7 @@ def test_progres_amb_cache_reaprofita_uns_segons(monkeypatch):
     assert crides == ["a" * 32, "b" * 32, "a" * 32]
 
 
-# --- Pendents del dia: a quina agrupacio es cada carrega -----------------
+# --- Preparació de comanda: a quina agrupacio es cada carrega -----------------
 def test_pendents_diu_l_agrupacio_o_sense_agrupar(monkeypatch):
     import app as app_module
     index = {
@@ -347,3 +349,95 @@ def test_granel_a_la_preparacio_no_suma_sacs():
     l["granel"] = True   # propietat 5 encara que la unitat no sigui GRA
     p = calc.progres_agrupacio(_resultat(("01921", [87])), _dades([l]))["productes"]["01921"]
     assert p["sacs_total"] is None and p["kg_total"] == 10000
+
+
+# --- Cache de "Preparacio de comanda" --------------------------------------
+def test_endpoint_reaprofita_el_resultat_uns_segons(client, monkeypatch):
+    c, app_module = client
+    crides = []
+    monkeypatch.setattr(app_module, "llistar_pendents_pistolejar",
+                        lambda d, f, nomes_pendents=True: crides.append(1) or
+                        {"carregues": [], "totals": calc._totals([])})
+    url = "/api/pistolejat/pendents?desde=2026-10-28&fins=2026-10-29"
+    assert c.get(url).status_code == 200
+    assert c.get(url).status_code == 200
+    assert len(crides) == 1
+    assert c.get(url + "&tots=1").status_code == 200   # una altra clau
+    assert len(crides) == 2
+
+
+def test_pendents_demana_capcaleres_sense_derivats(monkeypatch):
+    import consultes_carregues as cc
+    rebut = {}
+
+    def llistar(desde, fins, **kw):
+        rebut.update(kw)
+        return {"items": [_carrega(87)]}
+
+    monkeypatch.setattr(cc, "llistar_carregues", llistar)
+    monkeypatch.setattr(cc, "obtenir_dades_pistolejat", lambda ids: _dades([_linia(0)]))
+    r = cc.llistar_pendents_pistolejar("2026-10-28", "2026-10-28")
+    assert rebut == {"limit": 1000, "derivats": False}
+    assert r["carregues"][0]["docentry"] == 87
+
+
+# --- % pistolejat per carrega (pagina principal) ---------------------------
+def test_progres_per_carrega_parcial_complet_i_amb_albara():
+    dades = {
+        "comandes": [
+            # 87: 1000 kg, 250 pistolejats -> 25%
+            {"docentry": 279, "docnum": 1, "carrega": 87, "cli_codi": "C1", "cli_nom": "",
+             "linies": [_linia(0)]},
+            # 98: una linia amb albara (oberta 0) i una de pistolejada sencera -> complet
+            {"docentry": 330, "docnum": 2, "carrega": 98, "cli_codi": "C2", "cli_nom": "",
+             "linies": [_linia(0, kg_oberts=0), _linia(1, kg=500, kg_oberts=500, sacs=20)]},
+            # 99: res -> pendent
+            {"docentry": 331, "docnum": 3, "carrega": 99, "cli_codi": "C3", "cli_nom": "",
+             "linies": [_linia(0)]},
+        ],
+        "pistolejats": [{"comanda": 279, "linia": 0, "sacs": 10, "kg": 250},
+                        {"comanda": 330, "linia": 1, "sacs": 20, "kg": 500}],
+        "estats": {},
+    }
+    r = calc.progres_per_carrega(dades)
+    assert r[87] == {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250}
+    assert r[98]["estat"] == "complet" and r[98]["percent"] == 100
+    assert r[99]["estat"] == "pendent" and r[99]["percent"] == 0
+
+
+def test_progres_per_carrega_no_arrodoneix_a_100_si_falta():
+    r = calc.progres_per_carrega(_dades([_linia(0)], [{"comanda": 279, "linia": 0, "sacs": 39.9, "kg": 998}]))
+    assert r[87]["estat"] == "parcial" and r[87]["percent"] == 99
+
+
+def test_endpoint_pistolejat_carregues(client, monkeypatch):
+    c, app_module = client
+    crides = []
+    monkeypatch.setattr(app_module, "progres_carregues",
+                        lambda ids: crides.append(ids) or {87: {"estat": "parcial", "percent": 25,
+                                                               "kg_total": 1000, "kg_fets": 250}})
+    r = c.get("/api/pistolejat/carregues?ids=98,87,87")
+    assert r.status_code == 200
+    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25,
+                                                 "kg_total": 1000, "kg_fets": 250}}}
+    assert crides == [[87, 98]]
+    c.get("/api/pistolejat/carregues?ids=87,98")       # mateix conjunt: cache
+    assert len(crides) == 1
+    assert c.get("/api/pistolejat/carregues?ids=").get_json() == {"carregues": {}}
+
+
+@pytest.mark.parametrize("qs", ["ids=abc", "ids=1,-2",
+                                "ids=" + ",".join(str(i) for i in range(1, 302))])
+def test_endpoint_pistolejat_carregues_valida(client, monkeypatch, qs):
+    c, app_module = client
+    monkeypatch.setattr(app_module, "progres_carregues", lambda ids: pytest.fail("no s'havia de consultar SAP"))
+    assert c.get(f"/api/pistolejat/carregues?{qs}").status_code == 400
+
+
+def test_pistolejat_carregues_no_es_public(client, monkeypatch):
+    """`/api/carregues` es public (calendari); aquesta ruta no hi ha de penjar."""
+    c, app_module = client
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setattr(app_module, "progres_carregues", lambda ids: pytest.fail("sense sessio"))
+    r = c.get("/api/pistolejat/carregues?ids=87")
+    assert r.status_code in (302, 401)

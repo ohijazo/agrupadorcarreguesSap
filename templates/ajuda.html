@@ -412,6 +412,13 @@
         <p style="margin:.5rem 0 0;">En tots tres casos la càrrega <strong>està bloquejada</strong> per no poder duplicar-la.</p>
         <p style="margin:.3rem 0 0;">La llista <strong>s'actualitza automàticament cada 5 segons</strong> sense que hagis de refrescar — a mesura que l'SGA pistoleja, el % i els productes acabats s'hi reflecteixen en un parell de minuts.</p>
     </div>
+    <div class="help-info">
+        <strong>Pistolejat de cada càrrega</strong> (agrupada o no): al costat del codi surt
+        <span class="mockup-badge" style="background:#ebf4ff; color:#1e4e8c; border:1px solid #90b4e0;">◐ 35% pist.</span>
+        quan l'SGA ha començat a pistolejar-la (el % són els kg de tota la càrrega ja pistolejats o amb albarà), i
+        <span class="mockup-badge" style="background:#f0fff4; color:#22543d; border:1px solid #68d391;">✓ Pistolejada</span>
+        quan està tota. Es torna a llegir de SAP cada 30 segons. Per veure-ho article per article, ves a <strong>Preparació de comanda</strong>.
+    </div>
 
     <h3>2.3 Seleccionar càrregues</h3>
     <ul>
@@ -543,7 +550,7 @@
         <li><strong>Elimina</strong> (oficina) — l'esborra definitivament. Les seves càrregues tornen a estar disponibles per agrupar.</li>
     </ul>
     <p>
-        <strong>Pendents del dia</strong> és una altra cosa: hi surten <em>totes</em> les càrregues que surten avui, demà o aquesta setmana,
+        <strong>Preparació de comanda</strong> és una altra cosa: hi surten <em>totes</em> les càrregues que surten avui, demà o aquesta setmana,
         estiguin agrupades o no, amb el que queda per pistolejar de cada comanda. Cada càrrega porta l'etiqueta de la seva agrupació
         (toca-la per anar a la preparació) o <strong>Sense agrupar</strong>.
     </p>
@@ -625,7 +632,11 @@
     <ul>
         <li><strong>Un sol albarà:</strong> botó <strong>📄 PDF</strong> de la fila.</li>
         <li><strong>Diversos:</strong> marca la casella de l'esquerra de cada albarà. La casella de dalt de tot els marca <strong>tots</strong>; si abans has escrit una càrrega o un client al cercador, només marca els que surten.</li>
-        <li>A baix apareix la barra <strong>"N albarans seleccionats"</strong>. Prem <strong>🖨 Imprimeix els seleccionats</strong>: en uns segons s'obre una pestanya amb <strong>un sol PDF</strong> amb tots els albarans, en l'ordre de la llista. Imprimeix-lo des d'allà (una còpia de cada).</li>
+        <li>A baix apareix la barra <strong>"N albarans seleccionats"</strong>. Hi ha dos botons:
+            <ul>
+                <li><strong>🖨 Imprimeix</strong>: en uns segons s'obre directament el diàleg de la impressora, amb <strong>tots els albarans en un sol document</strong> (en l'ordre de la llista, una còpia de cada). Prem <em>Imprimir</em>. La impressora que triïs al diàleg queda recordada per a la propera vegada.</li>
+                <li><strong>👁 Vista prèvia</strong>: obre el mateix document en una pestanya nova per mirar-lo abans.</li>
+            </ul></li>
         <li>Com a màxim <strong>40 albarans</strong> per cop. Els cancel·lats no es poden seleccionar.</li>
         <li>Si algun albarà no es pot generar, la pestanya diu quin: treu-lo de la selecció i torna-ho a provar.</li>
     </ul>

@@ -312,7 +312,7 @@ def test_oficina_i_admin_hi_tenen_acces(amb_rol, rol):
 
 def test_menu_magatzem_sense_gestio_albarans(amb_rol):
     html = amb_rol("magatzem").get("/magatzem/pendents").data
-    assert b"Pendents del dia" in html
+    assert "Preparació de comanda" in html.decode()
     assert b'href="/albarans"' not in html
 
 

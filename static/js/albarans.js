@@ -164,26 +164,82 @@ function pintaSeleccio() {
         ? `${total} seleccionats · màxim ${MAX_PDF} per cop`
         : `${total} ${total === 1 ? "albarà seleccionat" : "albarans seleccionats"}`;
     txt.classList.toggle("is-massa", massa);
-    document.getElementById("alb-imprimeix").disabled = massa;
+    for (const id of ["alb-imprimeix", "alb-previa"]) document.getElementById(id).disabled = massa;
 }
 
 function marcaAlbara(docentry, on) {
     if (on) albState.sel.add(docentry); else albState.sel.delete(docentry);
 }
 
-// Un sol PDF amb tots els seleccionats, en l'ordre de la llista, en una
-// pestanya nova: s'imprimeix d'una vegada des del visor del navegador.
-function imprimeixSeleccionats() {
+// Un sol PDF amb tots els seleccionats, en l'ordre de la llista.
+function urlSeleccionats() {
     const tria = albState.albarans.filter(a => albState.sel.has(a.docentry) && imprimible(a));
-    if (!tria.length || tria.length > MAX_PDF) return;
+    if (!tria.length || tria.length > MAX_PDF) return null;
     const qs = new URLSearchParams({
         ids: tria.map(a => a.docentry).join(","),
         nums: tria.map(a => a.docnum).join(","),
     });
-    window.open(`/albarans/pdf?${qs}`, "_blank", "noopener");
-    toast("success", tria.length === 1
+    return { url: `/albarans/pdf?${qs}`, n: tria.length };
+}
+
+// Vista prèvia: el PDF en una pestanya nova.
+function previaSeleccionats() {
+    const s = urlSeleccionats();
+    if (!s) return;
+    window.open(s.url, "_blank", "noopener");
+    toast("success", s.n === 1
         ? "S'obre l'albarà en una pestanya nova."
-        : `Generant ${tria.length} albarans en un sol PDF. S'obrirà en una pestanya nova d'aquí a uns segons.`);
+        : `Generant ${s.n} albarans en un sol PDF. S'obrirà en una pestanya nova d'aquí a uns segons.`);
+}
+
+// Imprimeix: el PDF es descarrega aquí mateix i es passa a un iframe amagat
+// que obre el diàleg d'impressió, sense cap pestanya. Si el servidor respon
+// amb un error, es veu en un toast.
+async function imprimeixSeleccionats() {
+    const s = urlSeleccionats();
+    if (!s) return;
+    const btn = document.getElementById("alb-imprimeix");
+    const text = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = s.n === 1 ? "Generant l'albarà…" : `Generant ${s.n} albarans…`;
+    try {
+        const r = await fetch(s.url, { credentials: "same-origin" });
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok || !(r.headers.get("Content-Type") || "").startsWith("application/pdf")) {
+            const msg = (await r.text().catch(() => "")).trim();
+            throw new Error(msg || `No s'han pogut generar els albarans (HTTP ${r.status}).`);
+        }
+        imprimeixPdf(URL.createObjectURL(await r.blob()));
+    } catch (e) {
+        toast("error", e.message || "No s'han pogut generar els albarans.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = text;
+        pintaSeleccio();
+    }
+}
+
+function imprimeixPdf(blobUrl) {
+    document.getElementById("alb-print-frame")?.remove();
+    const f = document.createElement("iframe");
+    f.id = "alb-print-frame";
+    f.className = "alb-print-frame";
+    f.setAttribute("aria-hidden", "true");
+    f.tabIndex = -1;
+    f.addEventListener("load", () => {
+        try {
+            f.contentWindow.focus();
+            f.contentWindow.print();
+        } catch {
+            // Navegador que no deixa imprimir un PDF des d'un iframe: pestanya.
+            window.open(blobUrl, "_blank", "noopener");
+            toast("error", "No s'ha pogut obrir el diàleg d'impressió: s'obre el PDF en una pestanya.");
+        }
+        // El blob ha de viure mentre el diàleg és obert; es neteja al cap d'una estona.
+        setTimeout(() => { f.remove(); URL.revokeObjectURL(blobUrl); }, 10 * 60_000);
+    }, { once: true });
+    f.src = blobUrl;
+    document.body.appendChild(f);
 }
 
 function datesValides() {
@@ -314,6 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pinta();
     });
     document.getElementById("alb-imprimeix").addEventListener("click", imprimeixSeleccionats);
+    document.getElementById("alb-previa").addEventListener("click", previaSeleccionats);
 
     refrescar();
 });
