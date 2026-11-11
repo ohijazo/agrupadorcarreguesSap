@@ -377,7 +377,7 @@
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
             `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
-            ` · <span class="cal-evt-alb">Alb. 7001 · 1/3</span> albarà (comandes amb albarà / total)</span>`;
+            ` · <span class="cal-evt-alb">Albarà 1/3</span> comandes amb albarà</span>`;
     }
 
     function renderStats() {
@@ -641,14 +641,9 @@
         return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans };
     }
 
-    // "7001", "7001, 7002" o "7001, 7002 +3": a la cel·la no hi cap més.
-    function textAlbarans(albarans, max = 2) {
-        const resta = albarans.length - max;
-        return albarans.slice(0, max).join(", ") + (resta > 0 ? ` +${resta}` : "");
-    }
-
-    // Pastilla amb el número d'albarà: "Alb. 7001" (totes les comandes en
-    // tenen, ple) o "Alb. 7001 · 1/3" (només algunes, en contorn).
+    // Pastilla "Albarà" (totes les comandes en tenen, ple) o "Albarà 1/3"
+    // (només algunes, en contorn). El número d'albarà va al detall de la
+    // càrrega, a cada comanda: a la cel·la no hi cap.
     function posaPastillaAlbara(li, c) {
         const a = albaransDe(c);
         let el = li.querySelector(".cal-evt-alb");
@@ -661,9 +656,10 @@
         }
         const totes = a.n >= a.total;
         el.classList.toggle("is-totes", totes);
-        el.textContent = `Alb. ${textAlbarans(a.albarans)}` + (totes ? "" : ` · ${a.n}/${a.total}`);
-        el.setAttribute("aria-label", `Albarà ${a.albarans.join(", ")}: `
-            + (totes ? "totes les comandes en tenen" : `${a.n} de ${a.total} comandes en tenen`));
+        el.textContent = totes ? "Albarà" : `Albarà ${a.n}/${a.total}`;
+        el.setAttribute("aria-label", totes
+            ? "Totes les comandes tenen albarà"
+            : `${a.n} de ${a.total} comandes tenen albarà`);
     }
 
     function pintaPistolejat() {
