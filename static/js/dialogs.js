@@ -91,6 +91,10 @@ window.mostrarInput = function mostrarInput(opts = {}) {
     // Camp opcional: checkbox amb {label, checked, tooltip}. Si està definit,
     // la promesa resol amb {valor, marcat} en comptes de només string.
     const checkbox = opts.checkbox || null;
+    // Camp secret opcional ({label, placeholder}), abans del de text, que no es
+    // veu en pantalla (p. ex. el codi d'operari). Si està definit, la promesa
+    // resol amb {valor, secret}.
+    const secret = opts.secret || null;
 
     return new Promise(resolve => {
         const dlg = _crearDialeg("app-dialog-input");
@@ -105,6 +109,11 @@ window.mostrarInput = function mostrarInput(opts = {}) {
                 <button type="button" class="dialog-close" data-act="cancel" aria-label="Tanca">×</button>
             </header>
             <form class="app-dialog-body" method="dialog">
+                ${secret ? `
+                <label for="app-dialog-input-secret">${_escape(secret.label || "")}</label>
+                <input type="password" id="app-dialog-input-secret" class="app-dialog-input"
+                       inputmode="numeric" autocomplete="off" maxlength="10"
+                       placeholder="${_escape(secret.placeholder || "")}">` : ""}
                 ${etiqueta ? `<label for="app-dialog-input-field">${_escape(etiqueta)}</label>` : ""}
                 <input type="text" id="app-dialog-input-field" class="app-dialog-input"
                        value="${_escape(defecte)}" placeholder="${_escape(placeholder)}" maxlength="${maxlength}" autocomplete="off">
@@ -117,11 +126,14 @@ window.mostrarInput = function mostrarInput(opts = {}) {
         `;
         const input = dlg.querySelector("#app-dialog-input-field");
         const check = dlg.querySelector("#app-dialog-input-check");
+        const secretIn = dlg.querySelector("#app-dialog-input-secret");
         const form = dlg.querySelector("form");
         let resolt = false;
-        const valorOK = () => checkbox
-            ? { valor: input.value, marcat: !!check?.checked }
-            : input.value;
+        const valorOK = () => secret
+            ? { valor: input.value, secret: secretIn.value }
+            : checkbox
+                ? { valor: input.value, marcat: !!check?.checked }
+                : input.value;
         const fi = (valor) => {
             if (resolt) return;
             resolt = true;
@@ -140,7 +152,10 @@ window.mostrarInput = function mostrarInput(opts = {}) {
         if (typeof dlg.showModal === "function") dlg.showModal();
         else dlg.setAttribute("open", "");
         // Selecciona el text per defecte perquè es pugui sobreescriure ràpidament
-        setTimeout(() => { input.focus(); input.select(); }, 50);
+        setTimeout(() => {
+            if (secretIn) { secretIn.focus(); return; }
+            input.focus(); input.select();
+        }, 50);
     });
 };
 

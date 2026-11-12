@@ -79,7 +79,10 @@ async function fetchJ(url, opts = {}) {
 }
 
 function estat(a) {
-    if (a.cancelat) return `<span class="alb-estat is-cancelat">Cancel·lat</span>`;
+    if (a.cancelat) {
+        const per = a.cancelat_per ? ` · ${escA(a.cancelat_per)}` : "";
+        return `<span class="alb-estat is-cancelat">Cancel·lat${per}</span>`;
+    }
     if (a.obert) return `<span class="alb-estat is-obert">Obert</span>`;
     return `<span class="alb-estat is-tancat">Tancat</span>`;
 }
@@ -283,19 +286,27 @@ async function refrescar() {
     }
 }
 
-// Cancel·la a SAP un albarà de l'SGA. Demana el motiu, que queda a
-// l'auditoria de l'app (a SAP la cancel·lació la signa l'usuari del SL).
+// Cancel·la a SAP un albarà de l'SGA. La signa un operari de magatzem amb el
+// seu codi (no es veu en pantalla); a la llista només hi surt el seu nom. El
+// motiu queda a l'app (a SAP la cancel·lació la signa l'usuari del SL).
 async function cancelaAlbara(btn) {
     const docnum = btn.dataset.docnum;
-    const motiu = await window.mostrarInput({
+    const resp = await window.mostrarInput({
         titol: `Cancel·lar l'albarà ${docnum} a SAP`,
+        secret: { label: "Codi d'operari", placeholder: "El teu codi" },
         etiqueta: "Motiu de la cancel·lació (obligatori). Això no es pot desfer.",
         placeholder: "Ex.: lot equivocat, s'ha de tornar a pistolejar",
         btnOk: "Cancel·la l'albarà",
         btnCancel: "No",
         maxlength: 200,
     });
-    if (motiu === null) return;
+    if (resp === null) return;
+    const codi = resp.secret.trim();
+    const motiu = resp.valor;
+    if (!codi) {
+        toast("error", "Cal escriure el codi d'operari.");
+        return;
+    }
     if (motiu.trim().length < 5) {
         toast("error", "Cal escriure el motiu (mínim 5 caràcters).");
         return;
@@ -303,12 +314,12 @@ async function cancelaAlbara(btn) {
     btn.disabled = true;
     btn.textContent = "Cancel·lant…";
     try {
-        await fetchJ(`/api/albarans/${encodeURIComponent(btn.dataset.docentry)}/cancelar`, {
+        const j = await fetchJ(`/api/albarans/${encodeURIComponent(btn.dataset.docentry)}/cancelar`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ motiu: motiu.trim() }),
+            body: JSON.stringify({ codi, motiu: motiu.trim() }),
         });
-        toast("success", `Albarà ${docnum} cancel·lat a SAP`);
+        toast("success", `Albarà ${docnum} cancel·lat a SAP per ${j.operari}`);
     } catch (e) {
         toast("error", e.message);
     }

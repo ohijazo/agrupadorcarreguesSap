@@ -89,6 +89,10 @@ def client(monkeypatch):
     auditats = []
     monkeypatch.setattr(app_module.audit, "log",
                         lambda accio, target=None, detall=None: auditats.append((accio, target, detall)))
+    # Sense PostgreSQL: qui ha cancel·lat es desa en una llista.
+    app_module._desats = []
+    monkeypatch.setattr(app_module, "_desa_cancelat",
+                        lambda *a: app_module._desats.append(a))
     with app_module.app.test_client() as c:
         yield c, app_module, auditats
     app_module.app.config["CSRF_ENABLED"] = True
@@ -99,8 +103,8 @@ def _posa(monkeypatch, app_module, fals):
     return fals
 
 
-def _cancela(c, motiu="Lot equivocat", n=148):
-    return c.post(f"/api/albarans/{n}/cancelar", json={"motiu": motiu})
+def _cancela(c, motiu="Lot equivocat", n=148, codi="193"):
+    return c.post(f"/api/albarans/{n}/cancelar", json={"codi": codi, "motiu": motiu})
 
 
 def test_cancela_i_audita_amb_motiu(client, monkeypatch):
@@ -108,10 +112,15 @@ def test_cancela_i_audita_amb_motiu(client, monkeypatch):
     fals = _posa(monkeypatch, app_module, _Fals())
     r = _cancela(c, "  Lot   equivocat  ")
     assert r.status_code == 200
-    assert r.get_json() == {"ok": True, "docnum": 26700148}
+    assert r.get_json() == {"ok": True, "docnum": 26700148, "operari": "Abdelkrim Fahchouch"}
     assert fals.cancelats == [148]
     assert auditats == [("cancelar_albara", "26700148",
-                         {"docentry": 148, "carrega": 98, "motiu": "Lot equivocat"})]
+                         {"docentry": 148, "carrega": 98, "motiu": "Lot equivocat",
+                          "operari": "Abdelkrim Fahchouch"})]
+    assert app_module._desats == [(148, 26700148, "Abdelkrim Fahchouch", "Lot equivocat")]
+    # El codi de l'operari no surt enlloc: ni a la resposta ni a l'auditoria.
+    assert "193" not in r.get_data(as_text=True)
+    assert "193" not in repr(auditats) + repr(app_module._desats)
     # La comprovacio i el POST van dins del bloqueig d'aquest albara.
     assert app_module._bloquejats == [148]
 
@@ -155,6 +164,32 @@ def test_motiu_obligatori(client, monkeypatch, motiu):
     assert fals.cancelats == []
 
 
+@pytest.mark.parametrize("codi", [None, "", "   ", "999", "abc", "19 3", "-193", "1930000000"])
+def test_codi_operari_no_valid(client, monkeypatch, codi):
+    c, app_module, auditats = client
+    fals = _posa(monkeypatch, app_module, _Fals())
+    r = _cancela(c, codi=codi)
+    assert r.status_code == 403
+    assert fals.cancelats == [] and auditats == [] and app_module._desats == []
+    assert app_module._bloquejats == []
+
+
+def test_codi_amb_espais_i_numeric(client, monkeypatch):
+    c, app_module, _ = client
+    fals = _posa(monkeypatch, app_module, _Fals())
+    assert _cancela(c, codi=" 226 ").status_code == 200
+    assert _cancela(c, codi=127).status_code == 200
+    assert [d[2] for d in app_module._desats] == ["Oussama Aknaf", "Joan Ballesteros Solbes"]
+    assert fals.cancelats == [148, 148]
+
+
+def test_codis_errats_frenats_pel_rate_limit(client, monkeypatch):
+    c, app_module, _ = client
+    _posa(monkeypatch, app_module, _Fals())
+    codis = [_cancela(c, codi=str(n)).status_code for n in range(100, 112)]
+    assert codis[:10] == [403] * 10 and codis[10:] == [429, 429]
+
+
 def test_albara_inexistent(client, monkeypatch):
     c, app_module, _ = client
     fals = _posa(monkeypatch, app_module, _Fals(estat={}))
@@ -193,6 +228,7 @@ def test_sap_rebutja_ensenya_el_missatge_i_audita_l_error(client, monkeypatch):
     assert "Document bloquejat per l'SGA" in r.get_json()["error"]
     assert auditats[0][0] == "cancelar_albara_error"
     assert auditats[0][2]["error"] == "Document bloquejat per l'SGA"
+    assert app_module._desats == []
 
 
 def test_sap_caigut_en_cancel_lar(client, monkeypatch):
@@ -230,6 +266,38 @@ def test_llista_marca_els_cancelables(client, monkeypatch):
     monkeypatch.setenv("CANCELAR_ALBARANS", "false")
     j = c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09").get_json()
     assert j["cancelar"] is False and not any(a["cancelable"] for a in j["albarans"])
+
+
+def test_llista_diu_qui_ha_cancel_lat(client, monkeypatch):
+    import db
+    c, app_module, _ = client
+    monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda d, f, u: [
+        {"docentry": 1, "usuari": 22, "obert": True, "cancelat": False},
+        {"docentry": 2, "usuari": 22, "obert": True, "cancelat": True},
+        {"docentry": 3, "usuari": 22, "obert": True, "cancelat": True}])
+    demanats = []
+
+    def fetch_all(sql, params):
+        demanats.append(params[0])
+        return [{"docentry": 2, "operari_nom": "Adil Ennali"}]
+    monkeypatch.setattr(db, "fetch_all", fetch_all)
+    j = c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09").get_json()
+    assert demanats == [[2, 3]]   # només es busquen els cancel·lats
+    assert [a.get("cancelat_per") for a in j["albarans"]] == [None, "Adil Ennali", None]
+
+
+def test_llista_sense_pg_surt_igual(client, monkeypatch):
+    import db
+    c, app_module, _ = client
+    monkeypatch.setattr(app_module, "llistar_albarans_dates", lambda d, f, u: [
+        {"docentry": 2, "usuari": 22, "obert": False, "cancelat": True}])
+
+    def caigut(*a, **k):
+        raise RuntimeError("PG caigut")
+    monkeypatch.setattr(db, "fetch_all", caigut)
+    r = c.get("/api/albarans?desde=2026-11-09&fins=2026-11-09")
+    assert r.status_code == 200
+    assert "cancelat_per" not in r.get_json()["albarans"][0]
 
 
 # --- Modul de debo ------------------------------------------------------

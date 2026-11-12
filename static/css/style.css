@@ -1009,6 +1009,7 @@ body {
     font-size: 1rem;
     background: #fff;
 }
+.app-dialog-input + label { margin-top: .9rem; }
 .app-dialog-input:focus {
     outline: none;
     border-color: var(--primary);

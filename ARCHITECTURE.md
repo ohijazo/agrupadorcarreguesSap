@@ -176,11 +176,11 @@ Vanilla JS sense framework. Tres "modes":
   - L'app només fa de proxy (`/albarans/<docentry>/pdf`) amb un token compartit. No desa cap PDF. Sense `CRYSTAL_PDF_URL` ni `CANCELAR_ALBARANS` l'entrada del menú no surt.
   - El servei entra a SQL amb el seu compte de Windows (`NT SERVICE\CrystalPdf`, només lectura) i no té cap contrasenya en fitxers.
 - **Cancel·lar albarans de l'SGA (mateixa pantalla)**: és la **primera escriptura a SAP** de l'app.
-  - Botó "✖ Cancel·la" als albarans oberts fets per l'SGA (`ALBARANS_SGA_USUARIS`). Demana un motiu obligatori.
+  - Botó "✖ Cancel·la" als albarans oberts fets per l'SGA (`ALBARANS_SGA_USUARIS`). Demana el codi d'un operari de magatzem autoritzat (`operaris_magatzem.py`, codi → nom) i un motiu obligatori. Codi no vàlid: 403, abans de tocar SAP (darrere el rate limit de 10/min, que frena qui prova codis).
   - Fa `POST DeliveryNotes(N)/Cancel` pel Service Layer (`dades/sl/escriptura_albarans.py`), sigui quin sigui el backend de lectura. Abans torna a llegir l'albarà de SAP i el rebutja si ja està cancel·lat, no és de l'SGA o té línies tancades (facturat o amb devolució).
   - Si el POST dona error o timeout, torna a llegir l'estat: si SAP el mostra cancel·lat, és un èxit.
   - La comprovació i el POST van dins d'un bloqueig per albarà a PostgreSQL (`pg_advisory_xact_lock(7101, DocEntry)`), que comparteixen els dos workers de Gunicorn: si dues persones cancel·len alhora, la segona espera i rep "ja està cancel·lat". Sense PostgreSQL no es cancel·la (503).
-  - A SAP la cancel·lació la signa l'usuari del Service Layer. Qui ho ha fet i per què només queda a l'auditoria de l'app.
+  - A SAP la cancel·lació la signa l'usuari del Service Layer. Qui ho ha fet i per què queda a `albarans_cancelats` (migració 008: només el **nom** de l'operari, mai el codi) i a l'auditoria. La llista (`/api/albarans`) en treu `cancelat_per` i la pantalla mostra "Cancel·lat · nom"; sense PostgreSQL la llista surt igual, sense noms.
   - Apagat per defecte (`CANCELAR_ALBARANS`).
 
 - **Administració (`/admin/usuaris`, `static/js/admin_usuaris.js`)** — només rol `admin`:
@@ -208,7 +208,7 @@ Vanilla JS sense framework. Tres "modes":
 | `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |
 | `GET` | `/albarans/<docentry>/pdf` | admin, oficina | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
 | `GET` | `/albarans/pdf?ids=…&nums=…` | admin, oficina | diversos albarans (màx. 40) en un sol PDF, en l'ordre demanat; 2 peticions alhora a `crystal-pdf` (el seu `MaxJobs`) i unió amb `pypdf`; si en falla algun, 503 amb els números; 10/min per usuari; audit `imprimir_albarans` |
-| `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina | CSRF; `{"motiu"}` obligatori; només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
+| `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina | CSRF; `{"codi", "motiu"}` obligatoris (codi d'operari de magatzem; no es desa ni es torna); només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

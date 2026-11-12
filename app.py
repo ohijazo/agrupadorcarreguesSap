@@ -80,6 +80,7 @@ from valida import (  # noqa: E402
 import agrupacions_store  # noqa: E402
 import preparacio_sga  # noqa: E402
 import etiquetes as etiquetes_mod  # noqa: E402
+import operaris_magatzem  # noqa: E402
 
 # --- Logging amb rotació -------------------------------------------------
 _log_handler = RotatingFileHandler(
@@ -838,6 +839,34 @@ def _bloqueig_albara(doc_entry: int):
         yield   # el lock es deixa anar amb el commit en sortir de get_conn()
 
 
+def _cancelats_per(docentries: list[int]) -> dict[int, str]:
+    """Nom de l'operari que ha cancel·lat cada albara. Sense PostgreSQL la
+    llista surt igual, sense noms."""
+    if not docentries:
+        return {}
+    import db
+    try:
+        files = db.fetch_all(
+            "SELECT docentry, operari_nom FROM albarans_cancelats WHERE docentry = ANY(%s)",
+            (list(docentries),))
+    except Exception:
+        log.warning("No s'han pogut llegir els albarans cancel·lats", exc_info=True)
+        return {}
+    return {f["docentry"]: f["operari_nom"] for f in files}
+
+
+def _desa_cancelat(doc_entry: int, docnum: int, operari: str, motiu: str) -> None:
+    """Apunta qui ha cancel·lat l'albara. SAP ja l'ha cancel·lat: si falla, nomes avisa."""
+    import db
+    try:
+        db.execute(
+            "INSERT INTO albarans_cancelats (docentry, docnum, operari_nom, motiu) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (docentry) DO NOTHING",
+            (doc_entry, docnum, operari, motiu))
+    except Exception:
+        log.warning("No s'ha pogut desar qui ha cancel·lat l'albara %s", doc_entry, exc_info=True)
+
+
 @app.route("/api/albarans")
 @auth.requires_rol("admin", "oficina")
 def api_albarans():
@@ -857,6 +886,10 @@ def api_albarans():
             # Orientatiu per pintar el boto; la comprovacio de debo es fa en
             # cancel·lar, amb l'estat fresc de SAP.
             a["cancelable"] = cancelar and a["obert"] and not a["cancelat"] and a["usuari"] in sga
+        per = _cancelats_per([a["docentry"] for a in albarans if a.get("cancelat")])
+        for a in albarans:
+            if a["docentry"] in per:
+                a["cancelat_per"] = per[a["docentry"]]
         return jsonify({"albarans": albarans, "pdf": bool(_crystal_pdf_url()), "cancelar": cancelar})
     except backend_dades.ERRORS_DADES:
         log.exception("DB error a albarans")
@@ -1007,32 +1040,38 @@ def albarans_pdf():
 @app.route("/api/albarans/<int:doc_entry>/cancelar", methods=["POST"])
 @auth.requires_rol("admin", "oficina")
 def cancelar_albara(doc_entry: int):
-    """Cancel·la a SAP un albara fet per l'SGA. Cos: `{"motiu": "..."}`.
+    """Cancel·la a SAP un albara fet per l'SGA. Cos: `{"codi": "...", "motiu": "..."}`.
 
-    El motiu nomes queda a l'auditoria de l'app: a SAP la cancel·lacio la
-    signa l'usuari del Service Layer, aixi que l'auditoria es l'unic lloc que
-    diu qui ho ha fet i per que."""
+    `codi` es el de l'operari de magatzem que la signa (`operaris_magatzem`):
+    nomes se'n desa i s'ensenya el nom, mai el codi. A SAP la cancel·lacio la
+    signa l'usuari del Service Layer, aixi que `albarans_cancelats` i
+    l'auditoria son els unics llocs que diuen qui ho ha fet i per que."""
     if not _cancelar_albarans_actiu():
         return jsonify({"error": "La cancel·lació d'albarans no està activada."}), 404
     if escriptura_albarans is None:
         return jsonify({"error": "La cancel·lació d'albarans no està disponible en aquest servidor."}), 503
-    motiu = " ".join(str((request.get_json(silent=True) or {}).get("motiu") or "").split())
+    cos = request.get_json(silent=True) or {}
+    motiu = " ".join(str(cos.get("motiu") or "").split())
     if not 5 <= len(motiu) <= 200:
         return _err_validacio("Cal indicar el motiu de la cancel·lació (entre 5 i 200 caràcters).")
+    # El rate limit va abans del codi: també frena qui prova codis.
     if not _rate_limit(f"cancel_alb:{session.get('user_id') or request.remote_addr}", max_req=10, window_sec=60):
         return jsonify({"error": "Massa cancel·lacions seguides; espera un minut."}), 429
+    operari = operaris_magatzem.nom_operari(cos.get("codi"))
+    if not operari:
+        return jsonify({"error": "Codi d'operari no vàlid."}), 403
 
     import psycopg
     try:
         with _bloqueig_albara(doc_entry):
-            return _cancela_albara_bloquejat(doc_entry, motiu)
+            return _cancela_albara_bloquejat(doc_entry, motiu, operari)
     except psycopg.Error:
         # Sense PostgreSQL no podem garantir una sola cancel·lacio: no seguim.
         log.exception("No s'ha pogut agafar el bloqueig de l'albara %s", doc_entry)
         return jsonify({"error": "No s'ha pogut cancel·lar ara mateix. Torna-ho a provar d'aquí a una estona."}), 503
 
 
-def _cancela_albara_bloquejat(doc_entry: int, motiu: str):
+def _cancela_albara_bloquejat(doc_entry: int, motiu: str, operari: str):
     """Comprovacio d'estat i POST a SAP. S'ha de cridar amb `_bloqueig_albara`."""
     try:
         estat = escriptura_albarans.estat_albara(doc_entry)
@@ -1045,7 +1084,7 @@ def _cancela_albara_bloquejat(doc_entry: int, motiu: str):
     if motiu_no:
         return jsonify({"error": motiu_no}), 409
 
-    detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu}
+    detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu, "operari": operari}
     try:
         escriptura_albarans.cancelar_albara(doc_entry)
     except SLError as e:
@@ -1059,9 +1098,10 @@ def _cancela_albara_bloquejat(doc_entry: int, motiu: str):
             return jsonify({"error": f"SAP no ha deixat cancel·lar l'albarà: {msg_sap}"}), 409
         return jsonify({"error": "No s'ha pogut cancel·lar l'albarà a SAP. Avisa administració."}), 503
 
-    log.info("Albara %s (DocEntry %s) cancel·lat", estat["docnum"], doc_entry)
+    log.info("Albara %s (DocEntry %s) cancel·lat per %s", estat["docnum"], doc_entry, operari)
+    _desa_cancelat(doc_entry, estat["docnum"], operari, motiu)
     audit.log("cancelar_albara", target=str(estat["docnum"]), detall=detall)
-    return jsonify({"ok": True, "docnum": estat["docnum"]})
+    return jsonify({"ok": True, "docnum": estat["docnum"], "operari": operari})
 
 
 @app.route("/api/transportistes")

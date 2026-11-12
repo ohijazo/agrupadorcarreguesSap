@@ -147,6 +147,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_accio ON audit_logs (accio);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user  ON audit_logs (user_id) WHERE user_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
+-- Albarans cancel·lats des de "Gestió d'albarans" i l'operari de magatzem que
+-- ho ha fet (només el nom, mai el seu codi). Migració 008.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS albarans_cancelats (
+    docentry    INTEGER     PRIMARY KEY,
+    docnum      INTEGER     NOT NULL,
+    operari_nom TEXT        NOT NULL,
+    motiu       TEXT,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
 -- Nota SAP: les taules `kais_carrega_snapshot` i `kais_carrega_override`
 -- que hi ha a la variant KAIS no s'apliquen aqui. SAP B1 no sobreescriu
 -- U_SEIDataS quan la carrega canvia d'estat, aixi que no cal snapshot ni
