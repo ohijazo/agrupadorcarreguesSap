@@ -131,8 +131,9 @@ Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
 ## Abans del dia
 
 - [ ] `DB_FARINERA` té comandes i entregues (vegeu «Estat» més amunt).
-- [ ] Les apps es connecten amb `agrupacions_lectura` i no amb `sa`
-      (secció anterior).
+- [x] Les apps es connecten amb `agrupacions_lectura` i no amb `sa`
+      (secció anterior). Fet el 18/11/2026: login creat a `DB_FARINERA` i
+      `DB_FARIN_TEST`, els dos `.env` canviats i `/health` OK. Contrasenya al KeePass.
 - [ ] Des del servidor s'hi arriba amb l'usuari SQL del `.env`.
       Es comprova amb `nc -zv AE01SAPSQL.Agrienergia.local 1433`, i amb el pas 6
       del dia, provat abans en una còpia del `.env`.
