@@ -1,6 +1,6 @@
 /* ============================================================
    Calendari mensual de càrregues
-   Grid Dl-Dv. Càrregues de cap de setmana en secció separada.
+   Grid Dl-Dv. Les càrregues de DS/DG surten al divendres anterior.
    ============================================================ */
 
 /* --- Toolbar -------------------------------------------------- */
@@ -820,62 +820,37 @@
     color: #fff;
 }
 
-/* --- Secció cap de setmana (sorra suau, integrat amb el sistema) ---- */
-.cal-capsetmana {
-    margin-top: 1.5rem;
+/* --- Càrregues de DS/DG mostrades al divendres anterior (to sorra) --- */
+.cal-evt-cs {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 .3rem;
+    height: 1rem;
+    font-size: .52rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    background: #fef9e7;
+    color: var(--warning);
+    border: 1px solid var(--warning);
+    border-radius: 3px;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.cal-evt.is-capsetmana {
+    outline: 1px dashed var(--warning);
+    outline-offset: -1px;
+}
+.cal-cell-cs {
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--warning);
     background: #fef9e7;
     border: 1px solid #f1e0a8;
-    border-left: 4px solid var(--warning);
-    border-radius: var(--radius-lg);
-    padding: 1rem 1.25rem;
-}
-.cal-capsetmana-titol {
-    margin: 0 0 .75rem;
-    font-size: .95rem;
-    font-weight: 600;
-    color: var(--warning);
-    display: flex;
-    align-items: baseline;
-    gap: .4rem;
-}
-.cal-capsetmana-count {
-    font-size: .85rem;
-    color: var(--gray-500);
-    font-weight: 500;
-}
-.cal-capsetmana-llista {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
-}
-.cal-cs-item {
-    display: grid;
-    grid-template-columns: minmax(120px, auto) 1fr auto auto;
-    align-items: baseline;
-    gap: .85rem;
-    padding: .5rem .7rem;
-    background: #fff;
-    border-radius: var(--radius-md);
-    border-left: 3px solid var(--warning);
-    cursor: pointer;
-    font-size: .85rem;
-    transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.cal-cs-item:hover { background: #fef9e7; transform: translateX(2px); }
-.cal-cs-item:focus-visible { outline: 2px solid var(--warning); outline-offset: 1px; }
-.cal-cs-data { color: var(--gray-700); font-weight: 600; text-transform: capitalize; }
-.cal-cs-nom { color: var(--gray-900); font-weight: 600; }
-.cal-cs-tra { font-size: .8rem; }
-.cal-cs-kg {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: var(--gray-700);
+    border-radius: 999px;
+    padding: 0 .4rem;
     white-space: nowrap;
 }
-.cal-cs-item.is-no-palletitzable { font-style: italic; opacity: .8; }
 
 /* --- Tooltip propi (clar, coherent amb la resta de la UI) -- */
 .cal-tooltip {
@@ -1051,13 +1026,12 @@
     .cal-cell-badge { font-size: .65rem; height: 1rem; min-width: 1rem; }
     .cal-evt { padding: .2rem .35rem; font-size: .72rem; border-left-width: 2px; }
     .cal-evt-kg { display: none; }
-    .cal-evt-tag { font-size: .46rem; height: .85rem; padding: 0 .18rem; }
+    .cal-evt-tag, .cal-evt-cs { font-size: .46rem; height: .85rem; padding: 0 .18rem; }
     .cal-evt-pist, .cal-evt-alb { font-size: .5rem; height: .85rem; padding: 0 .18rem; }
     .cal-evt:hover { transform: none; }
     .cal-grid-head > div { font-size: .7rem; padding: .4rem .15rem; }
     .cal-d-long { display: none; }
     .cal-d-short { display: inline; }
-    .cal-cs-item { grid-template-columns: 1fr; gap: .15rem; }
     .cal-tooltip { max-width: 90vw; }
     /* KPI cards: ajustar al mòbil */
     .cal-stats { gap: .35rem; width: 100%; justify-content: flex-start; }

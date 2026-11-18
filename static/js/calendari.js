@@ -1,7 +1,7 @@
 // =====================================================================
 // Calendari mensual de càrregues
-// Grid de Dilluns a Divendres (les càrregues de DS/DG, si n'hi ha, surten
-// a una secció separada sota el grid).
+// Grid de Dilluns a Divendres. Les càrregues de DS/DG es mostren al
+// divendres anterior (és quan es preparen), marcades amb l'etiqueta "DS/DG".
 // Click sobre una càrrega → obre dialog modal amb el detall.
 // =====================================================================
 (function () {
@@ -49,7 +49,7 @@
     function rangMesVisible(any, mes) {
         // Sempre 6 setmanes (42 dies). El grid només renderitza Dl-Dv,
         // però fetch-egem dades de la setmana sencera per detectar càrregues
-        // a DS/DG i mostrar-les a la secció de cap de setmana.
+        // a DS/DG i mostrar-les al divendres anterior.
         const primer = ferDataLocal(any, mes, 1);
         const inici = new Date(primer);
         inici.setDate(primer.getDate() - diaSetmana(primer));
@@ -135,8 +135,6 @@
         diaFi: null,           // últim diumenge visible
         carreguesPerDiaTotes: new Map(),  // isoDate -> Carrega[]   (totes, sense filtre)
         carreguesPerDia: new Map(),       // isoDate -> Carrega[]   (filtrades per `cercaText`)
-        capSetmanaTotes: [],   // (totes les DS/DG, sense filtre)
-        capSetmana: [],        // càrregues DS/DG dins el mes actual (filtrades)
         totalsCount: 0,
         totalsKg: 0,
         totalsSetmana: 0,      // càrregues a la setmana actual (dins del mes vist)
@@ -182,7 +180,6 @@
             agruparPerDia(data.items || []);
             renderLegenda();
             renderGrid();
-            renderCapSetmana();
             renderStats();
             refrescaPistolejat();
         } catch (e) {
@@ -192,9 +189,7 @@
             err.textContent = `No s'ha pogut carregar el calendari: ${e.message}`;
             err.hidden = false;
             state.carreguesPerDia.clear();
-            state.capSetmana = [];
             renderGrid();
-            renderCapSetmana();
         } finally {
             if (state.abortCtrl === ctrl) state.abortCtrl = null;
             $("#cal-loading").hidden = true;
@@ -203,7 +198,6 @@
 
     function agruparPerDia(items) {
         const perDia = new Map();
-        const capSetmana = [];
         for (const c of items) {
             const d = dataCalendari(c);
             if (!d) continue;
@@ -211,13 +205,17 @@
             const [yy, mm, dd] = key.split("-").map(Number);
             const data = new Date(yy, mm - 1, dd);
             const ws = diaSetmana(data);
-            const enMesActual = (yy === state.any_ && mm === state.mes);
+            let keyCela = key;
             if (ws >= 5) {
-                if (enMesActual) capSetmana.push({ data: key, ws, c });
-            } else {
-                if (!perDia.has(key)) perDia.set(key, []);
-                perDia.get(key).push(c);
+                // DS/DG → es mostra al divendres anterior (quan es prepara).
+                // Guardem la data real per a l'etiqueta i les estadístiques.
+                const divendres = new Date(yy, mm - 1, dd - (ws - 4));
+                keyCela = isoLocal(divendres);
+                c._dataReal = key;
+                c._wsReal = ws;
             }
+            if (!perDia.has(keyCela)) perDia.set(keyCela, []);
+            perDia.get(keyCela).push(c);
         }
         // Ordenació dins d'un mateix dia: 4 blocs (rangSort definit a nivell
         // de mòdul) i, dins de cada bloc, ordre per kg total descendent.
@@ -235,12 +233,7 @@
         for (const arr of perDia.values()) {
             arr.sort(compararDins);
         }
-        capSetmana.sort((a, b) => {
-            if (a.data !== b.data) return a.data.localeCompare(b.data);
-            return compararDins(a.c, b.c);
-        });
         state.carreguesPerDiaTotes = perDia;
-        state.capSetmanaTotes = capSetmana;
         construirMapaTransportistes(items);
         aplicarFiltreText();
     }
@@ -300,32 +293,18 @@
         for (const [key, arr] of state.carreguesPerDiaTotes) {
             const filtrats = arr.filter(c => matchTra(c) && (!q || carregaCoincideix(c, q)));
             if (filtrats.length > 0) perDia.set(key, filtrats);
-            // Stats: només dies del mes actual
-            const [yy, mm, dd] = key.split("-").map(Number);
-            if (yy === state.any_ && mm === state.mes) {
-                const dillunsKey = isoLocal(dilluns(new Date(yy, mm - 1, dd)));
-                for (const c of filtrats) {
-                    nMes++;
-                    kgMes += kgDeCarrega(c);
-                    if (c.is_granel) nGranel++;
-                    if (dillunsKey === dillunsAvuiIso) nSetmana++;
-                }
+            // Stats: només càrregues del mes actual, per data real (una
+            // càrrega de DS/DG compta al seu mes encara que surti al divendres).
+            for (const c of filtrats) {
+                const [yy, mm, dd] = (c._dataReal || key).split("-").map(Number);
+                if (yy !== state.any_ || mm !== state.mes) continue;
+                nMes++;
+                kgMes += kgDeCarrega(c);
+                if (c.is_granel) nGranel++;
+                if (isoLocal(dilluns(new Date(yy, mm - 1, dd))) === dillunsAvuiIso) nSetmana++;
             }
         }
-        // Filtra DS/DG (capSetmana — events del mes actual)
-        const capSetmana = state.capSetmanaTotes.filter(x =>
-            matchTra(x.c) && (!q || carregaCoincideix(x.c, q))
-        );
-        for (const x of capSetmana) {
-            nMes++;
-            kgMes += kgDeCarrega(x.c);
-            if (x.c.is_granel) nGranel++;
-            const [yy, mm, dd] = x.data.split("-").map(Number);
-            const dillunsKey = isoLocal(dilluns(new Date(yy, mm - 1, dd)));
-            if (dillunsKey === dillunsAvuiIso) nSetmana++;
-        }
         state.carreguesPerDia = perDia;
-        state.capSetmana = capSetmana;
         state.totalsCount = nMes;
         state.totalsKg = kgMes;
         state.totalsSetmana = nSetmana;
@@ -452,6 +431,16 @@
                     badge.title = `${llista.length} càrregues`;
                     head.appendChild(badge);
 
+                    // Indicador de càrregues de cap de setmana portades a aquest divendres
+                    const nCs = llista.filter(c => c._wsReal != null).length;
+                    if (nCs > 0) {
+                        const cs = document.createElement("span");
+                        cs.className = "cal-cell-cs";
+                        cs.textContent = `+${nCs} DS/DG`;
+                        cs.title = `${nCs} càrregues de dissabte/diumenge que es preparen aquest divendres`;
+                        head.appendChild(cs);
+                    }
+
                     // Kg totals a la capçalera (al costat del badge, amb icona ⚖)
                     const sumKg = llista.reduce((acc, c) => acc + kgDeCarrega(c), 0);
                     if (sumKg > 0) {
@@ -574,7 +563,6 @@
     function totesLesCarregues() {
         const out = [];
         for (const llista of state.carreguesPerDiaTotes.values()) out.push(...llista);
-        for (const x of state.capSetmanaTotes) out.push(x.c);   // DS/DG: {data, c}
         return out;
     }
 
@@ -689,6 +677,17 @@
         const nom = (c.car_descripcion || "").trim() || c.carrega_id || "—";
         const kg = kgDeCarrega(c);
 
+        if (c._wsReal != null) {
+            // Càrrega de DS/DG mostrada al divendres anterior
+            li.classList.add("is-capsetmana");
+            const [, mm, dd] = c._dataReal.split("-").map(Number);
+            const tagCs = document.createElement("span");
+            tagCs.className = "cal-evt-cs";
+            tagCs.textContent = `${DIES_CURT[c._wsReal]} ${dd}`;
+            tagCs.title = `Càrrega de ${c._wsReal === 5 ? "dissabte" : "diumenge"} ${dd}/${mm} — es prepara divendres`;
+            li.appendChild(tagCs);
+        }
+
         if (c.is_granel) {
             const tag = document.createElement("span");
             tag.className = "cal-evt-tag";
@@ -794,37 +793,6 @@
         if (tooltipEl) tooltipEl.classList.remove("is-visible");
     }
 
-    function renderCapSetmana() {
-        const sec = $("#cal-capsetmana");
-        const ul  = $("#cal-capsetmana-llista");
-        if (state.capSetmana.length === 0) {
-            sec.hidden = true;
-            ul.innerHTML = "";
-            return;
-        }
-        sec.hidden = false;
-        $("#cal-capsetmana-comptador").textContent = String(state.capSetmana.length);
-
-        const html = state.capSetmana.map(({ data, ws, c }) => {
-            const nom = (c.car_descripcion || "").trim() || c.carrega_id || "—";
-            const kg = kgDeCarrega(c);
-            const [yy, mm, dd] = data.split("-").map(Number);
-            const dataObj = new Date(yy, mm - 1, dd);
-            const dataTxt = capitalitzar(fmtDiaLlarg.format(dataObj));
-            const transp = (c.transportista || c.tra_codi || "").trim();
-            const kgHtml = kg > 0 ? `<span class="cal-cs-kg">${escapeHtml(fmtKg0.format(kg))} kg</span>` : "";
-            const transpHtml = transp ? `<span class="cal-cs-tra muted">${escapeHtml(transp)}</span>` : "";
-            const npClass = c.palletitzable === false ? " is-no-palletitzable" : "";
-            return `<li class="cal-cs-item${npClass}" data-id="${escapeHtml(c.carrega_id)}" data-data="${escapeHtml(data)}" tabindex="0" title="Càrrega ${escapeHtml(c.carrega_id)}">
-                <span class="cal-cs-data">${escapeHtml(dataTxt)}</span>
-                <span class="cal-cs-nom">${escapeHtml(nom)}</span>
-                ${transpHtml}
-                ${kgHtml}
-            </li>`;
-        }).join("");
-        ul.innerHTML = html;
-    }
-
     // ---------------------------------------------------------------
     // Modal: detall d'una càrrega
     // ---------------------------------------------------------------
@@ -870,8 +838,7 @@
             const found = arr.find(c => c.carrega_id === carregaId);
             if (found) return found;
         }
-        const cs = state.capSetmana.find(x => x.c.carrega_id === carregaId);
-        return cs ? cs.c : null;
+        return null;
     }
 
     function fmtDataLlarga(iso, hora) {
@@ -1120,7 +1087,7 @@
             if (clearBtn) {
                 state.filtreTra = "";
                 aplicarFiltreText();
-                renderLegenda(); renderGrid(); renderCapSetmana(); renderStats();
+                renderLegenda(); renderGrid(); renderStats();
                 return;
             }
             const chip = e.target.closest(".cal-legend-chip");
@@ -1128,7 +1095,7 @@
             const codi = chip.dataset.tra || "";
             state.filtreTra = (state.filtreTra === codi) ? "" : codi;
             aplicarFiltreText();
-            renderLegenda(); renderGrid(); renderCapSetmana(); renderStats();
+            renderLegenda(); renderGrid(); renderStats();
         });
 
         // Picker mes/any: click al títol obre el dropdown
@@ -1158,25 +1125,24 @@
 
         const grid = $("#cal-grid");
         const onClickEvt = (e) => {
-            const evt = e.target.closest(".cal-evt, .cal-cs-item");
+            const evt = e.target.closest(".cal-evt");
             if (!evt) return;
             obrirModal(evt.dataset.id);
         };
         grid.addEventListener("click", onClickEvt);
-        $("#cal-capsetmana-llista").addEventListener("click", onClickEvt);
 
         // Tooltip propi (substitueix l'atribut title natiu). Mouseover/mouseout
-        // bubbleejen i els filtrem per `closest(".cal-evt, .cal-cs-item")`.
+        // bubbleejen i els filtrem per `closest(".cal-evt")`.
         let lastHover = null;
         const onMouseOver = (e) => {
-            const evt = e.target.closest(".cal-evt, .cal-cs-item");
+            const evt = e.target.closest(".cal-evt");
             if (!evt || evt === lastHover) return;
             lastHover = evt;
             const c = evt._cal || (evt.dataset.id && trobaCarreguaLocal(evt.dataset.id));
             if (c) mostraTooltip(evt, c);
         };
         const onMouseOut = (e) => {
-            const evt = e.target.closest(".cal-evt, .cal-cs-item");
+            const evt = e.target.closest(".cal-evt");
             if (!evt) return;
             if (e.relatedTarget && evt.contains(e.relatedTarget)) return;
             lastHover = null;
@@ -1184,8 +1150,6 @@
         };
         grid.addEventListener("mouseover", onMouseOver);
         grid.addEventListener("mouseout",  onMouseOut);
-        $("#cal-capsetmana-llista").addEventListener("mouseover", onMouseOver);
-        $("#cal-capsetmana-llista").addEventListener("mouseout",  onMouseOut);
         window.addEventListener("scroll", amagaTooltip, true);
         window.addEventListener("resize", amagaTooltip);
 
@@ -1196,7 +1160,6 @@
                 state.cercaText = cercaInput.value;
                 aplicarFiltreText();
                 renderGrid();
-                renderCapSetmana();
                 renderStats();
             }, 150);
             cercaInput.addEventListener("input", aplicarCerca);
@@ -1205,7 +1168,7 @@
                 if (e.key === "Escape" && cercaInput.value) {
                     cercaInput.value = "";
                     state.cercaText = "";
-                    aplicarFiltreText(); renderGrid(); renderCapSetmana(); renderStats();
+                    aplicarFiltreText(); renderGrid(); renderStats();
                     e.preventDefault();
                     e.stopPropagation();
                 }
@@ -1214,13 +1177,12 @@
 
         const onKeyEvt = (e) => {
             if (e.key !== "Enter" && e.key !== " ") return;
-            const evt = e.target.closest(".cal-evt, .cal-cs-item");
+            const evt = e.target.closest(".cal-evt");
             if (!evt) return;
             e.preventDefault();
             obrirModal(evt.dataset.id);
         };
         grid.addEventListener("keydown", onKeyEvt);
-        $("#cal-capsetmana-llista").addEventListener("keydown", onKeyEvt);
 
         // Modal: tanca amb X o clic fora
         const dlg = $("#cal-modal");
