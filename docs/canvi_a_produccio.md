@@ -141,11 +141,16 @@ Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
       `DB_FARINERA`. A producció els usuaris de SAP poden no ser els de proves.
       Recomanat: un usuari propi de l'app, i no el personal.
 - [ ] **crystal-pdf** (servidor de SAP, Windows): el compte del servei ha de
-      poder llegir `DB_FARINERA`:
+      poder llegir `DB_FARINERA` i executar les dues funcions escalars de SEIDOR
+      que crida el layout `DLN20014` (sense EXECUTE, Crystal falla amb l'error
+      229). Vegeu `serveis/crystal-pdf/README.md`, pas 4:
       ```sql
       USE DB_FARINERA;
-      CREATE USER [NT SERVICE\CrystalPdf] FOR LOGIN [NT SERVICE\CrystalPdf];
+      IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'NT SERVICE\CrystalPdf')
+          CREATE USER [NT SERVICE\CrystalPdf] FOR LOGIN [NT SERVICE\CrystalPdf];
       ALTER ROLE db_datareader ADD MEMBER [NT SERVICE\CrystalPdf];
+      GRANT EXECUTE ON dbo.SEI_MODIFICAR_CODI_IDIOMA TO [NT SERVICE\CrystalPdf];
+      GRANT EXECUTE ON dbo.SEI_TRADUCCIO TO [NT SERVICE\CrystalPdf];
       ```
 
 ---
@@ -226,12 +231,18 @@ que surten les càrregues reals de SAP: comparar-ne un parell amb el client de S
 
 ### 7. crystal-pdf (servidor de SAP)
 
-A `C:\Serveis\CrystalPdf\crystal-pdf.exe.config`, posar
-`<add key="SqlDatabase" value="DB_FARINERA" />` i reiniciar el servei:
+El `crystal-pdf.exe.config` està xifrat: s'ha de desxifrar, editar i tornar a
+xifrar. En una consola d'administrador:
 
 ```powershell
+C:\Serveis\CrystalPdf\crystal-pdf.exe --desprotegeix
+notepad C:\Serveis\CrystalPdf\crystal-pdf.exe.config
+#   <add key="SqlDatabase" value="DB_FARINERA" />
+C:\Serveis\CrystalPdf\crystal-pdf.exe --protegeix
 Restart-Service CrystalPdf
 ```
+
+Al log (`C:\Serveis\CrystalPdf\logs\`) ha de sortir `Escoltant al port 8095 (BD DB_FARINERA)`.
 
 Comprovar que s'imprimeix l'albarà d'una càrrega real des de l'app.
 
