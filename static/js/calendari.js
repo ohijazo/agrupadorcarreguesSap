@@ -171,7 +171,8 @@
 
         const desde = isoLocal(state.diaInici);
         const fins  = isoLocal(state.diaFi);
-        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000&estat=1`;
+        // historic=1: també les càrregues de KAIS d'abans del canvi a SAP (còpia congelada).
+        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000&estat=1&historic=1`;
 
         try {
             const resp = await fetch(url, { signal: ctrl.signal, credentials: "same-origin" });
@@ -566,9 +567,16 @@
         return out;
     }
 
+    // Càrrega de SAP? Les heretades de KAIS no tenen pistolejat ni albarans a
+    // SAP, i el seu número podria coincidir amb el DocEntry d'una altra càrrega.
+    function esSap(c) {
+        return (c && c.eje_ejercicio ? String(c.eje_ejercicio) : "SAP") === "SAP";
+    }
+
     async function refrescaPistolejat() {
         if (document.hidden) return;
         const ids = [...new Set(totesLesCarregues()
+            .filter(esSap)
             .map(c => String(c.car_numero || ""))
             .filter(id => /^\d+$/.test(id)))];
         if (!ids.length) return;
@@ -595,6 +603,7 @@
     }
 
     function pistolejatDe(c) {
+        if (!esSap(c)) return null;
         const p = state.pistolejat.get(String(c.car_numero || ""));
         return p && (p.estat === "parcial" || p.estat === "complet") ? p : null;
     }
@@ -621,6 +630,7 @@
     // albarans} o null si cap comanda en té. `perComanda`: DocNum de la
     // comanda -> DocNum dels seus albarans. Ve amb el pistolejat.
     function albaransDe(c) {
+        if (!esSap(c)) return null;
         const p = state.pistolejat.get(String(c.car_numero || ""));
         const llista = (p && p.comandes_albara) || [];
         if (!llista.length) return null;
@@ -821,10 +831,10 @@
             const resp = await fetch(`/api/carrega-detall?${params}`, { signal: ctrl.signal, credentials: "same-origin" });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
-            $("#cal-modal-body").innerHTML = renderDetallCarrega(data);
+            $("#cal-modal-body").innerHTML = renderDetallCarrega(data, eje === "SAP");
             state.modalCarrega = localItem;
             marcaAlbaransModal();
-            carregaPistolejatDetall((localItem && localItem.car_numero) || car, ctrl);
+            if (eje === "SAP") carregaPistolejatDetall((localItem && localItem.car_numero) || car, ctrl);
         } catch (e) {
             if (e.name === "AbortError") return;
             $("#cal-modal-body").innerHTML = `<div class="cal-error">Error carregant detall: ${escapeHtml(e.message)}</div>`;
@@ -869,7 +879,12 @@
         $("#cal-modal-meta").innerHTML = meta;
     }
 
-    function renderDetallCarrega(data) {
+    // `ambPistolejat` = false per a les càrregues heretades de KAIS: no tenen
+    // pistolejat a SAP, i el calendari de KAIS no tenia aquesta columna.
+    function renderDetallCarrega(data, ambPistolejat = true) {
+        const thPist = ambPistolejat ? `<th title="Pistolejat a l'SGA (expedició). El que ja té albarà compta com a fet.">Pistolejat</th>` : "";
+        const tdPist = ambPistolejat ? `<td class="cal-pist-cel muted">…</td>` : "";
+        const nCols = ambPistolejat ? 6 : 5;
         if (!data.comandes || data.comandes.length === 0) {
             return `<div class="muted">Aquesta càrrega no té comandes associades.</div>`;
         }
@@ -884,7 +899,7 @@
                     <td>${escapeHtml(l.tunitat)}</td>
                     <td class="num">${fmtNum.format(l.sacs)}</td>
                     <td class="num">${fmtKg0.format(l.kg)}</td>
-                    <td class="cal-pist-cel muted">…</td>
+                    ${tdPist}
                 </tr>`;
             }).join("");
             const tipoBadge = a.det_tipo === "P"
@@ -900,8 +915,8 @@
                         <span class="muted">${fmtNum.format(a.total_sacs)} sacs · ${fmtKg0.format(a.total_kg)} kg</span>
                     </h4>
                     <table class="data-table data-table-mini">
-                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th><th title="Pistolejat a l'SGA (expedició). El que ja té albarà compta com a fet.">Pistolejat</th></tr></thead>
-                        <tbody>${linies || `<tr><td colspan="6" class="muted">Sense línies</td></tr>`}</tbody>
+                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th>${thPist}</tr></thead>
+                        <tbody>${linies || `<tr><td colspan="${nCols}" class="muted">Sense línies</td></tr>`}</tbody>
                     </table>
                 </div>`;
         }).join("");

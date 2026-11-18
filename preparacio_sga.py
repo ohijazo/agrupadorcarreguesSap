@@ -26,6 +26,10 @@ def ids_carregues(obj: dict) -> list[int]:
     """DocEntry de `@SEI_ORDENCARGA` de les carregues de l'agrupacio."""
     ids = []
     for c in obj.get("carregues") or []:
+        # Agrupacions heretades de KAIS: els seus números no són DocEntry de
+        # SAP i trobarien una altra càrrega.
+        if str(c.get("eje_ejercicio") or "SAP") != "SAP":
+            continue
         try:
             ids.append(int(c.get("car_numero")))
         except (TypeError, ValueError):

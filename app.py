@@ -78,6 +78,7 @@ from valida import (  # noqa: E402
     valida_codi, valida_int, valida_llista_carregues, valida_rang_dates,
 )
 import agrupacions_store  # noqa: E402
+import historic_kais  # noqa: E402
 import preparacio_sga  # noqa: E402
 import etiquetes as etiquetes_mod  # noqa: E402
 import operaris_magatzem  # noqa: E402
@@ -1162,6 +1163,14 @@ def api_carregues():
             art_codi=art_codi,
             limit=limit, offset=offset,
         )
+        # El calendari (historic=1) també ensenya les càrregues de KAIS d'abans
+        # del canvi a SAP, perquè l'usuari les continuï veient com abans. Com a
+        # KAIS, sense filtre d'estat: allà les sortides també es veien.
+        if request.args.get("historic") == "1" and not art_codi and offset == 0:
+            hist = historic_kais.carregues(desde_d.isoformat(), fins_d.isoformat(), tra_codis)
+            if hist:
+                resp["items"] = hist + resp.get("items", [])
+                resp["total"] = int(resp.get("total") or 0) + len(hist)
         # Enriqueix cada càrrega amb les agrupacions desades on apareix.
         index = agrupacions_store.index_carregues_agrupades()
         for item in resp.get("items", []):
@@ -1457,6 +1466,16 @@ def api_carrega_detall():
     car, err = valida_codi(request.args.get("car"), "car", max_len=7)
     if err:
         return _err_validacio(err)
+    if historic_kais.es_kais(eje):
+        # Càrrega de KAIS (d'abans del canvi a SAP): detall de la còpia congelada.
+        try:
+            d = historic_kais.detall(f"{eje}/{sca}/{car}")
+        except Exception:
+            log.exception("carrega-detall historic")
+            return _err_db()
+        if d is None:
+            return jsonify({"error": "No hi ha el detall d'aquesta càrrega de KAIS."}), 404
+        return jsonify(d)
     try:
         return jsonify(resum_carrega(eje, sca, car))
     except backend_dades.ERRORS_DADES:

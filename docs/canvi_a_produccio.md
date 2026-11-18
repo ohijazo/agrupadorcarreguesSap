@@ -22,6 +22,62 @@ canviar totes dues**, o cada app llegirà d'una base de dades diferent.
 
 ---
 
+## Herència de KAIS: l'usuari no ha de notar el canvi
+
+L'app SAP hereta de l'app de KAIS (`agrupacio-carregues`):
+
+| Què | Com |
+|---|---|
+| **Usuaris** | Es creen els que no hi són, amb el mateix hash de contrasenya, rol i estat. Entren amb la contrasenya de sempre. |
+| **Agrupacions** | Les dels últims tres mesos, amb els productes preparats i les càrregues. Conserven l'id. |
+| **Càrregues del calendari** | Del 23/08/2026 al 22/11/2026, amb el detall de cadascuna, a la taula `historic_carregues` (migració 009). |
+
+És una **còpia congelada**: a KAIS ja no s'hi fa res i l'app SAP no en depèn.
+Es fa en dos passos:
+
+1. `scripts/exportar_historic.py` de l'**app de KAIS**: llegeix KAIS i el seu
+   PostgreSQL i escriu un JSON. Només llegeix.
+2. `scripts/importar_historic_kais.py` d'**aquesta app**: ho desa a PostgreSQL.
+   Es pot repetir sense duplicar res. Amb `--simular` ho desfà al final.
+
+El calendari demana `historic=1` i hi barreja les càrregues de KAIS, igual que
+les veia a KAIS: sense filtre d'estat i sense la columna de pistolejat. Els ids
+no es poden confondre: els de SAP comencen per `SAP/` i els de KAIS per l'any.
+Les agrupacions de KAIS no es sincronitzen amb el pistolejat de SAP.
+
+---
+
+## Automatització (servidor `ae01farwebsrv` i servidor de SAP)
+
+Els passos 1-7 del dia, més l'herència, estan automatitzats:
+
+| On | Script | Programat |
+|---|---|---|
+| Ubuntu | `deploy/canvi_produccio.sh` | timer systemd `agrupacio-canvi-produccio`, 23/11/2026 00:05 |
+| Windows (SAP) | `serveis/crystal-pdf/canvi_produccio.ps1` | tasca programada, 23/11/2026 00:05, com a SYSTEM |
+
+`canvi_produccio.sh` primer comprova que s'arriba a `DB_FARINERA` per SQL i pel
+Service Layer. Si falla, no toca res. Si alguna cosa falla un cop començat,
+torna els `.env` i PostgreSQL a l'estat d'abans. Si els `.env` ja apunten a
+`DB_FARINERA`, no fa res.
+
+```bash
+cd /var/www/agrupacio-carregues-sap
+sudo bash deploy/canvi_produccio.sh --comprovar   # assaig: no toca res
+sudo bash deploy/canvi_produccio.sh --programar   # deixa el timer a punt
+systemctl list-timers agrupacio-canvi-produccio.timer
+# el dia 23: sudo journalctl -u agrupacio-canvi-produccio.service --no-pager
+```
+
+```powershell
+# servidor de SAP, consola d'administrador
+C:\Serveis\CrystalPdf\canvi_produccio.ps1             # assaig
+C:\Serveis\CrystalPdf\canvi_produccio.ps1 -Programar  # tasca programada
+# el dia 23: C:\Serveis\CrystalPdf\logs\canvi_produccio.log
+```
+
+---
+
 ## Estat (comprovat el 18/11/2026)
 
 - Des del servidor s'arriba a `DB_FARINERA` (prova feta encara amb `sa`).
