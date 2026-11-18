@@ -22,9 +22,117 @@ canviar totes dues**, o cada app llegirà d'una base de dades diferent.
 
 ---
 
+## Estat (comprovat el 18/11/2026)
+
+- Des del servidor s'arriba a `DB_FARINERA` (prova feta encara amb `sa`).
+- Hi ha les **dades mestres**: `OITM` 2.072 articles, `OCRD` 5.749 clients
+  (l'últim creat el 16/11).
+- **Encara no hi ha operativa**: `ORDR` (comandes) i `ODLN` (entregues) són a 0.
+
+Per això el canvi de base de dades **no es pot avançar**: amb `DB_FARINERA`
+l'app no mostraria cap càrrega, i qui hi fa proves les perdria. S'ha de fer
+quan es comencin a entrar comandes a SAP de producció (cap de setmana o dilluns
+23 a primera hora). Cal que les comandes que es carreguen el dilluns s'entrin a
+`DB_FARINERA`, no a KAIS ni a `DB_FARIN_TEST`: si no, l'app no les veu.
+
+Per tornar-ho a comprovar (només llegeix):
+
+```bash
+sudo -u www-data /var/www/agrupacio-carregues-sap/venv/bin/python - <<'PY'
+import pyodbc
+env = {}
+for l in open("/var/www/agrupacio-carregues-sap/.env"):
+    l = l.strip()
+    if l and not l.startswith("#") and "=" in l:
+        k, v = l.split("=", 1); env[k.strip()] = v.strip()
+cs = ("DRIVER={ODBC Driver 18 for SQL Server};"
+      f"SERVER={env['SAP_SQL_SERVER']};DATABASE=DB_FARINERA;"
+      f"UID={env['SAP_SQL_USER']};PWD={env['SAP_SQL_PASSWORD']};"
+      "TrustServerCertificate=yes;ApplicationIntent=ReadOnly;")
+c = pyodbc.connect(cs, timeout=10).cursor()
+for taula in ("ORDR", "ODLN", "OITM", "OCRD"):
+    n, ult = c.execute(f"SELECT COUNT(*), MAX(CreateDate) FROM {taula}").fetchone()
+    print(f"{taula:5} {n:>8} files   darrera creacio: {ult}")
+PY
+```
+
+---
+
+## Usuari SQL propi en lloc de `sa`
+
+Fins al 18/11 les dues apps es connectaven a SQL Server com a `sa`, que és
+l'administrador i pot escriure i esborrar a l'ERP. `ApplicationIntent=ReadOnly`
+no ho impedeix: només encamina la connexió. Cap de les dues apps escriu a SAP
+per SQL (les cancel·lacions van pel Service Layer i l'únic `INSERT` és a
+PostgreSQL), així que n'hi ha prou amb un usuari de només lectura. Es fa abans
+del canvi, contra `DB_FARIN_TEST`, i ja queda llest per a `DB_FARINERA`.
+
+**1. Crear-lo** (a `AE01SAPSQL`, des de l'SSMS, amb un compte administrador).
+Contrasenya llarga, p. ex. `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`:
+
+```sql
+CREATE LOGIN agrupacions_lectura
+    WITH PASSWORD = '<contrasenya>',
+         CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;   -- que no caduqui i aturi l'app
+
+USE DB_FARINERA;
+CREATE USER agrupacions_lectura FOR LOGIN agrupacions_lectura;
+ALTER ROLE db_datareader ADD MEMBER agrupacions_lectura;
+
+USE DB_FARIN_TEST;
+CREATE USER agrupacions_lectura FOR LOGIN agrupacions_lectura;
+ALTER ROLE db_datareader ADD MEMBER agrupacions_lectura;
+```
+
+**2. Provar-lo des del servidor** abans de tocar cap `.env` (la contrasenya es
+demana per pantalla i no queda a l'historial). Han de sortir dos `OK`:
+
+```bash
+sudo -u www-data /var/www/agrupacio-carregues-sap/venv/bin/python - <<'PY'
+import getpass, pyodbc
+pwd = getpass.getpass("Contrasenya d'agrupacions_lectura: ")
+for bd in ("DB_FARIN_TEST", "DB_FARINERA"):
+    try:
+        c = pyodbc.connect("DRIVER={ODBC Driver 18 for SQL Server};"
+            f"SERVER=AE01SAPSQL.Agrienergia.local;DATABASE={bd};"
+            f"UID=agrupacions_lectura;PWD={pwd};"
+            "TrustServerCertificate=yes;ApplicationIntent=ReadOnly;", timeout=10).cursor()
+        n, ult = c.execute("SELECT COUNT(*), MAX(CreateDate) FROM ODLN").fetchone()
+        print(f"{bd:14} OK   entregues: {n}   darrera: {ult}")
+    except Exception as e:
+        print(f"{bd:14} ERROR  {e}")
+PY
+```
+
+**3. Posar-lo als dos `.env`** i reiniciar:
+
+```bash
+D=$(date +%Y%m%d-%H%M)
+sudo cp /var/www/agrupacio-carregues-sap/.env /root/agrupacio-sap.env.$D
+sudo cp /var/www/comandes-venda-sap/.env      /root/comandes-sap.env.$D
+
+sudo nano /var/www/agrupacio-carregues-sap/.env
+#   SAP_SQL_USER=agrupacions_lectura   SAP_SQL_PASSWORD=<contrasenya>
+#   SQL_USER=agrupacions_lectura       SQL_PASSWORD=<contrasenya>
+sudo nano /var/www/comandes-venda-sap/.env
+#   SAP_SQL_USER=agrupacions_lectura   SAP_SQL_PASSWORD=<contrasenya>
+
+sudo grep -n 'SQL_USER' /var/www/agrupacio-carregues-sap/.env /var/www/comandes-venda-sap/.env
+sudo systemctl restart comandes-venda-sap.service agrupacio-carregues-sap.service
+curl -s http://127.0.0.1:50006/health
+```
+
+Obrir l'app i comprovar que surten les càrregues. Els timers (agregats,
+pistolejat) llegeixen el mateix `.env` a cada passada: no cal reiniciar-los.
+Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
+
+---
+
 ## Abans del dia
 
-- [ ] `DB_FARINERA` té les dades de producció carregades.
+- [ ] `DB_FARINERA` té comandes i entregues (vegeu «Estat» més amunt).
+- [ ] Les apps es connecten amb `agrupacions_lectura` i no amb `sa`
+      (secció anterior).
 - [ ] Des del servidor s'hi arriba amb l'usuari SQL del `.env`.
       Es comprova amb `nc -zv AE01SAPSQL.Agrienergia.local 1433`, i amb el pas 6
       del dia, provat abans en una còpia del `.env`.
