@@ -41,7 +41,8 @@ Es fa en dos passos:
    Es pot repetir sense duplicar res. Amb `--simular` ho desfà al final.
 
 El calendari demana `historic=1` i hi barreja les càrregues de KAIS, igual que
-les veia a KAIS: sense filtre d'estat i sense la columna de pistolejat. Els ids
+les veia a KAIS: sense filtre d'estat i sense la columna de pistolejat. Les de
+SAP també hi surten planificades i sortides (`estat=1,2`), com a KAIS. Els ids
 no es poden confondre: els de SAP comencen per `SAP/` i els de KAIS per l'any.
 Les agrupacions de KAIS no es sincronitzen amb el pistolejat de SAP.
 

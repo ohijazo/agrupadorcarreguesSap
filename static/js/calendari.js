@@ -171,8 +171,9 @@
 
         const desde = isoLocal(state.diaInici);
         const fins  = isoLocal(state.diaFi);
+        // estat=1,2: planificades i també les ja sortides, com el calendari de KAIS.
         // historic=1: també les càrregues de KAIS d'abans del canvi a SAP (còpia congelada).
-        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000&estat=1&historic=1`;
+        const url = `/api/carregues?desde=${desde}&fins=${fins}&limit=1000&estat=1,2&historic=1`;
 
         try {
             const resp = await fetch(url, { signal: ctrl.signal, credentials: "same-origin" });

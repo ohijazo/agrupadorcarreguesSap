@@ -1138,12 +1138,23 @@ def api_carregues():
                 return _err_validacio(err)
             tra_codis.append(v)
 
+    # `estat` accepta un valor o una llista CSV ("1,2" = planificades i
+    # sortides, el que ensenyava el calendari de KAIS). Amb més d'un, SAP es
+    # consulta sense filtre d'estat i es filtra aquí.
     estat_raw = request.args.get("estat")
     estat = None
+    estats: set[int] | None = None
     if estat_raw not in (None, ""):
-        estat, err = valida_int(estat_raw, "estat", minim=0, maxim=99)
-        if err:
-            return _err_validacio(err)
+        valors = []
+        for part in str(estat_raw).split(","):
+            v, err = valida_int(part.strip(), "estat", minim=0, maxim=99)
+            if err:
+                return _err_validacio(err)
+            valors.append(v)
+        if len(set(valors)) == 1:
+            estat = valors[0]
+        else:
+            estats = set(valors)
 
     art_codi, err = valida_codi(request.args.get("art_codi"), "art_codi", max_len=20, obligatori=False)
     if err:
@@ -1163,6 +1174,10 @@ def api_carregues():
             art_codi=art_codi,
             limit=limit, offset=offset,
         )
+        if estats is not None:
+            items = [it for it in resp.get("items", []) if it.get("car_estat") in estats]
+            resp["total"] = int(resp.get("total") or 0) - (len(resp.get("items", [])) - len(items))
+            resp["items"] = items
         # El calendari (historic=1) també ensenya les càrregues de KAIS d'abans
         # del canvi a SAP, perquè l'usuari les continuï veient com abans. Com a
         # KAIS, sense filtre d'estat: allà les sortides també es veien.
