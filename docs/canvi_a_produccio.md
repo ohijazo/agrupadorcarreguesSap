@@ -140,7 +140,8 @@ Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
 - [ ] L'usuari del Service Layer (`SAP_SL_USER`) pot entrar a la companyia
       `DB_FARINERA`. A producció els usuaris de SAP poden no ser els de proves.
       Recomanat: un usuari propi de l'app, i no el personal.
-- [ ] **crystal-pdf** (servidor de SAP, Windows): el compte del servei ha de
+- [x] **crystal-pdf** (servidor de SAP, Windows) — fet el 18/11/2026, comprovat
+      `db_datareader` + EXECUTE a les dues funcions. El compte del servei ha de
       poder llegir `DB_FARINERA` i executar les dues funcions escalars de SEIDOR
       que crida el layout `DLN20014` (sense EXECUTE, Crystal falla amb l'error
       229). Vegeu `serveis/crystal-pdf/README.md`, pas 4:
