@@ -202,8 +202,10 @@ Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
       `scripts/paritat_backends.py` passa les 11 lectures de l'app a
       `DB_FARIN_TEST` (630 casos, 0 diferències) i fa login i llegeix
       entregues i comandes a `DB_FARINERA`. Pendent:
-      - [ ] confirmar que té permís de **cancel·lar entregues** (no es pot
-            veure per SQL: SAP o una cancel·lació de prova a `DB_FARIN_TEST`);
+      - [x] permís de **cancel·lar entregues**: provat el 19/11/2026 a
+            `DB_FARIN_TEST` amb l'albarà de proves 26700091 (CLIENT PROVES APP).
+            SAP l'ha cancel·lat i el document de cancel·lació 26700222 surt
+            signat per Almacen (USERID 21);
       - [ ] confirmar que no està reservat per a la gent del magatzem;
       - [ ] posar-lo als dos `.env` (`SAP_SL_USER`, `SAP_SL_PASSWORD`),
             reiniciar els dos serveis i comprovar `/health` (`sl: ok`).
