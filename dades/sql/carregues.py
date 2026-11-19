@@ -494,7 +494,9 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
                    COALESCE(NULLIF(l.PackQty, 0), l.Quantity) AS unitats,
                    l.Quantity AS quan,
                    CASE WHEN (UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
-                        THEN 'GRA' ELSE RTRIM(i.SalUnitMsr) END AS tunitat
+                        THEN 'GRA' ELSE
+             -- S25KG -> S25 (unitats_sap.sql_unitat_sacs)
+             CASE WHEN UPPER(RTRIM(i.SalUnitMsr)) LIKE 'S[0-9]%KG' AND UPPER(LEFT(RTRIM(i.SalUnitMsr), LEN(RTRIM(i.SalUnitMsr)) - 2)) NOT LIKE 'S%[^0-9]%' THEN LEFT(RTRIM(i.SalUnitMsr), LEN(RTRIM(i.SalUnitMsr)) - 2) ELSE RTRIM(i.SalUnitMsr) END END AS tunitat
             FROM   RDR1 l WITH (NOLOCK)
             LEFT   JOIN OITM i WITH (NOLOCK) ON i.ItemCode = l.ItemCode
             WHERE  l.DocEntry IN ({placeholders})

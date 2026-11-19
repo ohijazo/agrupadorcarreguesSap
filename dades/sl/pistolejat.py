@@ -82,7 +82,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
             u = l["unitat"].upper()
             # Mateix criteri que preparacioComandesVendaSAP/unitats_sap.py.
             l["granel"] = u in ("GRA", "KG", "KGS") or (
-                l["art_codi"] in granel and not re.match(r"^S\d+$", u))
+                l["art_codi"] in granel and not re.match(r"^S\d+(KG)?$", u))
 
     docs = sorted(comandes)
     sumes: dict[tuple[int, int], dict] = {}

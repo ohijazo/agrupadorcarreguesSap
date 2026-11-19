@@ -19,10 +19,10 @@ from models_agrupacio import (
 
 
 def _pes_per_tunitat(tunitat: str) -> float:
-    """S25 -> 25, S10 -> 10, etc. GRA/UNI -> 0."""
+    """S25 -> 25, S10 -> 10, etc. (també S25KG). GRA/UNI -> 0."""
     if tunitat and tunitat.startswith("S"):
         try:
-            return float(tunitat[1:])
+            return float(tunitat[1:].upper().removesuffix("KG"))
         except ValueError:
             return 0.0
     return 0.0
