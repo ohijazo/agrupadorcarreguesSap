@@ -194,9 +194,19 @@ Per tornar enrere: copiar els `.env` de `/root/` i reiniciar els dos serveis.
 - [ ] Des del servidor s'hi arriba amb l'usuari SQL del `.env`.
       Es comprova amb `nc -zv AE01SAPSQL.Agrienergia.local 1433`, i amb el pas 6
       del dia, provat abans en una còpia del `.env`.
-- [ ] L'usuari del Service Layer (`SAP_SL_USER`) pot entrar a la companyia
-      `DB_FARINERA`. A producció els usuaris de SAP poden no ser els de proves.
-      Recomanat: un usuari propi de l'app, i no el personal.
+- [ ] Usuari del Service Layer propi en lloc d'`OHijazo` (superusuari, personal).
+      **No `SGA1`/`SGA2`**: l'app els tracta com «fet pel magatzem» per decidir
+      què es pot cancel·lar, i si una altra app el bloqueja s'aturen totes.
+      Candidat: **`Almacen`** (USERID 21). Comprovat el 19/11/2026: només 2
+      entrades a SAP (l'última el 13/03/2026), cap document creat; amb
+      `scripts/paritat_backends.py` passa les 11 lectures de l'app a
+      `DB_FARIN_TEST` (630 casos, 0 diferències) i fa login i llegeix
+      entregues i comandes a `DB_FARINERA`. Pendent:
+      - [ ] confirmar que té permís de **cancel·lar entregues** (no es pot
+            veure per SQL: SAP o una cancel·lació de prova a `DB_FARIN_TEST`);
+      - [ ] confirmar que no està reservat per a la gent del magatzem;
+      - [ ] posar-lo als dos `.env` (`SAP_SL_USER`, `SAP_SL_PASSWORD`),
+            reiniciar els dos serveis i comprovar `/health` (`sl: ok`).
 - [x] **crystal-pdf** (servidor de SAP, Windows) — fet el 18/11/2026, comprovat
       `db_datareader` + EXECUTE a les dues funcions. El compte del servei ha de
       poder llegir `DB_FARINERA` i executar les dues funcions escalars de SEIDOR
