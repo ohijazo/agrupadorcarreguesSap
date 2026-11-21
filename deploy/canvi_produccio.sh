@@ -136,8 +136,8 @@ exporta_kais() {
     [ "${PIPESTATUS[0]}" -eq 0 ] && [ -s "$1" ]
 }
 importa_kais() {
-    log "Important l'historic de KAIS $2"
-    sudo -u www-data env KAIS_APP_PATH="$KAIS_MOTOR_DIR" "$APP_DIR/venv/bin/python"         "$APP_DIR/scripts/importar_historic_kais.py" "$1" $2 2>&1 | grep -v '\[INFO\]'
+    log "Important l'historic de KAIS ${2:-}"
+    sudo -u www-data env KAIS_APP_PATH="$KAIS_MOTOR_DIR" "$APP_DIR/venv/bin/python"         "$APP_DIR/scripts/importar_historic_kais.py" "$1" ${2:-} 2>&1 | grep -v '\[INFO\]'
     [ "${PIPESTATUS[0]}" -eq 0 ]
 }
 
