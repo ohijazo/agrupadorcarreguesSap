@@ -898,7 +898,7 @@
                 const np = l.palletitzable === false;
                 const cls = np ? ' class="not-palletitzable"' : '';
                 const tip = np ? ' title="No palletitzable: el motor d&apos;embalatges ignora aquesta línia"' : '';
-                return `<tr${cls}${tip} data-art="${escapeHtml(l.art_codi)}">
+                return `<tr${cls}${tip} data-art="${escapeHtml(l.art_codi)}" data-tunitat="${escapeHtml(l.tunitat || "")}">
                     <td><code>${escapeHtml(l.art_codi)}</code></td>
                     <td>${escapeHtml(l.art_descrip)}</td>
                     <td>${escapeHtml(l.tunitat)}</td>
@@ -969,20 +969,24 @@
             const docnum = String(b.dataset.comanda).split("/").pop();
             const articles = comandes && comandes[docnum] ? comandes[docnum].articles || {} : null;
             b.querySelectorAll("tr[data-art] .cal-pist-cel").forEach(td => {
-                const art = td.closest("tr").dataset.art;
+                const tr = td.closest("tr");
+                const art = tr.dataset.art;
                 td.className = "cal-pist-cel";
                 if (!comandes) { td.textContent = "—"; td.classList.add("muted"); td.title = "No s'ha pogut llegir el pistolejat"; return; }
                 const a = articles && articles[art];
                 if (!a) { td.textContent = "—"; td.classList.add("muted"); td.title = "Sense dades de pistolejat"; return; }
-                td.innerHTML = htmlPistolejatArticle(a);
+                td.innerHTML = htmlPistolejatArticle(a, tr.dataset.tunitat);
             });
         });
     }
 
-    function htmlPistolejatArticle(a) {
+    // Només són sacs les TUnitat que comencen per S (S25, S10...); la resta
+    // (palets, unitats soltes) es compten en unitats.
+    function htmlPistolejatArticle(a, tunitat) {
         const fet = a.estat === "complet";
+        const nom = /^s/i.test((tunitat || "").trim()) ? "sacs" : "unitats";
         const quant = a.sacs_total != null
-            ? `${fmtNum.format(Math.round(a.sacs_fets))}/${fmtNum.format(Math.round(a.sacs_total))} sacs`
+            ? `${fmtNum.format(Math.round(a.sacs_fets))}/${fmtNum.format(Math.round(a.sacs_total))} ${nom}`
             : `${fmtKg0.format(a.kg_fets)}/${fmtKg0.format(a.kg_total)} kg`;
         const cls = fet ? "is-complet" : (a.estat === "parcial" ? "is-parcial" : "is-pendent");
         return `<span class="cal-pist-art ${cls}" title="${fet ? "Pistolejat del tot" : `${a.percent}% pistolejat`}">`
