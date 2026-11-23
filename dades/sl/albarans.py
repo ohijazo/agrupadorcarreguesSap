@@ -38,11 +38,12 @@ def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[
     usuaris = sorted({int(u) for u in usuaris or []})
     if not usuaris:
         return []
+    de, fi = od.data_hora(desde), od.data_hora(fins + timedelta(days=1))
     docs = client().tot(
         ALBARANS,
         select=_CAMPS,
-        filtre=od.i(f"DocDate ge {od.data_hora(desde)}",
-                    f"DocDate lt {od.data_hora(fins + timedelta(days=1))}",
+        filtre=od.i(f"((DocDate ge {de} and DocDate lt {fi}) or "
+                    f"(CreationDate ge {de} and CreationDate lt {fi}))",
                     od.qualsevol_num("UserSign", usuaris),
                     "U_SEIOrdCargId ne null",
                     "CancelStatus ne 'csCancellation'"),

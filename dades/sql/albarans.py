@@ -47,7 +47,8 @@ def llistar_albarans_carregues(carregues: list[int]) -> list[dict]:
 
 def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[dict]:
     """Albarans amb carrega fets pels `usuaris` de SAP (els de l'SGA) amb
-    DocDate entre `desde` i `fins`, tots dos inclosos."""
+    DocDate o CreateDate entre `desde` i `fins`, tots dos inclosos. L'SGA en
+    fa amb la data de l'endema (SGA2): sense CreateDate no sortirien a "Avui"."""
     usuaris = sorted({int(u) for u in usuaris or []})
     if not usuaris:
         return []
@@ -59,11 +60,12 @@ def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[
                    RTRIM(o.CardCode) AS cli_codi, RTRIM(o.CardName) AS cli_nom,
                    o.UserSign, o.DocStatus, o.CANCELED
             FROM   ODLN o WITH (NOLOCK)
-            WHERE  o.DocDate >= ? AND o.DocDate <= ?
+            WHERE  ((o.DocDate >= ? AND o.DocDate <= ?)
+                    OR (o.CreateDate >= ? AND o.CreateDate <= ?))
               AND  o.UserSign IN ({ph})
               AND  o.U_SEIOrdCargId IS NOT NULL
               AND  o.CANCELED <> 'C'
-        """, desde, fins, *usuaris).fetchall()
+        """, desde, fins, desde, fins, *usuaris).fetchall()
         albarans = [_fila(r) for r in files]
     finally:
         conn.close()
