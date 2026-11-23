@@ -922,11 +922,16 @@ class _ErrorPdf(Exception):
 
 
 def _crystal_pdf(url: str, doc_entry: int) -> tuple[bytes, str]:
-    """PDF d'un albara (layout per defecte de SAP) i el seu DocNum."""
+    """PDF d'un albara i el seu DocNum. Layout: CRYSTAL_PDF_LAYOUT (DLN20011
+    si no hi es); buit = el per defecte de SAP."""
+    params = {"tipus": "DLN2", "docentry": doc_entry}
+    layout = os.environ.get("CRYSTAL_PDF_LAYOUT", "DLN20011").strip()
+    if layout:
+        params["layout"] = layout
     try:
         r = requests.get(
             f"{url}/pdf",
-            params={"tipus": "DLN2", "docentry": doc_entry},
+            params=params,
             headers={"X-Token": os.environ.get("CRYSTAL_PDF_TOKEN", "")},
             timeout=int(os.environ.get("CRYSTAL_PDF_TIMEOUT", "60")),
         )

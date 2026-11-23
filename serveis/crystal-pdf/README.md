@@ -2,9 +2,9 @@
 
 L'app d'Agrupació de Càrregues viu a Ubuntu i Crystal Reports només funciona a
 Windows. Aquest servei corre al **servidor de SAP** i genera el PDF d'un document
-amb el layout per defecte que hi ha configurat a SAP. Ara mateix és
-`DLN20014 "ALBARÀ IVA-NOIVA COPIES"` per als albarans. El resultat és idèntic al que
-imprimeix SAP B1.
+amb el layout que demana l'app (`&layout=`, de `CRYSTAL_PDF_LAYOUT`; ara
+`DLN20011` per als albarans) o, si no en demana cap, amb el per defecte que hi ha
+configurat a SAP. El resultat és idèntic al que imprimeix SAP B1.
 
 ```
 Tablet/PC ─► App Flask (Ubuntu) ─► crystal-pdf (servidor SAP, port 8095) ─► SQL Server
@@ -14,7 +14,7 @@ Tablet/PC ─► App Flask (Ubuntu) ─► crystal-pdf (servidor SAP, port 8095)
 `GET /pdf?tipus=DLN2&docentry=148` amb la capçalera `X-Token`:
 
 1. Comprova que el document existeix (`ODLN`). Si no hi és, retorna 404, no un PDF en blanc.
-2. Llegeix de SAP el layout per defecte del tipus (`RTYP.DEFLT_REP`) i el `.rpt` sencer (`RDOC.Template`). Es llegeix cada vegada: si es canvia el layout a SAP, el PDF canvia sol.
+2. Llegeix de SAP el layout demanat (`&layout=DLN20011`, ha de començar pel tipus) o el per defecte del tipus (`RTYP.DEFLT_REP`), i el `.rpt` sencer (`RDOC.Template`). Un layout inexistent dona `400`. Es llegeix cada vegada: si es canvia el layout a SAP, el PDF canvia sol.
 3. Reapunta les taules del report i dels 4 subinformes a la BD configurada.
 4. Posa `DocKey@` = docentry, igual que SAP.
 5. Retorna el PDF. Afegeix la capçalera `X-DocNum`.

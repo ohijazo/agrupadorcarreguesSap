@@ -5,9 +5,10 @@
 // driver OLE DB amb que estan desats els reports. L'app li demana
 // `GET /pdf?tipus=DLN2&docentry=148` i ell:
 //
-//   1. llegeix de SAP el layout per defecte del tipus (RTYP.DEFLT_REP) i el
-//      .rpt sencer (RDOC.Template). Es llegeix a CADA peticio: si algu canvia
-//      el layout a SAP, el PDF canvia sense tocar res aqui;
+//   1. llegeix de SAP el layout demanat (`&layout=DLN20011`) o, si no se'n
+//      demana cap, el per defecte del tipus (RTYP.DEFLT_REP), i el .rpt sencer
+//      (RDOC.Template). Es llegeix a CADA peticio: si algu canvia el layout a
+//      SAP, el PDF canvia sense tocar res aqui;
 //   2. reapunta totes les taules (i subinformes) a la BD configurada;
 //   3. hi posa `DocKey@` = docentry, que es exactament el que fa SAP;
 //   4. retorna el PDF.
@@ -143,19 +144,25 @@ namespace CrystalPdf
             jobs = new SemaphoreSlim(cfg.MaxJobs);
         }
 
-        // Retorna el cami del .rpt per defecte del tipus. El fitxer es desa amb
-        // el hash del contingut: si el layout canvia a SAP surt un fitxer nou,
-        // i mai no es carrega un .rpt a mig escriure.
-        string Layout(SqlConnection cn, string tipus)
+        // Retorna el cami del .rpt: el layout demanat o, si `layout` es buit, el
+        // per defecte del tipus. El codi d'un layout comenca pel tipus
+        // (DLN20011 es de DLN2): aixi no es pot demanar el d'un altre document.
+        // El fitxer es desa amb el hash del contingut: si el layout canvia a
+        // SAP surt un fitxer nou, i mai no es carrega un .rpt a mig escriure.
+        string Layout(SqlConnection cn, string tipus, string layout)
         {
-            using (var cmd = new SqlCommand(
-                "SELECT d.DocCode, d.Template FROM RTYP t JOIN RDOC d ON d.DocCode = t.DEFLT_REP " +
-                "WHERE t.CODE = @t", cn))
+            using (var cmd = new SqlCommand(layout == ""
+                ? "SELECT d.DocCode, d.Template FROM RTYP t JOIN RDOC d ON d.DocCode = t.DEFLT_REP " +
+                  "WHERE t.CODE = @t"
+                : "SELECT DocCode, Template FROM RDOC WHERE DocCode = @l AND LEFT(DocCode, LEN(@t)) = @t", cn))
             {
                 cmd.Parameters.AddWithValue("@t", tipus);
+                cmd.Parameters.AddWithValue("@l", layout);
                 using (var r = cmd.ExecuteReader())
                 {
-                    if (!r.Read()) throw new InvalidOperationException("No hi ha layout per defecte per a " + tipus);
+                    if (!r.Read()) throw new ArgumentException(layout == ""
+                        ? "No hi ha layout per defecte per a " + tipus
+                        : "El layout " + layout + " no existeix o no es de " + tipus);
                     var codi = r.GetString(0);
                     if (r.IsDBNull(1)) throw new InvalidOperationException(codi + " no es un Crystal (es un layout del sistema)");
                     var bytes = (byte[])r[1];
@@ -224,7 +231,7 @@ namespace CrystalPdf
             }
         }
 
-        public byte[] Pdf(string tipus, int docEntry, out int docNum)
+        public byte[] Pdf(string tipus, string layout, int docEntry, out int docNum)
         {
             string taula;
             if (!Tipus.Capcalera.TryGetValue(tipus, out taula))
@@ -237,7 +244,7 @@ namespace CrystalPdf
                 var num = NumDocument(cn, taula, docEntry);
                 if (num == null) throw new DocumentNoTrobat(tipus + " " + docEntry + " no existeix");
                 docNum = num.Value;
-                rpt = Layout(cn, tipus);
+                rpt = Layout(cn, tipus, layout);
             }
 
             // Crystal te un limit de jobs simultanis per proces i cada export
@@ -360,6 +367,7 @@ namespace CrystalPdf
                 if (!TokenOk(req.Headers["X-Token"], cfg.Token)) { Respon(resp, 401, "Token incorrecte"); return; }
 
                 var tipus = (req.QueryString["tipus"] ?? "").ToUpperInvariant();
+                var layout = (req.QueryString["layout"] ?? "").ToUpperInvariant();
                 int docEntry;
                 if (!int.TryParse(req.QueryString["docentry"], out docEntry) || docEntry <= 0)
                 {
@@ -368,14 +376,15 @@ namespace CrystalPdf
                 }
 
                 int docNum;
-                var pdf = gen.Pdf(tipus, docEntry, out docNum);
+                var pdf = gen.Pdf(tipus, layout, docEntry, out docNum);
                 resp.StatusCode = 200;
                 resp.ContentType = "application/pdf";
                 resp.AddHeader("X-DocNum", docNum.ToString());
                 resp.ContentLength64 = pdf.Length;
                 resp.OutputStream.Write(pdf, 0, pdf.Length);
-                Log.Escriu(string.Format("OK {0} {1} (num {2}) {3} bytes en {4:0} ms des de {5}",
-                    tipus, docEntry, docNum, pdf.Length, (DateTime.Now - t0).TotalMilliseconds, req.RemoteEndPoint));
+                Log.Escriu(string.Format("OK {0} {1} (num {2}) layout {3} {4} bytes en {5:0} ms des de {6}",
+                    tipus, docEntry, docNum, layout == "" ? "per defecte" : layout, pdf.Length,
+                    (DateTime.Now - t0).TotalMilliseconds, req.RemoteEndPoint));
             }
             catch (ArgumentException e) { Respon(resp, 400, e.Message); }
             catch (DocumentNoTrobat e) { Respon(resp, 404, e.Message); }
@@ -437,12 +446,13 @@ namespace CrystalPdf
                     return 0;
                 }
                 var cfg = Config.Llegeix();
-                if (args.Length == 4 && args[0] == "--prova")
+                if ((args.Length == 4 || args.Length == 5) && args[0] == "--prova")
                 {
-                    // crystal-pdf.exe --prova DLN2 148 sortida.pdf
+                    // crystal-pdf.exe --prova DLN2 148 sortida.pdf [DLN20011]
                     var t0 = DateTime.Now;
                     int docNum;
-                    var pdf = new Generador(cfg).Pdf(args[1].ToUpperInvariant(), int.Parse(args[2]), out docNum);
+                    var pdf = new Generador(cfg).Pdf(args[1].ToUpperInvariant(),
+                        args.Length == 5 ? args[4].ToUpperInvariant() : "", int.Parse(args[2]), out docNum);
                     File.WriteAllBytes(args[3], pdf);
                     Console.WriteLine("OK: document " + docNum + ", " + pdf.Length + " bytes en "
                                       + (DateTime.Now - t0).TotalMilliseconds.ToString("0") + " ms -> " + args[3]);

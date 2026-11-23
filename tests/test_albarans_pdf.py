@@ -72,9 +72,20 @@ def test_pdf_ok_passa_token_i_audita(client, monkeypatch):
     assert r.headers["Content-Type"] == "application/pdf"
     assert r.headers["Content-Disposition"] == 'inline; filename="Albara_26700148.pdf"'
     assert r.headers["Cache-Control"] == "no-store"
-    assert crides == [{"url": "http://sap:8095/pdf", "params": {"tipus": "DLN2", "docentry": 148},
+    assert crides == [{"url": "http://sap:8095/pdf",
+                       "params": {"tipus": "DLN2", "docentry": 148, "layout": "DLN20011"},
                        "headers": {"X-Token": "t" * 32}, "timeout": 60}]
     assert auditats == [("imprimir_albara", "26700148", {"docentry": 148})]
+
+
+def test_pdf_layout_configurable_i_buit_es_el_de_sap(client, monkeypatch):
+    c, app_module, _ = client
+    crides = _mock_get(monkeypatch, app_module, _Resp())
+    monkeypatch.setenv("CRYSTAL_PDF_LAYOUT", "DLN20012")
+    c.get("/albarans/148/pdf")
+    monkeypatch.setenv("CRYSTAL_PDF_LAYOUT", "")
+    c.get("/albarans/148/pdf")
+    assert [x["params"].get("layout") for x in crides] == ["DLN20012", None]
 
 
 def test_pdf_docnum_estrany_no_entra_a_la_capcalera(client, monkeypatch):
