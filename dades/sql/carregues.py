@@ -18,6 +18,7 @@ Al backend eje="SAP" fa de sentinel, sca=Series, car=DocEntry.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timedelta
 
 import pyodbc
@@ -188,6 +189,10 @@ def llistar_carregues(
         where_params.append(art_codi)
 
     # SUB-consultes derivades (num_comandes, palletitzable, is_granel, kg_total).
+    # Una carrega porta comandes de venda (ORDR) i sol·licituds de trasllat a
+    # un altre magatzem (OWTQ, p. ex. 01 -> 05 Mallorca), totes dues lligades
+    # per `U_SEIOrdCargId`. Les dues compten: una carrega nomes de trasllats
+    # sortia al calendari amb 0 comandes i 0 kg (23/11, carregues 29 i 38).
     # Granel = unitat GRA/KG/KGS, o propietat 5 ("Es Granel") si la unitat no
     # es de sacs: a produccio el granel te SalUnitMsr 'KGS', no 'GRA'. Mateix
     # criteri que preparacioComandesVendaSAP/unitats_sap.py (el motor).
@@ -202,6 +207,16 @@ def llistar_carregues(
               AND  RTRIM(i2.SalUnitMsr) <> 'UNI'
               AND  NOT (UPPER(RTRIM(ISNULL(i2.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i2.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i2.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
         )
+        OR EXISTS (
+            SELECT 1
+            FROM   OWTQ q2 WITH (NOLOCK)
+            JOIN   WTQ1 m2 WITH (NOLOCK) ON m2.DocEntry = q2.DocEntry
+            JOIN   OITM j2 WITH (NOLOCK) ON j2.ItemCode = m2.ItemCode
+            WHERE  q2.U_SEIOrdCargId = h.DocEntry
+              AND  m2.Quantity > 0
+              AND  RTRIM(j2.SalUnitMsr) <> 'UNI'
+              AND  NOT (UPPER(RTRIM(ISNULL(j2.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (j2.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(j2.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
+        )
     """
     exists_granel_sql = """
         EXISTS (
@@ -213,6 +228,15 @@ def llistar_carregues(
               AND  (UPPER(RTRIM(ISNULL(i3.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i3.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i3.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
               AND  l3.Quantity > 0
         )
+        OR EXISTS (
+            SELECT 1
+            FROM   OWTQ q3 WITH (NOLOCK)
+            JOIN   WTQ1 m3 WITH (NOLOCK) ON m3.DocEntry = q3.DocEntry
+            JOIN   OITM j3 WITH (NOLOCK) ON j3.ItemCode = m3.ItemCode
+            WHERE  q3.U_SEIOrdCargId = h.DocEntry
+              AND  (UPPER(RTRIM(ISNULL(j3.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (j3.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(j3.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
+              AND  m3.Quantity > 0
+        )
     """
     kg_total_sql = """
         ISNULL((
@@ -220,6 +244,11 @@ def llistar_carregues(
             FROM   ORDR o4 WITH (NOLOCK)
             JOIN   RDR1 l4 WITH (NOLOCK) ON l4.DocEntry = o4.DocEntry
             WHERE  o4.U_SEIOrdCargId = h.DocEntry
+        ), 0) + ISNULL((
+            SELECT SUM(m4.Quantity)
+            FROM   OWTQ q4 WITH (NOLOCK)
+            JOIN   WTQ1 m4 WITH (NOLOCK) ON m4.DocEntry = q4.DocEntry
+            WHERE  q4.U_SEIOrdCargId = h.DocEntry
         ), 0)
     """
     num_comandes_sql = """
@@ -227,6 +256,10 @@ def llistar_carregues(
             SELECT COUNT(DISTINCT o5.DocEntry)
             FROM   ORDR o5 WITH (NOLOCK)
             WHERE  o5.U_SEIOrdCargId = h.DocEntry
+        ), 0) + ISNULL((
+            SELECT COUNT(*)
+            FROM   OWTQ q5 WITH (NOLOCK)
+            WHERE  q5.U_SEIOrdCargId = h.DocEntry
         ), 0)
     """
 
@@ -479,9 +512,11 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
             ORDER  BY o.Series, o.DocNum
         """
         com_rows = conn.execute(sql_com, docentry_carrega).fetchall()
+        trasllats = _trasllats_carrega(conn, docentry_carrega)
 
         if not com_rows:
-            return {"comandes": [], "total_sacs": 0, "total_kg": 0.0}
+            return _amb_trasllats({"comandes": [], "total_sacs": 0, "total_kg": 0.0},
+                                  trasllats)
 
         docentries = [r.DocEntry for r in com_rows]
         placeholders = ",".join(["?"] * len(docentries))
@@ -568,4 +603,90 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
                                 (c.get("pobla") or "").upper(),
                                 (c.get("cli_nom") or "").upper()))
 
-    return {"comandes": out_com, "total_sacs": total_sacs, "total_kg": round(total_kg, 2)}
+    return _amb_trasllats(
+        {"comandes": out_com, "total_sacs": total_sacs, "total_kg": round(total_kg, 2)},
+        trasllats)
+
+
+def _sacs_trasllat(quan: float, unitat_venda: str) -> int:
+    """Sacs d'una linia de trasllat.
+
+    A les comandes SAP posa els sacs a `PackQty`, pero a les sol·licituds de
+    trasllat el deixa a 0 i nomes hi ha els kg. Es treuen de la unitat de
+    venda de l'article: S25KG -> 25 kg per sac. Les altres (UNI, palets) ja
+    son unitats.
+    """
+    m = re.fullmatch(r"S(\d+(?:[.,]\d+)?)KG", (unitat_venda or "").strip().upper())
+    if not m:
+        return int(quan)
+    kg_sac = float(m.group(1).replace(",", "."))
+    return int(round(quan / kg_sac)) if kg_sac > 0 else int(quan)
+
+
+def _trasllats_carrega(conn, docentry_carrega: int) -> list[dict]:
+    """Sol·licituds de trasllat (OWTQ) d'una carrega, amb el format de les
+    comandes del detall.
+
+    Una carrega pot portar mercaderia cap a un altre magatzem nostre (01 ->
+    05 Mallorca, 01 -> 04 Salzadella) en lloc de, o a mes de, comandes de
+    venda. El "client" es el magatzem de desti.
+    """
+    sql = """
+        SELECT q.DocEntry, q.DocNum, RTRIM(q.ToWhsCode) AS whs_codi,
+               RTRIM(w.WhsName) AS whs_nom, RTRIM(w.City) AS whs_ciutat,
+               RTRIM(l.ItemCode) AS art_codi,
+               RTRIM(l.Dscription) AS art_descrip,
+               l.Quantity AS quan, l.PackQty AS paq,
+               RTRIM(i.SalUnitMsr) AS unitat_venda,
+               CASE WHEN (UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) IN ('GRA', 'KG', 'KGS') OR (i.QryGroup5 = 'Y' AND UPPER(RTRIM(ISNULL(i.SalUnitMsr, ''))) NOT LIKE 'S[0-9]%'))
+                    THEN 'GRA' ELSE
+             CASE WHEN UPPER(RTRIM(i.SalUnitMsr)) LIKE 'S[0-9]%KG' AND UPPER(LEFT(RTRIM(i.SalUnitMsr), LEN(RTRIM(i.SalUnitMsr)) - 2)) NOT LIKE 'S%[^0-9]%' THEN LEFT(RTRIM(i.SalUnitMsr), LEN(RTRIM(i.SalUnitMsr)) - 2) ELSE RTRIM(i.SalUnitMsr) END END AS tunitat
+        FROM   OWTQ q WITH (NOLOCK)
+        JOIN   WTQ1 l WITH (NOLOCK) ON l.DocEntry = q.DocEntry
+        LEFT   JOIN OITM i WITH (NOLOCK) ON i.ItemCode = l.ItemCode
+        LEFT   JOIN OWHS w WITH (NOLOCK) ON w.WhsCode = q.ToWhsCode
+        WHERE  q.U_SEIOrdCargId = ?
+        ORDER  BY q.DocNum, l.LineNum
+    """
+    per_doc: dict[int, dict] = {}
+    for r in conn.execute(sql, docentry_carrega).fetchall():
+        quan = float(r.quan or 0)
+        paq = float(r.paq or 0)
+        sacs = int(paq) if paq > 0 else _sacs_trasllat(quan, r.unitat_venda)
+        tun = (r.tunitat or "").strip()
+        palletizable = _tunitat_es_palletizable(tun, sacs)
+        doc = per_doc.setdefault(r.DocEntry, {
+            "comanda": f"Trasllat {r.DocNum}",
+            "det_tipo": "T",
+            "cli_codi": r.whs_codi or "",
+            "cli_nom": (r.whs_nom or "").strip(),
+            "pobla": (r.whs_ciutat or "").strip(),
+            "total_sacs": 0,
+            "total_kg": 0.0,
+            "linies": [],
+        })
+        kg = quan if quan > 0 else 0.0
+        doc["linies"].append({
+            "art_codi": r.art_codi,
+            "art_descrip": (r.art_descrip or "").strip(),
+            "sacs": sacs,
+            "quan": quan,
+            "tunitat": tun,
+            "kg": round(kg, 2),
+            "palletitzable": palletizable,
+        })
+        if palletizable:
+            doc["total_sacs"] += sacs
+        doc["total_kg"] = round(doc["total_kg"] + kg, 2)
+    return list(per_doc.values())
+
+
+def _amb_trasllats(resum: dict, trasllats: list[dict]) -> dict:
+    """Afegeix els trasllats al final del detall i als totals."""
+    if not trasllats:
+        return resum
+    return {
+        "comandes": resum["comandes"] + trasllats,
+        "total_sacs": resum["total_sacs"] + sum(t["total_sacs"] for t in trasllats),
+        "total_kg": round(resum["total_kg"] + sum(t["total_kg"] for t in trasllats), 2),
+    }

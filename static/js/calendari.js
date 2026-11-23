@@ -907,7 +907,9 @@
                     ${tdPist}
                 </tr>`;
             }).join("");
-            const tipoBadge = a.det_tipo === "P"
+            const tipoBadge = a.det_tipo === "T"
+                ? `<span class="badge badge-warn" title="Sol·licitud de trasllat a un altre magatzem">T</span>`
+                : a.det_tipo === "P"
                 ? `<span class="badge badge-warn" title="Comanda pendent">P</span>`
                 : `<span class="badge badge-ok" title="Comanda">C</span>`;
             const poblaHtml = a.pobla
