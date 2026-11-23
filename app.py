@@ -54,7 +54,8 @@ if _PREP_PATH and os.path.isdir(_PREP_PATH) and _PREP_PATH not in sys.path:
 # Imports locals (després del sys.path)
 from agregador import agrupar, serialitzar  # noqa: E402
 from consultes_carregues import (  # noqa: E402
-    FUNCIONS as FUNCIONS_DADES, cercar_articles, connectar, llistar_albarans_dates,
+    FUNCIONS as FUNCIONS_DADES, albarans_granel_propi, cercar_articles, connectar,
+    llistar_albarans_dates, llistar_albarans_granel_dates,
     llistar_carregues, llistar_estats_carregues, llistar_pendents_pistolejar,
     llistar_transportistes, progres_articles_carrega, progres_carregues, resum_carrega,
 )
@@ -595,6 +596,8 @@ def index():
     # magatzem amb agrupacions pendents).
     if auth.auth_enabled() and session.get("user_rol") == "magatzem":
         return redirect(url_for("magatzem_llista"))
+    if _es_rol_granel():
+        return redirect(url_for("albarans_llista"))
     avui = date.today()
     # Deep-link des de /calendari: ?desde=YYYY-MM-DD&fins=YYYY-MM-DD&focus=carrega_id
     desde_q = (request.args.get("desde") or "").strip()
@@ -632,7 +635,7 @@ def control_llista():
 
 
 @app.route("/albarans", strict_slashes=False)
-@auth.requires_rol("admin", "oficina")
+@auth.requires_rol("admin", "oficina", auth.ROL_GRANEL)
 def albarans_llista():
     return render_template("albarans.html")
 
@@ -817,6 +820,12 @@ def _cancelar_albarans_actiu() -> bool:
     return os.environ.get("CANCELAR_ALBARANS", "").strip().lower() in ("true", "1", "si", "sí")
 
 
+def _es_rol_granel() -> bool:
+    """Rol 'granel': nomes veu i imprimeix els albarans de granel amb transport
+    propi (els faci qui els faci), i no en pot cancel·lar cap."""
+    return auth.auth_enabled() and session.get("user_rol") == auth.ROL_GRANEL
+
+
 def _usuaris_sga() -> set[int]:
     """USERID de SAP dels usuaris de l'SGA (els albarans del magatzem)."""
     crus = os.environ.get("ALBARANS_SGA_USUARIS", "22,23")
@@ -869,10 +878,11 @@ def _desa_cancelat(doc_entry: int, docnum: int, operari: str, motiu: str) -> Non
 
 
 @app.route("/api/albarans")
-@auth.requires_rol("admin", "oficina")
+@auth.requires_rol("admin", "oficina", auth.ROL_GRANEL)
 def api_albarans():
     """Albarans de l'SGA (amb carrega) amb data entre `?desde` i `?fins`
-    (YYYY-MM-DD, tots dos inclosos, 31 dies com a maxim)."""
+    (YYYY-MM-DD, tots dos inclosos, 31 dies com a maxim). Per al rol 'granel',
+    els de granel amb transport propi, sense cancel·lar."""
     rang, err = valida_rang_dates(request.args.get("desde"), request.args.get("fins"))
     if err:
         return _err_validacio(err)
@@ -880,6 +890,12 @@ def api_albarans():
     if (fins_d - desde_d).days >= 31:   # tots dos dies inclosos
         return _err_validacio("El rang màxim és de 31 dies.")
     try:
+        if _es_rol_granel():
+            albarans = llistar_albarans_granel_dates(desde_d, fins_d)
+            for a in albarans:
+                a["cancelable"] = False
+            return jsonify({"albarans": albarans, "pdf": bool(_crystal_pdf_url()),
+                            "cancelar": False, "granel": True})
         sga = _usuaris_sga()
         albarans = llistar_albarans_dates(desde_d, fins_d, sorted(sga))
         cancelar = _cancelar_albarans_actiu()
@@ -956,13 +972,31 @@ def _resposta_pdf(contingut: bytes, nom: str):
     return resp
 
 
+_NO_GRANEL = "Només pots imprimir albarans de granel amb transport propi."
+
+
+def _fora_de_granel(ids: list[int]) -> list[int] | None:
+    """Per al rol 'granel', els DocEntry demanats que NO son de granel amb
+    transport propi (llista buida si tots ho son). None per als altres rols."""
+    if not _es_rol_granel():
+        return None
+    permesos = albarans_granel_propi(ids)
+    return [d for d in ids if d not in permesos]
+
+
 @app.route("/albarans/<int:doc_entry>/pdf")
-@auth.requires_rol("admin", "oficina")
+@auth.requires_rol("admin", "oficina", auth.ROL_GRANEL)
 def albara_pdf(doc_entry: int):
     """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
     url = _crystal_pdf_url()
     if not url:
         return _text("La impressió d'albarans no està activada.", 404)
+    try:
+        if _fora_de_granel([doc_entry]):
+            return _text(_NO_GRANEL, 403)
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error comprovant l'albara granel %s", doc_entry)
+        return _text("SAP no respon. Torna-ho a provar d'aquí a una estona.", 503)
     try:
         contingut, num = _crystal_pdf(url, doc_entry)
     except _ErrorPdf as e:
@@ -986,7 +1020,7 @@ def _ids_url(param: str) -> list[int] | None:
 
 
 @app.route("/albarans/pdf")
-@auth.requires_rol("admin", "oficina")
+@auth.requires_rol("admin", "oficina", auth.ROL_GRANEL)
 def albarans_pdf():
     """Diversos albarans (?ids=12,15,18, DocEntry) en un sol PDF, en l'ordre
     demanat, per imprimir-los de cop. Cada un amb el layout de SAP. Si en falla
@@ -1002,6 +1036,12 @@ def albarans_pdf():
         return _text("No hi ha cap albarà seleccionat.", 400)
     if len(ids) > MAX_ALBARANS_PDF:
         return _text(f"Com a màxim es poden imprimir {MAX_ALBARANS_PDF} albarans de cop.", 400)
+    try:
+        if _fora_de_granel(ids):
+            return _text(_NO_GRANEL, 403)
+    except backend_dades.ERRORS_DADES:
+        log.exception("DB error comprovant albarans granel %s", ids)
+        return _text("SAP no respon. Torna-ho a provar d'aquí a una estona.", 503)
     if not _rate_limit(f"pdf_alb:{session.get('user_id') or request.remote_addr}",
                        max_req=10, window_sec=60):
         return _text("Massa impressions seguides. Espera un minut i torna-ho a provar.", 429)

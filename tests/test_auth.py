@@ -174,3 +174,8 @@ def test_auth_enabled_false_other_values(monkeypatch):
     assert auth.auth_enabled() is False
     monkeypatch.setenv("AUTH_ENABLED", "")
     assert auth.auth_enabled() is False
+
+
+def test_crear_usuari_rol_granel(usuaris_tmp):
+    u = auth.crear_usuari("granel@pytest.local", "secret123", "Granel", rol="granel")
+    assert u["rol"] == "granel"

@@ -332,3 +332,105 @@ def test_menu_amaga_gestio_albarans_sense_cap_funcio(amb_rol, monkeypatch):
     monkeypatch.setenv("CANCELAR_ALBARANS", "")
     html = amb_rol("oficina").get("/magatzem").data
     assert b'href="/albarans"' not in html
+
+
+# --- Rol 'granel' -----------------------------------------------------------
+# Nomes "Gestió d'albarans", amb els albarans de granel amb transport propi
+# (els faci qui els faci); pot imprimir-los pero no cancel·lar-ne cap.
+GRANEL = [{"docentry": 46, "docnum": 26700046, "data": "2026-11-23", "carrega": None,
+           "cli_codi": "C1", "cli_nom": "TURRIS PANEM", "usuari": 1, "obert": True,
+           "cancelat": False}]
+
+
+@pytest.fixture
+def granel(amb_rol, monkeypatch):
+    c = amb_rol("granel")
+    import app as app_module
+    crides = {"llista": [], "permesos": []}
+
+    def llista(desde, fins):
+        crides["llista"].append((desde, fins))
+        return [dict(a) for a in GRANEL]
+
+    def permesos(ids):
+        crides["permesos"].append(list(ids))
+        return {a["docentry"] for a in GRANEL} & set(ids)
+
+    monkeypatch.setattr(app_module, "llistar_albarans_granel_dates", llista)
+    monkeypatch.setattr(app_module, "albarans_granel_propi", permesos)
+    monkeypatch.setattr(app_module, "llistar_albarans_dates",
+                        lambda *a: pytest.fail("el rol granel no ha de veure els de l'SGA"))
+    monkeypatch.setenv("CANCELAR_ALBARANS", "true")
+    return c, crides
+
+
+def test_granel_inici_va_a_albarans(granel):
+    c, _ = granel
+    r = c.get("/")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/albarans")
+
+
+def test_granel_nomes_veu_gestio_albarans(granel):
+    c, _ = granel
+    html = c.get("/albarans").data.decode()
+    assert 'href="/albarans"' in html
+    for altra in ('href="/"', 'href="/magatzem"', 'href="/magatzem/pendents"',
+                  'href="/calendari"', 'href="/ajuda"'):
+        assert altra not in html, altra
+    assert "granel amb transport propi" in html
+    assert "cancel·lació d'albarans no està activada" not in html
+
+
+def test_granel_llista_els_de_granel_sense_cancel(granel):
+    c, crides = granel
+    j = c.get("/api/albarans?desde=2026-11-23&fins=2026-11-23").get_json()
+    assert crides["llista"] == [(date(2026, 11, 23), date(2026, 11, 23))]
+    assert [a["docnum"] for a in j["albarans"]] == [26700046]
+    assert j["cancelar"] is False and j["granel"] is True
+    assert all(a["cancelable"] is False for a in j["albarans"])
+
+
+def test_granel_no_pot_cancel_lar(granel):
+    c, _ = granel
+    import app as app_module
+    app_module.app.config["CSRF_ENABLED"] = False
+    try:
+        r = c.post("/api/albarans/46/cancelar", json={"codi": "1", "motiu": "prova granel"})
+    finally:
+        app_module.app.config["CSRF_ENABLED"] = True
+    assert r.status_code == 403
+
+
+def test_granel_imprimeix_un_de_granel(granel):
+    c, _ = granel
+    r = c.get("/albarans/46/pdf")
+    assert r.status_code == 200 and r.data == PDF
+
+
+def test_granel_no_imprimeix_un_que_no_es_de_granel(granel):
+    c, crides = granel
+    r = c.get("/albarans/148/pdf")
+    assert r.status_code == 403
+    assert "granel" in r.data.decode()
+    assert crides["permesos"] == [[148]]
+
+
+def test_granel_pdf_conjunt_tot_o_res(granel, monkeypatch):
+    c, _ = granel
+    import app as app_module
+    _mock_get(monkeypatch, app_module, _Resp(content=_pdf_real(100)))
+    assert c.get("/albarans/pdf?ids=46").status_code == 200
+    assert c.get("/albarans/pdf?ids=46,148").status_code == 403
+
+
+@pytest.mark.parametrize("url", ["/magatzem", "/magatzem/pendents", "/api/agrupacions"])
+def test_granel_sense_acces_a_la_resta(granel, url):
+    c, _ = granel
+    assert c.get(url).status_code == 403
+
+
+def test_oficina_no_passa_pel_filtre_granel(amb_rol, monkeypatch):
+    import app as app_module
+    monkeypatch.setattr(app_module, "albarans_granel_propi",
+                        lambda ids: pytest.fail("oficina no s'ha de filtrar per granel"))
+    assert amb_rol("oficina").get("/albarans/148/pdf").status_code == 200

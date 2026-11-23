@@ -36,7 +36,7 @@ def main():
     p = argparse.ArgumentParser(description="Crea un usuari (per defecte rol=admin).")
     p.add_argument("--username", help="Email de l'usuari (p.ex. nom@agrienergia.com).")
     p.add_argument("--nom", help="Nom complet de l'usuari.")
-    p.add_argument("--rol", default="admin", choices=["admin", "oficina", "magatzem"])
+    p.add_argument("--rol", default="admin", choices=list(auth.ROLS))
     args = p.parse_args()
 
     username = args.username or input("Email: ").strip().lower()

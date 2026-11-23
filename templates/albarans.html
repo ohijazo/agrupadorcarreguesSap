@@ -14,7 +14,11 @@
     <div class="container mag-header-row">
         <div>
             <h1>🧾 Gestió d'albarans</h1>
+            {% if current_user and current_user.rol == 'granel' %}
+            <p class="mag-subtitle">Albarans de granel amb transport propi (Agri Energia)</p>
+            {% else %}
             <p class="mag-subtitle">Albarans de venda que l'SGA ha creat a SAP per a les càrregues</p>
+            {% endif %}
         </div>
         <div class="mag-header-tools">
             {% include '_user_menu.html' %}
@@ -46,7 +50,7 @@
     {% if not pdf_albarans %}
     <p class="alb-avis">La impressió d'albarans no està activada en aquest servidor.</p>
     {% endif %}
-    {% if not cancelar_albarans %}
+    {% if not cancelar_albarans and not (current_user and current_user.rol == 'granel') %}
     <p class="alb-avis">La cancel·lació d'albarans no està activada en aquest servidor.</p>
     {% endif %}
 

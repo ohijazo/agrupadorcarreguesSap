@@ -109,7 +109,7 @@ function pintaFila(a) {
             <td class="alb-sel">${check}</td>
             <td data-lbl="Data">${escA(a.data ? fmtData(a.data) : "")}</td>
             <td data-lbl="Albarà" class="alb-num">${escA(a.docnum)}</td>
-            <td data-lbl="Càrrega">#${escA(a.carrega)}</td>
+            <td data-lbl="Càrrega">${a.carrega != null ? `#${escA(a.carrega)}` : "—"}</td>
             <td data-lbl="Client">
                 <div class="alb-cli">${escA(a.cli_nom || a.cli_codi)}</div>
                 <div class="alb-cli-codi">${escA(a.cli_codi)}</div>
@@ -131,7 +131,7 @@ function normalitza(s) {
 function visibles() {
     const q = normalitza(document.getElementById("alb-cerca").value.trim());
     return q
-        ? albState.albarans.filter(a => normalitza(`${a.docnum} ${a.carrega} ${a.cli_codi} ${a.cli_nom}`).includes(q))
+        ? albState.albarans.filter(a => normalitza(`${a.docnum} ${a.carrega ?? ""} ${a.cli_codi} ${a.cli_nom}`).includes(q))
         : albState.albarans;
 }
 

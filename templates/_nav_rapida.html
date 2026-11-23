@@ -4,9 +4,10 @@
     "Agrupacions" és l'única llista de les agrupacions desades (preparar-les
     i, per a l'oficina, reimprimir, tancar o eliminar). "Preparació de comanda" és
     una altra cosa: totes les càrregues que surten, agrupades o no (n'hi ha
-    que es preparen sense agrupar). -#}
+    que es preparen sense agrupar). El rol 'granel' només veu "Gestió d'albarans". -#}
 {% set rol = current_user.rol if current_user else None %}
 {% set oficina = not current_user or rol in ('admin', 'oficina') %}
+{% set granel = rol == 'granel' %}
 {% macro actiu(ruta) %}{% if request.path == ruta %} aria-current="page"{% endif %}{% endmacro %}
 <nav class="nav-rapida" aria-label="Seccions">
     {% if oficina %}
@@ -15,6 +16,7 @@
         <span>Agrupar càrregues</span>
     </a>
     {% endif %}
+    {% if not granel %}
     {#- També activa dins la preparació d'una agrupació (/magatzem/<id>). -#}
     <a href="/magatzem" class="nav-tile"{% if request.path == '/magatzem' or (request.path.startswith('/magatzem/') and request.path != '/magatzem/pendents') %} aria-current="page"{% endif %}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></svg>
@@ -24,12 +26,14 @@
         {% include '_icona_pda.html' %}
         <span>Preparació de comanda</span>
     </a>
-    {% if oficina and (pdf_albarans or cancelar_albarans) %}
+    {% endif %}
+    {% if (oficina and (pdf_albarans or cancelar_albarans)) or (granel and pdf_albarans) %}
     <a href="/albarans" class="nav-tile"{{ actiu('/albarans') }}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14 2.5V7h5M9 11.5h7M9 15h7M9 18.5h4"/></svg>
         <span>Gestió d'albarans</span>
     </a>
     {% endif %}
+    {% if not granel %}
     <a href="/calendari" class="nav-tile"{{ actiu('/calendari') }}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>
         <span>Calendari</span>
@@ -38,4 +42,5 @@
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.7"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>
         <span>Ajuda</span>
     </a>
+    {% endif %}
 </nav>

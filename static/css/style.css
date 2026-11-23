@@ -191,6 +191,7 @@ body {
 .user-menu-rol-admin    { background: #b45309; }
 .user-menu-rol-oficina  { background: var(--primary); }
 .user-menu-rol-magatzem { background: #2f855a; }
+.user-menu-rol-granel   { background: #6b46c1; }
 
 .user-menu-item {
     display: flex;

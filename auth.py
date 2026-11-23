@@ -42,6 +42,11 @@ PBKDF2_ITER = 200_000
 PBKDF2_ALGO = "sha256"
 SALT_BYTES = 16
 
+# 'granel': nomes "Gestió d'albarans", amb els albarans de granel amb transport
+# propi; pot imprimir-los pero no cancel·lar-los (app.py, `_es_rol_granel`).
+ROL_GRANEL = "granel"
+ROLS = ("admin", "oficina", "magatzem", ROL_GRANEL)
+
 
 def auth_enabled() -> bool:
     return os.environ.get("AUTH_ENABLED", "").strip().lower() in ("1", "true", "yes")
@@ -84,7 +89,7 @@ def crear_usuari(username: str, password: str, nom: str, rol: str = "oficina") -
     username = (username or "").strip().lower()
     if not es_email_valid(username):
         raise ValueError("L'usuari ha de ser un email vàlid (p.ex. nom@agrienergia.com)")
-    if rol not in ("admin", "oficina", "magatzem"):
+    if rol not in ROLS:
         raise ValueError(f"rol invàlid: {rol}")
     h = hash_password(password)
     row = db.fetch_one(
@@ -145,7 +150,7 @@ def actualitzar_usuari(id_: int, nom: str | None = None, rol: str | None = None,
         sets.append("nom = %s")
         params.append(nom)
     if rol is not None:
-        if rol not in ("admin", "oficina", "magatzem"):
+        if rol not in ROLS:
             raise ValueError(f"rol invàlid: {rol}")
         sets.append("rol = %s")
         params.append(rol)

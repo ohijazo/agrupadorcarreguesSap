@@ -91,6 +91,11 @@ curl -s http://127.0.0.1:50006/health
 cd /var/www/agrupacio-carregues-sap
 sudo -u www-data venv/bin/python scripts/crear_admin.py --username tu@agrienergia.com --nom "El teu nom"
 
+#    Usuari que només imprimeix albarans de granel amb transport propi (rol granel:
+#    només veu "Gestió d'albarans", no pot cancel·lar). També es pot crear des de
+#    /admin/usuaris triant el rol "Granel".
+# sudo -u www-data venv/bin/python scripts/crear_admin.py --username granel@agrienergia.com --nom "Albarans granel" --rol granel
+
 # 5. DNS: demanar l'entrada al servidor DNS corporatiu
 #    agrupacions-sap.agrienergia.local  ->  ae01farwebsrv.agrienergia.local
 

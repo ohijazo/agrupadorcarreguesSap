@@ -197,18 +197,18 @@ Vanilla JS sense framework. Tres "modes":
 
 | Mètode | Path | Rols | Notes |
 |---|---|---|---|
-| `GET` | `/` | admin, oficina | (magatzem → redirigit a `/magatzem`) |
+| `GET` | `/` | admin, oficina | (magatzem → redirigit a `/magatzem`; granel → `/albarans`) |
 | `GET` | `/calendari` | tots auth | |
-| `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | tots auth | |
+| `GET` | `/magatzem`, `/magatzem/<id>`, `/magatzem/pendents` | admin, oficina, magatzem | |
 | `GET` | `/api/pistolejat/pendents?desde&fins[&tots=1]` | tots auth | rang màxim 31 dies; capçaleres sense derivats (`llistar_carregues(derivats=False)`); cache de 8 s per (dates, tots); temps per part al log (`pendents: … ms`); cada línia porta `lots` (`obtenir_dades_pistolejat(amb_lots=True)`: `@SEIOPIC.U_MdAbsEntry` → `OBTN.DistNumber`, sense els d'albarans cancel·lats) |
 | `GET` | `/api/pistolejat/carregues?ids=…` | tots auth | % pistolejat de cada càrrega sencera (màx. 300; `dades.pistolejat.progres_per_carrega`); la pàgina principal el llegeix cada 30 s; cache de 8 s |
 | `GET` | `/api/carregues/pistolejat?ids=…` | **pública** (prefix `/api/carregues`) | el mateix per al calendari (incrustat a l'app germana sense sessió), només `{estat, percent}`; 30/min per IP; comparteix la cache |
 | `GET` | `/api/agrupacions/<id>/pistolejat` | tots auth | progrés de la preparació segons el pistolejat de l'SGA; desa els fets a `productes_preparats` |
-| `GET` | `/albarans` | admin, oficina | pantalla de gestió d'albarans |
-| `GET` | `/api/albarans?desde&fins` | admin, oficina | albarans de l'SGA; rang màxim 31 dies |
-| `GET` | `/albarans/<docentry>/pdf` | admin, oficina | proxy a `serveis/crystal-pdf`; audit `imprimir_albara` |
-| `GET` | `/albarans/pdf?ids=…&nums=…` | admin, oficina | diversos albarans (màx. 40) en un sol PDF, en l'ordre demanat; 2 peticions alhora a `crystal-pdf` (el seu `MaxJobs`) i unió amb `pypdf`; si en falla algun, 503 amb els números; 10/min per usuari; audit `imprimir_albarans` |
-| `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina | CSRF; `{"codi", "motiu"}` obligatoris (codi d'operari de magatzem; no es desa ni es torna); només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
+| `GET` | `/albarans` | admin, oficina, granel | pantalla de gestió d'albarans |
+| `GET` | `/api/albarans?desde&fins` | admin, oficina, granel | albarans de l'SGA; rang màxim 31 dies. Rol granel: els de granel amb transport propi (`llistar_albarans_granel_dates`), de qualsevol usuari, mai `cancelable` |
+| `GET` | `/albarans/<docentry>/pdf` | admin, oficina, granel | proxy a `serveis/crystal-pdf`; audit `imprimir_albara`. Rol granel: 403 si l'albarà no és de granel amb transport propi (`albarans_granel_propi`) |
+| `GET` | `/albarans/pdf?ids=…&nums=…` | admin, oficina, granel (només de granel; si n'hi ha un que no ho és, 403) | diversos albarans (màx. 40) en un sol PDF, en l'ordre demanat; 2 peticions alhora a `crystal-pdf` (el seu `MaxJobs`) i unió amb `pypdf`; si en falla algun, 503 amb els números; 10/min per usuari; audit `imprimir_albarans` |
+| `POST` | `/api/albarans/<docentry>/cancelar` | admin, oficina (**no** granel) | CSRF; `{"codi", "motiu"}` obligatoris (codi d'operari de magatzem; no es desa ni es torna); només albarans de l'SGA; escriu a SAP pel Service Layer; audit `cancelar_albara` / `cancelar_albara_error` |
 | `GET` | `/ajuda` | tots auth | |
 | `GET/POST` | `/login`, `/logout` | públic | rate-limit 5/min/IP |
 | `GET` | `/admin/usuaris` | admin | |

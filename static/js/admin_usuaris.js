@@ -60,7 +60,7 @@ function fmtTs(iso) {
 }
 
 function rolBadge(rol) {
-    const colors = { admin: "#dc2626", oficina: "#2c5282", magatzem: "#d97706" };
+    const colors = { admin: "#dc2626", oficina: "#2c5282", magatzem: "#d97706", granel: "#6b46c1" };
     const c = colors[rol] || "#718096";
     return `<span class="rol-badge" style="background:${c}">${escapeHtml(rol)}</span>`;
 }

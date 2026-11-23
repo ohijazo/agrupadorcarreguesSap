@@ -150,6 +150,17 @@ def llistar_albarans_dates(*args, **kwargs):
                        getattr(_sl_alb, "llistar_albarans_dates", None), *args, **kwargs)
 
 
+# Rol 'granel': nomes SQL (no hi ha implementacio SL; el commutador usa SQL).
+def llistar_albarans_granel_dates(*args, **kwargs):
+    return _b.despatxa("llistar_albarans_granel_dates", _sql_alb.llistar_albarans_granel_dates,
+                       None, *args, **kwargs)
+
+
+def albarans_granel_propi(*args, **kwargs):
+    return _b.despatxa("albarans_granel_propi", _sql_alb.albarans_granel_propi,
+                       None, *args, **kwargs)
+
+
 def llistar_pendents_pistolejar(desde: str, fins: str, nomes_pendents: bool = True) -> dict:
     """Articles pendents de pistolejar de les carregues que surten entre
     `desde` i `fins`. No es una funcio de dades mes, sino la composicio de dues
