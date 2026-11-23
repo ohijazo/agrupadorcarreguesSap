@@ -161,12 +161,15 @@
     // ---------------------------------------------------------------
     // Fetch llista de càrregues
     // ---------------------------------------------------------------
-    async function carregaMes() {
+    // `silenci`: refresc automàtic. No mostra "Carregant…" i, si falla, deixa
+    // el que ja hi ha en lloc de buidar el calendari.
+    async function carregaMes({ silenci = false } = {}) {
+        if (silenci && state.abortCtrl) return;   // ja n'hi ha una en marxa
         if (state.abortCtrl) state.abortCtrl.abort();
         const ctrl = new AbortController();
         state.abortCtrl = ctrl;
 
-        $("#cal-loading").hidden = false;
+        if (!silenci) $("#cal-loading").hidden = false;
         $("#cal-error").hidden = true;
 
         const desde = isoLocal(state.diaInici);
@@ -187,6 +190,7 @@
         } catch (e) {
             if (e.name === "AbortError") return;
             console.error(e);
+            if (silenci) return;
             const err = $("#cal-error");
             err.textContent = `No s'ha pogut carregar el calendari: ${e.message}`;
             err.hidden = false;
@@ -1211,16 +1215,18 @@
             if (state.modalAbort) { state.modalAbort.abort(); state.modalAbort = null; }
         });
 
-        // Auto-refresh cada 10 minuts. No refresca si la pestanya és al fons
-        // ni si hi ha el modal de detall obert (per no interrompre la lectura).
-        const REFRESH_MS = 10 * 60 * 1000;
+        // Auto-refresh cada 2 minuts, el mateix ritme amb què el servidor
+        // actualitza els kg de SAP (timer agregats). No refresca si la pestanya
+        // és al fons ni si hi ha el modal de detall obert (per no interrompre
+        // la lectura).
+        const REFRESH_MS = 2 * 60 * 1000;
         setInterval(() => {
             if (document.hidden) return;
             if (dlg.hasAttribute("open")) return;
-            carregaMes();
+            carregaMes({ silenci: true });
         }, REFRESH_MS);
         // El pistolejat canvia mentre l'SGA carrega: es llegeix més sovint
-        // que la llista (que es refresca cada 10 min).
+        // que la llista.
         setInterval(() => {
             if (document.hidden || dlg.hasAttribute("open")) return;
             refrescaPistolejat();
@@ -1228,7 +1234,7 @@
         // En tornar a la pestanya després d'estar a un altre tab, refresca un
         // cop perquè els kg/càrregues del dia reflecteixin canvis recents.
         document.addEventListener("visibilitychange", () => {
-            if (!document.hidden && !dlg.hasAttribute("open")) carregaMes();
+            if (!document.hidden && !dlg.hasAttribute("open")) carregaMes({ silenci: true });
         });
     }
 
