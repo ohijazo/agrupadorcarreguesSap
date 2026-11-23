@@ -46,6 +46,12 @@ _CONN_STR = (
 )
 
 
+# Transportistes que el calendari pinta el dia d'entrega i no el de sortida
+# (excepcio heretada de KAIS, vegeu static/js/calendari.js `usaDataArribada`).
+# El backend SL fa el mateix en Python amb `dades.sl.carregues._TRANSP_PER_ENTREGA`.
+_SQL_TRANSP_PER_ENTREGA = "t.Name LIKE 'AGRI%' OR t.Name LIKE 'M% SOLEDAD L%PEZ%'"
+
+
 def connectar():
     """Obre una connexio SQL a SAP B1. Read-only + timeout 15s."""
     conn = pyodbc.connect(_CONN_STR, timeout=10, autocommit=True)
@@ -138,11 +144,24 @@ def llistar_carregues(
     # "Ordenes de Carga Abiertas" (mostra fins i tot Canceled='Y' si
     # U_SEIEstado='P'). Si cal restringir a un estat concret, es fa amb
     # el parametre opcional `estat`.
-    where_sql = """
-        WHERE COALESCE(h.U_SEIDataS, h.CreateDate) >= ?
-          AND COALESCE(h.U_SEIDataS, h.CreateDate) <  ?
+    # Excepcio AGRI / Mª Soledad Lopez (com a KAIS): el calendari les pinta el
+    # dia d'entrega (U_SEIDataE), aixi que tambe han de sortir si aquesta data
+    # cau al rang encara que la de sortida en quedi fora. Els parentesis externs
+    # fan que els AND d'aqui sota s'apliquin a les dues branques del OR.
+    where_sql = f"""
+        WHERE (
+                (
+                        COALESCE(h.U_SEIDataS, h.CreateDate) >= ?
+                    AND COALESCE(h.U_SEIDataS, h.CreateDate) <  ?
+                )
+             OR (
+                        h.U_SEIDataE >= ?
+                    AND h.U_SEIDataE <  ?
+                    AND ({_SQL_TRANSP_PER_ENTREGA})
+                )
+        )
     """
-    where_params: list = [desde_d, fins_d]
+    where_params: list = [desde_d, fins_d, desde_d, fins_d]
 
     if tra_codis:
         placeholders = ",".join(["?"] * len(tra_codis))
@@ -268,8 +287,8 @@ def llistar_carregues(
             "car_fecha": r.CreateDate.strftime("%Y-%m-%d") if r.CreateDate else None,
             "car_fecsalida": r.U_SEIDataS.strftime("%Y-%m-%d") if r.U_SEIDataS else None,
             "car_fecsalida_hora": _fmt_hora(r.U_SEIHoraS),
-            # SAP no te data d'arribada: retornem None per compatibilitat.
-            "car_fecllegada": None,
+            # "Fecha de entrega prevista". SAP no en guarda l'hora.
+            "car_fecllegada": r.U_SEIDataE.strftime("%Y-%m-%d") if r.U_SEIDataE else None,
             "car_fecllegada_hora": None,
             "car_estat": _estat_char_to_int(r.U_SEIEstado) or 0,
             "tra_codi": r.tra_codi or "",

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 import unicodedata
 from datetime import datetime, timedelta
@@ -400,8 +401,13 @@ def resum_carrega(eje: str, sca: str, car: str) -> dict:
 # Layer torna les 40 propietats de l'entitat.
 _CAMPS_CAPCALERA = (
     "DocEntry,DocNum,Series,CreateDate,U_SEINomCarg,U_SEIDataS,U_SEIHoraS,"
-    "U_SEIEstado,U_SEITransp,U_SEIMatric,U_SEIPesoC,U_SEIComent"
+    "U_SEIDataE,U_SEIEstado,U_SEITransp,U_SEIMatric,U_SEIPesoC,U_SEIComent"
 )
+
+# Transportistes que el calendari pinta el dia d'entrega (excepcio de KAIS).
+# Mateix criteri que el LIKE del SQL (`_SQL_TRANSP_PER_ENTREGA`):
+# 'AGRI%' o 'M% SOLEDAD L%PEZ%', sense distingir majuscules.
+_TRANSP_PER_ENTREGA = re.compile(r"^(AGRI|M.* SOLEDAD L.*PEZ)", re.IGNORECASE | re.DOTALL)
 
 # Cache del nom dels transportistes: substitueix el LEFT JOIN amb la UDT.
 # Es una taula petita i gairebe estatica.
@@ -497,6 +503,20 @@ def llistar_carregues(
     filtre = od.finestra_coalesce("U_SEIDataS", "CreateDate", desde_d, fins_d)
     capceleres = client().tot(ORDRES, select=_CAMPS_CAPCALERA,
                               filtre=filtre, ordre="DocEntry")
+    # Excepcio AGRI / Mª Soledad Lopez: tambe les que tenen la data d'entrega
+    # al rang, com la segona branca del WHERE del SQL.
+    noms = _noms_transportistes()
+    per_entrega = sorted(c for c, n in noms.items() if _TRANSP_PER_ENTREGA.match(n))
+    if per_entrega:
+        ja = {int(h["DocEntry"]) for h in capceleres}
+        finestra_e = od.i(f"U_SEIDataE ge {od.data_hora(desde_d)}",
+                          f"U_SEIDataE lt {od.data_hora(fins_d)}")
+        for tros in od.trossos(per_entrega):
+            for h in client().tot(ORDRES, select=_CAMPS_CAPCALERA, ordre="DocEntry",
+                                  filtre=od.i(finestra_e, od.qualsevol_de("U_SEITransp", tros))):
+                if int(h["DocEntry"]) not in ja:
+                    ja.add(int(h["DocEntry"]))
+                    capceleres.append(h)
 
     maxim = int(os.environ.get("SL_MAX_CAPCALERES", "5000"))
     if len(capceleres) > maxim:
@@ -533,7 +553,6 @@ def llistar_carregues(
     derivats = agregats.per_carrega(docentries)
     neutre = {"kg_total": 0.0, "num_comandes": 0,
               "palletitzable": False, "is_granel": False}
-    noms = _noms_transportistes()
 
     items = []
     for h in pagina:
@@ -551,8 +570,8 @@ def llistar_carregues(
             "car_fecha": _data(h.get("CreateDate")),
             "car_fecsalida": _data(h.get("U_SEIDataS")),
             "car_fecsalida_hora": _hora(h.get("U_SEIHoraS")),
-            # SAP no te data d'arribada: None per compatibilitat amb KAIS.
-            "car_fecllegada": None,
+            # "Fecha de entrega prevista". SAP no en guarda l'hora.
+            "car_fecllegada": _data(h.get("U_SEIDataE")),
             "car_fecllegada_hora": None,
             "car_estat": _estat_char_to_int(h.get("U_SEIEstado")) or 0,
             "tra_codi": tra_codi,
