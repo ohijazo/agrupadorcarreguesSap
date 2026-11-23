@@ -1072,7 +1072,7 @@ function renderDetallCarrega(data) {
         }).join("");
         const tipoBadge = a.det_tipo === "P"
             ? `<span class="badge badge-warn" title="Comanda pendent">P</span>`
-            : `<span class="badge badge-ok" title="Comanda">A</span>`;
+            : `<span class="badge badge-ok" title="Comanda">C</span>`;
         const poblaHtml = a.pobla
             ? ` · <span class="comanda-pobla" title="Població d'enviament"><span aria-hidden="true">📍</span> ${escapeHtml(a.pobla)}</span>`
             : "";
