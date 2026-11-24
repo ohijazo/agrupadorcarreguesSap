@@ -651,7 +651,10 @@
     function posaPastillaPistolejat(li, c) {
         const p = pistolejatDe(c);
         let el = li.querySelector(".cal-evt-pist");
-        if (!p) { if (el) el.remove(); return; }
+        // Totes les comandes amb albarà: ja ho diu la pastilla "ALB." plena,
+        // el ✓ del pistolejat sobra.
+        const a = p && p.estat === "complet" ? albaransDe(c) : null;
+        if (!p || (a && a.n >= a.total)) { if (el) el.remove(); return; }
         if (!el) {
             el = document.createElement("span");
             el.className = "cal-evt-pist";
