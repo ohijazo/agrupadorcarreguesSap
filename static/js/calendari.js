@@ -683,7 +683,10 @@
         const albarans = [...new Set(llista.flatMap(x => x.albarans || []))].sort((a, b) => a - b);
         // DocNum de l'albarà -> quan s'ha fet ("2026-11-24 10:18").
         const creats = Object.assign({}, ...llista.map(x => x.creats || {}));
-        return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans, creats };
+        // Càrrega només de trasllats (a un altre magatzem nostre): "TRAS.", no "ALB.".
+        const nomesTrasllats = llista.every(x => String(x.comanda).startsWith("Trasllat"));
+        return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans, creats,
+                 nomesTrasllats };
     }
 
     // Pastilla "ALB." (totes les comandes en tenen, ple) o "ALB.1/3"
@@ -700,11 +703,13 @@
             li.insertBefore(el, kg || null);
         }
         const totes = a.n >= a.total;
+        const sigla = a.nomesTrasllats ? "TRAS." : "ALB.";
+        const doc = a.nomesTrasllats ? "trasllat fet" : "albarà";
         el.classList.toggle("is-totes", totes);
-        el.textContent = totes ? "ALB." : `ALB.${a.n}/${a.total}`;
+        el.textContent = totes ? sigla : `${sigla}${a.n}/${a.total}`;
         el.setAttribute("aria-label", totes
-            ? "Totes les comandes tenen albarà"
-            : `${a.n} de ${a.total} comandes tenen albarà`);
+            ? `Totes les comandes tenen ${doc}`
+            : `${a.n} de ${a.total} comandes tenen ${doc}`);
     }
 
     function pintaPistolejat() {
@@ -800,7 +805,7 @@
                 const a = albaransDe(c);
                 if (!a) return "";
                 const detall = [...a.perComanda].map(([com, albs]) => `comanda ${com} → ${albs.join(", ")}`).join(" · ");
-                return `<div class="cal-tt-row"><span class="muted">Albarà:</span> <strong>${a.n} de ${a.total} comandes</strong> (${escapeHtml(detall)})</div>`;
+                return `<div class="cal-tt-row"><span class="muted">${a.nomesTrasllats ? "Trasllat" : "Albarà"}:</span> <strong>${a.n} de ${a.total} comandes</strong> (${escapeHtml(detall)})</div>`;
             })(),
             `<div class="cal-tt-hint muted">Clica per veure el detall complet</div>`,
         ].filter(Boolean).join("");

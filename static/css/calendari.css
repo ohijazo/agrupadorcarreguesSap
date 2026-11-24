@@ -657,11 +657,12 @@
    a la pastilla. Discret a propòsit; sense animació si l'usuari no en vol. */
 .cal-evt-pist.is-ara::before {
     content: "";
-    width: .38rem;
-    height: .38rem;
-    margin-right: .22rem;
+    width: .45rem;
+    height: .45rem;
+    margin-right: .25rem;
     border-radius: 50%;
-    background: currentColor;
+    background: #38a169;   /* verd: es distingeix del ◐ blau */
+    box-shadow: 0 0 0 2px rgba(56, 161, 105, .25);
     animation: cal-pist-batec 1.6s ease-in-out infinite;
 }
 @keyframes cal-pist-batec {
