@@ -161,10 +161,20 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                 cancelats_docnum[int(d["DocEntry"])] = int(d["DocNum"])
             elif estat == "csNo":
                 vius_docnum[int(d["DocEntry"])] = int(d["DocNum"])
-    albarans = [
-        {"comanda": com, "albara": alb, "docnum": vius_docnum[alb]}
-        for com, alb in sorted({(com, alb) for (com, _, alb) in amb_albara if alb in vius_docnum})
-    ]
+    vius = {(com, alb, vius_docnum[alb]) for (com, _, alb) in amb_albara if alb in vius_docnum}
+    # Tambe els albarans sense lectures (granel fet a SAP), per la linia de
+    # l'albara (BaseEntry), com la segona branca del SQL. El Service Layer no
+    # pot filtrar per linia: es demanen els de les carregues i es mira en Python.
+    for tros in od.trossos(ids):
+        for d in c.tot(
+            "DeliveryNotes",
+            select="DocEntry,DocNum,CancelStatus,DocumentLines",
+            filtre=od.i(od.qualsevol_num("U_SEIOrdCargId", tros), "CancelStatus eq 'csNo'"),
+        ):
+            for l in d.get("DocumentLines") or []:
+                if l.get("BaseType") == 17 and l.get("BaseEntry") in comandes:
+                    vius.add((int(l["BaseEntry"]), int(d["DocEntry"]), int(d["DocNum"])))
+    albarans = [{"comanda": com, "albara": alb, "docnum": num} for com, alb, num in sorted(vius)]
     pistolejats_cancelats = [
         {"comanda": com, "linia": lin, "albara": alb, "docnum": cancelats_docnum[alb],
          "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}

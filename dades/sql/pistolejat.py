@@ -132,16 +132,25 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                 })
 
             # Albarans vius de cada comanda (nomes se'n fa un per comanda):
-            # una comanda amb albara ja no es pendent de pistolejar.
+            # una comanda amb albara ja no es pendent de pistolejar. Pels
+            # lectures de l'SGA i tambe per la linia de l'albara (DLN1): els
+            # de granel es fan a SAP sense pistolejar (usuari MES, carrega 13).
             for r in conn.execute(f"""
-                SELECT DISTINCT p.U_BaseEntry AS comanda, d.DocEntry AS albara, d.DocNum AS docnum
+                SELECT p.U_BaseEntry AS comanda, d.DocEntry AS albara, d.DocNum AS docnum
                 FROM   [@SEIOPIC] p WITH (NOLOCK)
                 JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = p.U_TargetEntry
                 WHERE  p.U_BaseObject = 17
                   AND  p.U_TargetType = 15
                   AND  d.CANCELED = 'N'
                   AND  p.U_BaseEntry IN ({ph})
-            """, *tros).fetchall():
+                UNION
+                SELECT dl.BaseEntry, d.DocEntry, d.DocNum
+                FROM   DLN1 dl WITH (NOLOCK)
+                JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = dl.DocEntry
+                WHERE  dl.BaseType = 17
+                  AND  d.CANCELED = 'N'
+                  AND  dl.BaseEntry IN ({ph})
+            """, *tros, *tros).fetchall():
                 albarans.append({
                     "comanda": int(r.comanda),
                     "albara": int(r.albara),

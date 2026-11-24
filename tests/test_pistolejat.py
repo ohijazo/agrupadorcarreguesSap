@@ -573,3 +573,34 @@ def test_calendari_pistolejat_detall_valida(client, monkeypatch, qs):
     c, app_module = client
     monkeypatch.setattr(app_module, "progres_articles_carrega", lambda car: pytest.fail("no s'havia de consultar SAP"))
     assert c.get(f"/api/carregues/pistolejat-detall?{qs}").status_code == 400
+
+
+# --- Albara fet a SAP sense pistolejar (granel, carrega 13 de produccio) ----
+def test_albara_sense_lectures_es_detecta(monkeypatch):
+    """L'albara 26700099 el va fer l'usuari MES a SAP: no te @SEIOPIC. Es
+    troba per la linia de l'albara (BaseEntry), als dos backends."""
+    sys.path.insert(0, os.environ.get("PREPARACIO_PATH", r"P:\preparacioComandesVendaSAP"))
+    from dades.sl import pistolejat as sl
+    from dades.sql import pistolejat as sql
+
+    class Client:
+        def tot(self, entitat, select=None, filtre="", ordre=None):
+            if entitat == "Orders":
+                return [{"DocEntry": 42, "DocNum": 26600042, "CardCode": "C", "CardName": "TURRIS",
+                         "U_SEIOrdCargId": 13,
+                         "DocumentLines": [{"LineNum": 1, "ItemCode": "01761", "MeasureUnit": "KGS",
+                                            "InventoryQuantity": 24700, "LineStatus": "bost_Close"}]}]
+            if entitat == "DeliveryNotes" and "U_SEIOrdCargId" in filtre:
+                return [{"DocEntry": 99, "DocNum": 26700099, "CancelStatus": "csNo",
+                         "DocumentLines": [{"BaseType": 17, "BaseEntry": 42, "BaseLine": 1}]}]
+            return []
+
+    monkeypatch.setattr(sl, "client", Client)
+    r = sl.obtenir_dades_pistolejat([13], incloure_tancades=True)
+    assert r["albarans"] == [{"comanda": 42, "albara": 99, "docnum": 26700099}]
+
+    # SQL: la consulta d'albarans tambe mira DLN1 (la paritat amb dades reals
+    # es comprova amb scripts/paritat_backends.py).
+    import inspect
+    font = " ".join(inspect.getsource(sql.obtenir_dades_pistolejat).split())
+    assert "UNION SELECT dl.BaseEntry, d.DocEntry, d.DocNum FROM DLN1 dl" in font
