@@ -394,7 +394,8 @@
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
             `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
-            ` · <span class="cal-evt-alb">ALB.1/3</span> comandes amb albarà</span>`;
+            ` · <span class="cal-evt-alb">A1/3</span> comandes amb albarà` +
+            ` · <span class="cal-evt-alb is-tras is-totes">T</span> trasllat fet</span>`;
     }
 
     function renderStats() {
@@ -651,7 +652,7 @@
     function posaPastillaPistolejat(li, c) {
         const p = pistolejatDe(c);
         let el = li.querySelector(".cal-evt-pist");
-        // Totes les comandes amb albarà: ja ho diu la pastilla "ALB." plena,
+        // Totes les comandes amb albarà: ja ho diu la pastilla "A" (o "T") plena,
         // el ✓ del pistolejat sobra.
         const a = p && p.estat === "complet" ? albaransDe(c) : null;
         if (!p || (a && a.n >= a.total)) { if (el) el.remove(); return; }
@@ -683,13 +684,14 @@
         const albarans = [...new Set(llista.flatMap(x => x.albarans || []))].sort((a, b) => a - b);
         // DocNum de l'albarà -> quan s'ha fet ("2026-11-24 10:18").
         const creats = Object.assign({}, ...llista.map(x => x.creats || {}));
-        // Càrrega només de trasllats (a un altre magatzem nostre): "TRAS.", no "ALB.".
+        // Càrrega només de trasllats (a un altre magatzem nostre): "T", no "A".
         const nomesTrasllats = llista.every(x => String(x.comanda).startsWith("Trasllat"));
         return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans, creats,
                  nomesTrasllats };
     }
 
-    // Pastilla "ALB." (totes les comandes en tenen, ple) o "ALB.1/3"
+    // Pastilla "A" (totes les comandes en tenen, ple) o "A1/3"; "T" en una
+    // càrrega només de trasllats, d'un altre color
     // (només algunes, en contorn). El número d'albarà va al detall de la
     // càrrega, a cada comanda: a la cel·la no hi cap.
     function posaPastillaAlbara(li, c) {
@@ -703,7 +705,8 @@
             li.insertBefore(el, kg || null);
         }
         const totes = a.n >= a.total;
-        const sigla = a.nomesTrasllats ? "TRAS." : "ALB.";
+        const sigla = a.nomesTrasllats ? "T" : "A";
+        el.classList.toggle("is-tras", a.nomesTrasllats);
         const doc = a.nomesTrasllats ? "trasllat fet" : "albarà";
         el.classList.toggle("is-totes", totes);
         el.textContent = totes ? sigla : `${sigla}${a.n}/${a.total}`;

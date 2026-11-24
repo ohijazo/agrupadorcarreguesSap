@@ -691,6 +691,9 @@
     border-radius: 3px;
 }
 .cal-evt-alb.is-totes { color: #fff; background: #6b46c1; border: 1px solid #6b46c1; }
+/* "T": trasllat a un altre magatzem nostre. Taronja per no confondre'l amb l'albarà. */
+.cal-evt-alb.is-tras { color: #9c4221; background: #fffaf0; border-color: #f6ad55; }
+.cal-evt-alb.is-tras.is-totes { color: #fff; background: #dd6b20; border-color: #dd6b20; }
 .comanda-block h4 .cal-evt-alb { margin-left: .4rem; vertical-align: middle; }
 /* Columna "Pistolejat" del detall: barreta + sacs (o kg) fets / total. */
 .cal-pist-cel { white-space: nowrap; font-size: .8rem; }
