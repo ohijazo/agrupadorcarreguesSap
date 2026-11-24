@@ -122,6 +122,12 @@ def _albarans_per_comanda(dades: dict) -> dict[int, list[int]]:
     return {k: sorted(v) for k, v in out.items()}
 
 
+def _creats(dades: dict) -> dict[int, str]:
+    """{docnum de l'albara: "AAAA-MM-DD HH:MM" de creacio}, per al detall."""
+    return {int(a.get("docnum") or a.get("albara") or 0): a["creat"]
+            for a in dades.get("albarans") or [] if a.get("creat")}
+
+
 def _avis_cancelat(acc: dict | None) -> dict | None:
     if not acc or acc["kg"] <= _EPSILON:
         return None
@@ -302,13 +308,14 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
     `dades`: `obtenir_dades_pistolejat(ids, incloure_tancades=True)`. Les
     linies amb albara compten com a fetes, aixi que el % es sobre tota la
     carrega. Retorna {docentry_carrega: {estat, percent, kg_total, kg_fets,
-    n_comandes, comandes_albara}} (`comandes_albara`: [{comanda, albarans}]
+    n_comandes, comandes_albara}} (`comandes_albara`: [{comanda, albarans, creats}]
     amb el DocNum de cada comanda amb albara no cancel·lat i els DocNum dels
     seus albarans); les carregues sense cap linia no hi surten. El % no
     arriba a 100 mentre falti algun kg (l'arrodoniment no ho ha d'amagar).
     """
     pist = _suma_pistolejats(dades)
     albarans = _albarans_per_comanda(dades)
+    creats = _creats(dades)
     accs: dict[int, dict] = {}
     comandes: dict[int, list] = {}
     for c in dades.get("comandes") or []:
@@ -326,7 +333,9 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
                     "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
                     "n_comandes": len(cms),
                     "comandes_albara": sorted(
-                        ({"comanda": _num_doc(c), "albarans": albarans[int(c["docentry"])]}
+                        ({"comanda": _num_doc(c), "albarans": albarans[int(c["docentry"])],
+                          # Quan s'ha fet cada albara (o trasllat): per al detall.
+                          "creats": {str(n): creats[n] for n in albarans[int(c["docentry"])] if n in creats}}
                          for c in cms if albarans.get(int(c["docentry"]))),
                         key=lambda x: str(x["comanda"]))}
     return out

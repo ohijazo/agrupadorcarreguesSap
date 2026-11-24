@@ -151,10 +151,11 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     # Un document de cancel·lacio (csCancellation) no te lectures.
     cancelats_docnum: dict[int, int] = {}
     vius_docnum: dict[int, int] = {}
+    creats: dict[int, str | None] = {}   # DocEntry de l'albara -> "AAAA-MM-DD HH:MM"
     for tros in od.trossos(sorted({alb for (_, _, alb) in amb_albara})):
         for d in c.tot(
             "DeliveryNotes",
-            select="DocEntry,DocNum,CancelStatus",
+            select="DocEntry,DocNum,CancelStatus,CreationDate,DocTime",
             filtre=od.qualsevol_num("DocEntry", tros),
         ):
             estat = d.get("CancelStatus")
@@ -162,6 +163,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                 cancelats_docnum[int(d["DocEntry"])] = int(d["DocNum"])
             elif estat == "csNo":
                 vius_docnum[int(d["DocEntry"])] = int(d["DocNum"])
+                creats[int(d["DocEntry"])] = _creat(d)
     vius = {(com, alb, vius_docnum[alb]) for (com, _, alb) in amb_albara if alb in vius_docnum}
     # Tambe els albarans sense lectures (granel fet a SAP), per la linia de
     # l'albara (BaseEntry), com la segona branca del SQL. El Service Layer no
@@ -169,13 +171,15 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
     for tros in od.trossos(ids):
         for d in c.tot(
             "DeliveryNotes",
-            select="DocEntry,DocNum,CancelStatus,DocumentLines",
+            select="DocEntry,DocNum,CancelStatus,CreationDate,DocTime,DocumentLines",
             filtre=od.i(od.qualsevol_num("U_SEIOrdCargId", tros), "CancelStatus eq 'csNo'"),
         ):
             for l in d.get("DocumentLines") or []:
                 if l.get("BaseType") == 17 and l.get("BaseEntry") in comandes:
                     vius.add((int(l["BaseEntry"]), int(d["DocEntry"]), int(d["DocNum"])))
-    albarans = [{"comanda": com, "albara": alb, "docnum": num} for com, alb, num in sorted(vius)]
+                    creats[int(d["DocEntry"])] = _creat(d)
+    albarans = [{"comanda": com, "albara": alb, "docnum": num, "creat": creats.get(alb)}
+                for com, alb, num in sorted(vius)]
     pistolejats_cancelats = [
         {"comanda": com, "linia": lin, "albara": alb, "docnum": cancelats_docnum[alb],
          "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
@@ -214,3 +218,12 @@ def _lots(c, per_lot: dict, cancelats_docnum: dict) -> list[dict]:
          "sacs": round(v["sacs"], 6), "kg": round(v["kg"], 6)}
         for (com, lin, alb, lot), v in sorted(sumes.items())
     ]
+
+
+def _creat(d: dict) -> str | None:
+    """CreationDate + DocTime ("10:18:00") -> "2026-11-24 10:18", com el SQL."""
+    data = (d.get("CreationDate") or "")[:10]
+    if not data:
+        return None
+    hora = (d.get("DocTime") or "")[:5]
+    return f"{data} {hora}" if hora else data

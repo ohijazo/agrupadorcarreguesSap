@@ -7,6 +7,18 @@ from dades.sql.carregues import connectar
 _TROS = 500
 
 
+def _creat(data, hora) -> str | None:
+    """Quan es va crear el document: CreateDate + DocTime (HHMM, l'hora de
+    creacio a SAP) -> "2026-11-24 10:18"."""
+    if not data:
+        return None
+    text = data.strftime("%Y-%m-%d")
+    if hora is not None:
+        h = int(hora)
+        text += f" {h // 100:02d}:{h % 100:02d}"
+    return text
+
+
 def _trossos(valors: list[int]):
     for n in range(0, len(valors), _TROS):
         yield valors[n:n + _TROS]
@@ -136,7 +148,8 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
             # lectures de l'SGA i tambe per la linia de l'albara (DLN1): els
             # de granel es fan a SAP sense pistolejar (usuari MES, carrega 13).
             for r in conn.execute(f"""
-                SELECT p.U_BaseEntry AS comanda, d.DocEntry AS albara, d.DocNum AS docnum
+                SELECT p.U_BaseEntry AS comanda, d.DocEntry AS albara, d.DocNum AS docnum,
+                       d.CreateDate, d.DocTime
                 FROM   [@SEIOPIC] p WITH (NOLOCK)
                 JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = p.U_TargetEntry
                 WHERE  p.U_BaseObject = 17
@@ -144,7 +157,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                   AND  d.CANCELED = 'N'
                   AND  p.U_BaseEntry IN ({ph})
                 UNION
-                SELECT dl.BaseEntry, d.DocEntry, d.DocNum
+                SELECT dl.BaseEntry, d.DocEntry, d.DocNum, d.CreateDate, d.DocTime
                 FROM   DLN1 dl WITH (NOLOCK)
                 JOIN   ODLN d WITH (NOLOCK) ON d.DocEntry = dl.DocEntry
                 WHERE  dl.BaseType = 17
@@ -155,6 +168,7 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
                     "comanda": int(r.comanda),
                     "albara": int(r.albara),
                     "docnum": int(r.docnum),
+                    "creat": _creat(r.CreateDate, r.DocTime),
                 })
 
             # Lots (U_ManagedBy 10000044 = per lots, OBTN). Les lectures d'un
@@ -290,7 +304,8 @@ def _afegeix_trasllats(conn, carregues, incloure_tancades, comandes, pistolejats
         # El trasllat fet (OWTR) es busca per la linia (WTR1.BaseEntry): hi
         # es tant si l'ha fet l'SGA com si s'ha fet a ma a SAP.
         for r in conn.execute(f"""
-            SELECT DISTINCT tl.BaseEntry AS doc, t.DocEntry AS albara, t.DocNum AS docnum
+            SELECT DISTINCT tl.BaseEntry AS doc, t.DocEntry AS albara, t.DocNum AS docnum,
+                   t.CreateDate, t.DocTime
             FROM   WTR1 tl WITH (NOLOCK)
             JOIN   OWTR t WITH (NOLOCK) ON t.DocEntry = tl.DocEntry
             WHERE  tl.BaseType = {OBJ_SOL_TRASLLAT}
@@ -298,6 +313,7 @@ def _afegeix_trasllats(conn, carregues, incloure_tancades, comandes, pistolejats
               AND  tl.BaseEntry IN ({ph})
         """, *tros).fetchall():
             albarans.append({"comanda": -int(r.doc), "albara": int(r.albara),
-                             "docnum": int(r.docnum)})
+                             "docnum": int(r.docnum),
+                             "creat": _creat(r.CreateDate, r.DocTime)})
     pistolejats.sort(key=lambda p: (p["comanda"], p["linia"]))
     albarans.sort(key=lambda a: (a["comanda"], a["albara"]))

@@ -430,11 +430,12 @@ def test_progres_per_carrega_comandes_amb_albara():
             {"docentry": 3, "docnum": 503, "carrega": 87, "linies": [_linia(0)]},
         ],
         "pistolejats": [], "estats": {},
-        "albarans": [{"comanda": 2, "albara": 900, "docnum": 7001}],
+        "albarans": [{"comanda": 2, "albara": 900, "docnum": 7001, "creat": "2026-11-24 10:18"}],
     }
     r = calc.progres_per_carrega(dades)
     assert r[87]["n_comandes"] == 3
-    assert r[87]["comandes_albara"] == [{"comanda": 502, "albarans": [7001]}]
+    assert r[87]["comandes_albara"] == [{"comanda": 502, "albarans": [7001],
+                                         "creats": {"7001": "2026-11-24 10:18"}}]
 
 
 def test_progres_per_carrega_no_arrodoneix_a_100_si_falta():
@@ -597,13 +598,13 @@ def test_albara_sense_lectures_es_detecta(monkeypatch):
 
     monkeypatch.setattr(sl, "client", Client)
     r = sl.obtenir_dades_pistolejat([13], incloure_tancades=True)
-    assert r["albarans"] == [{"comanda": 42, "albara": 99, "docnum": 26700099}]
+    assert r["albarans"] == [{"comanda": 42, "albara": 99, "docnum": 26700099, "creat": None}]
 
     # SQL: la consulta d'albarans tambe mira DLN1 (la paritat amb dades reals
     # es comprova amb scripts/paritat_backends.py).
     import inspect
     font = " ".join(inspect.getsource(sql.obtenir_dades_pistolejat).split())
-    assert "UNION SELECT dl.BaseEntry, d.DocEntry, d.DocNum FROM DLN1 dl" in font
+    assert "UNION SELECT dl.BaseEntry, d.DocEntry, d.DocNum, d.CreateDate, d.DocTime FROM DLN1 dl" in font
 
 
 # --- Trasllats (OWTQ) de la carrega 29 de produccio ---------------------------
@@ -626,9 +627,19 @@ def test_trasllat_compta_al_pistolejat_i_al_detall():
     }
     r = calc.progres_per_carrega(dades)[29]
     assert r["estat"] == "parcial" and r["n_comandes"] == 2
-    assert r["comandes_albara"] == [{"comanda": "Trasllat 26000003", "albarans": [26020001]}]
+    assert r["comandes_albara"] == [{"comanda": "Trasllat 26000003", "albarans": [26020001],
+                                     "creats": {}}]
     det = calc.progres_per_article(dades)
     assert det["Trasllat 26000003"]["albarans"] == [26020001]
     assert det["Trasllat 26000003"]["articles"]["30150"]["estat"] == "complet"
     assert det["Trasllat 26000003"]["articles"]["30650"]["estat"] == "pendent"
     assert det["26600003"]["articles"]["X"]["estat"] == "complet"
+
+
+def test_hora_de_creacio_de_l_albara():
+    from datetime import datetime
+    from dades.sql.pistolejat import _creat
+    assert _creat(datetime(2026, 11, 24), 1018) == "2026-11-24 10:18"
+    assert _creat(datetime(2026, 11, 24), 905) == "2026-11-24 09:05"
+    assert _creat(datetime(2026, 11, 24), None) == "2026-11-24"
+    assert _creat(None, 1018) is None

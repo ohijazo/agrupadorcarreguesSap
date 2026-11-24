@@ -641,7 +641,9 @@
         if (!llista.length) return null;
         const perComanda = new Map(llista.map(x => [String(x.comanda), x.albarans || []]));
         const albarans = [...new Set(llista.flatMap(x => x.albarans || []))].sort((a, b) => a - b);
-        return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans };
+        // DocNum de l'albarà -> quan s'ha fet ("2026-11-24 10:18").
+        const creats = Object.assign({}, ...llista.map(x => x.creats || {}));
+        return { n: llista.length, total: p.n_comandes || llista.length, perComanda, albarans, creats };
     }
 
     // Pastilla "ALB." (totes les comandes en tenen, ple) o "ALB.1/3"
@@ -930,6 +932,12 @@
         return `<div class="detall-resum muted">${data.comandes.length} comandes · <strong>${fmtNum.format(data.total_sacs)}</strong> sacs · <strong>${fmtKg0.format(data.total_kg)}</strong> kg</div>${blocks}`;
     }
 
+    // "2026-11-24 10:18" -> "24/11 10:18"
+    function fmtCreat(creat) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(creat || "");
+        return m ? `${m[3]}/${m[2]}${m[4] ? " " + m[4] : ""}` : "";
+    }
+
     // Al detall obert, la pastilla "Albarà" a les comandes que en tenen. La
     // comanda del detall és "Sèrie/DocNum"; l'albarà ve per DocNum.
     function marcaAlbaransModal() {
@@ -949,9 +957,14 @@
                 b.querySelector("h4 > span")?.appendChild(el);
             }
             // Un trasllat no fa albarà: en surt un trasllat d'estoc (OWTR).
+            // Al costat de cada número, quan s'ha fet: "26700099 · 24/11 10:18".
+            const ambHora = albs.map(n => {
+                const q = fmtCreat(a.creats[String(n)]);
+                return q ? `${n} · ${q}` : String(n);
+            }).join(", ");
             el.textContent = docnum.startsWith("Trasllat")
-                ? `Traslladat (${albs.join(", ")})`
-                : `Albarà ${albs.join(", ")}`;
+                ? `Traslladat (${ambHora})`
+                : `Albarà ${ambHora}`;
         });
     }
 
