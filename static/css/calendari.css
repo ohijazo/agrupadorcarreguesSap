@@ -653,6 +653,24 @@
     border-radius: 3px;
 }
 .cal-evt-pist.is-complet { color: #22543d; background: #f0fff4; border-color: #68d391; }
+/* S'està pistolejant ara (lectures dels últims minuts): un puntet que batega
+   a la pastilla. Discret a propòsit; sense animació si l'usuari no en vol. */
+.cal-evt-pist.is-ara::before {
+    content: "";
+    width: .38rem;
+    height: .38rem;
+    margin-right: .22rem;
+    border-radius: 50%;
+    background: currentColor;
+    animation: cal-pist-batec 1.6s ease-in-out infinite;
+}
+@keyframes cal-pist-batec {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .25; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cal-evt-pist.is-ara::before { animation: none; }
+}
 /* Albarà fet per l'SGA (un per comanda): lila per no confondre'l amb el
    pistolejat. "Albarà 1/3" en contorn; ple quan totes les comandes en tenen. */
 .cal-evt-alb {

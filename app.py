@@ -760,6 +760,7 @@ def api_carregues_pistolejat():
         return err
     return jsonify({"carregues": {k: {"estat": v["estat"], "percent": v["percent"],
                                       "n_comandes": v.get("n_comandes", 0),
+                                      "senyal": v.get("senyal", ""),
                                       "comandes_albara": v.get("comandes_albara", [])}
                                   for k, v in r.items()}})
 

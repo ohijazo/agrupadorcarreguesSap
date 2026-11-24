@@ -158,6 +158,38 @@
     const PISTOLEJAT_MAX_IDS = 300;          // el límit del servidor
     const PISTOLEJAT_REFRESH_MS = 60 * 1000;
 
+    // "S'està pistolejant ara". L'SGA no desa l'hora de cada lectura: el
+    // servidor dona un `senyal` que canvia quan es pistoleja, i aquí es marca
+    // la càrrega durant uns minuts després de cada canvi. Es desa al navegador
+    // perquè en tornar a obrir el calendari no es perdi.
+    const ACTIVITAT_MS = 5 * 60 * 1000;
+    const ACTIVITAT_KEY = "cal-pist-activitat";
+    // car_numero -> {senyal, canvi (ms del darrer canvi vist)}
+    const activitat = (() => {
+        try {
+            const m = new Map(Object.entries(JSON.parse(localStorage.getItem(ACTIVITAT_KEY) || "{}")));
+            // Un senyal vist fa més d'una hora ja no serveix per comparar.
+            for (const [k, v] of m) if (!v || Date.now() - (v.vist || 0) > 3600_000) m.delete(k);
+            return m;
+        } catch { return new Map(); }
+    })();
+
+    function actualitzaActivitat(nou) {
+        const ara = Date.now();
+        for (const [k, v] of nou) {
+            if (!v.senyal) continue;
+            const abans = activitat.get(k);
+            const canvi = abans && abans.senyal !== v.senyal ? ara : (abans ? abans.canvi : 0);
+            activitat.set(k, { senyal: v.senyal, canvi, vist: ara });
+        }
+        try { localStorage.setItem(ACTIVITAT_KEY, JSON.stringify(Object.fromEntries(activitat))); } catch { /* sense storage */ }
+    }
+
+    function esPistolejantAra(c) {
+        const a = activitat.get(String(c.car_numero || ""));
+        return !!(a && a.canvi && Date.now() - a.canvi < ACTIVITAT_MS);
+    }
+
     // ---------------------------------------------------------------
     // Fetch llista de càrregues
     // ---------------------------------------------------------------
@@ -598,6 +630,7 @@
                 const data = await resp.json();
                 for (const [k, v] of Object.entries(data.carregues || {})) nou.set(k, v);
             }
+            actualitzaActivitat(nou);
             state.pistolejat = nou;
             pintaPistolejat();
         } catch (e) {
@@ -626,9 +659,13 @@
             li.insertBefore(el, kg || null);
         }
         const complet = p.estat === "complet";
+        const ara = esSap(c) && esPistolejantAra(c);
         el.classList.toggle("is-complet", complet);
+        el.classList.toggle("is-ara", ara);
         el.textContent = complet ? "✓" : `◐ ${p.percent}%`;
-        el.setAttribute("aria-label", complet ? "Pistolejada" : `Pistolejat ${p.percent}%`);
+        el.setAttribute("aria-label", (complet ? "Pistolejada" : `Pistolejat ${p.percent}%`)
+            + (ara ? ". S'està pistolejant ara" : ""));
+        el.title = ara ? "S'està pistolejant ara (lectures dels últims minuts)" : "";
     }
 
     // Albarans de la càrrega (se'n fa un per comanda): {n, total, perComanda,

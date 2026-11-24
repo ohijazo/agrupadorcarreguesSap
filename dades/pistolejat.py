@@ -25,6 +25,8 @@ Aquest modul no toca SAP: rep files ja normalitzades pels backends
 """
 from __future__ import annotations
 
+import zlib
+
 # Per sota d'aixo (en kg) una linia es dona per completa: les quantitats de SAP
 # venen amb 6 decimals i les restes poden deixar residus.
 _EPSILON = 1e-6
@@ -331,6 +333,11 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
         cms = comandes.get(car, [])
         out[car] = {"estat": t["estat"], "percent": percent,
                     "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
+                    # Canvia quan es pistoleja alguna cosa (o es fa un albara):
+                    # el calendari hi veu "s'esta pistolejant ara". Opac: el
+                    # calendari es public i no ha d'ensenyar kg. L'SGA no desa
+                    # l'hora de les lectures (@SEIOPIC), aixi que no hi ha res millor.
+                    "senyal": format(zlib.crc32(f"{acc['kg_fets']:.3f}|{acc['kg_pistolejats']:.3f}".encode()), "08x"),
                     "n_comandes": len(cms),
                     "comandes_albara": sorted(
                         ({"comanda": _num_doc(c), "albarans": albarans[int(c["docentry"])],

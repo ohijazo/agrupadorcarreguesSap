@@ -416,8 +416,10 @@ def test_progres_per_carrega_parcial_complet_i_amb_albara():
         "estats": {},
     }
     r = calc.progres_per_carrega(dades)
+    senyal = r[87].pop("senyal")
     assert r[87] == {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250,
                      "n_comandes": 1, "comandes_albara": []}
+    assert len(senyal) == 8
     assert r[98]["estat"] == "complet" and r[98]["percent"] == 100
     assert r[99]["estat"] == "pendent" and r[99]["percent"] == 0
 
@@ -507,7 +509,7 @@ def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
     monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
     r = c.get("/api/carregues/pistolejat?ids=87")      # sense sessio
     assert r.status_code == 200
-    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25,
+    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25, "senyal": "",
                                                  "n_comandes": 3, "comandes_albara": [{"comanda": 502, "albarans": [7001]}]}}}
 
 
@@ -643,3 +645,14 @@ def test_hora_de_creacio_de_l_albara():
     assert _creat(datetime(2026, 11, 24), 905) == "2026-11-24 09:05"
     assert _creat(datetime(2026, 11, 24), None) == "2026-11-24"
     assert _creat(None, 1018) is None
+
+
+def test_senyal_canvia_quan_es_pistoleja():
+    """El calendari marca "s'esta pistolejant" quan el senyal canvia. Ha de
+    canviar amb una sola lectura (1 sac d'una carrega gran, el % no es mou)."""
+    linia = _linia(0, kg=25000, sacs=1000, kg_oberts=25000)
+    abans = calc.progres_per_carrega(_dades([linia], []))[87]["senyal"]
+    un_sac = calc.progres_per_carrega(_dades([linia], [{"comanda": 279, "linia": 0, "sacs": 1, "kg": 25}]))[87]
+    assert un_sac["senyal"] != abans
+    igual = calc.progres_per_carrega(_dades([linia], [{"comanda": 279, "linia": 0, "sacs": 1, "kg": 25}]))[87]
+    assert igual["senyal"] == un_sac["senyal"]
