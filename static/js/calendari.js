@@ -948,7 +948,10 @@
                 el.title = "Aquesta comanda ja té albarà";
                 b.querySelector("h4 > span")?.appendChild(el);
             }
-            el.textContent = `Albarà ${albs.join(", ")}`;
+            // Un trasllat no fa albarà: en surt un trasllat d'estoc (OWTR).
+            el.textContent = docnum.startsWith("Trasllat")
+                ? `Traslladat (${albs.join(", ")})`
+                : `Albarà ${albs.join(", ")}`;
         });
     }
 

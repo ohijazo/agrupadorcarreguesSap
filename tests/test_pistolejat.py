@@ -604,3 +604,31 @@ def test_albara_sense_lectures_es_detecta(monkeypatch):
     import inspect
     font = " ".join(inspect.getsource(sql.obtenir_dades_pistolejat).split())
     assert "UNION SELECT dl.BaseEntry, d.DocEntry, d.DocNum FROM DLN1 dl" in font
+
+
+# --- Trasllats (OWTQ) de la carrega 29 de produccio ---------------------------
+def test_trasllat_compta_al_pistolejat_i_al_detall():
+    """Trasllat 26000003: 10 linies amb el trasllat d'estoc 26020001 fet i una
+    (30650, 3375 kg) encara oberta. Va amb DocEntry negatiu perque el 3 tambe
+    es una comanda."""
+    lin = lambda n, art, kg, obert: {"linia": n, "art_codi": art, "unitat": "S25KG",
+                                     "granel": False, "sacs": kg / 25, "kg": kg,
+                                     "kg_oberts": kg if obert else 0}
+    dades = {
+        "comandes": [
+            {"docentry": 3, "docnum": 26600003, "carrega": 29, "linies": [lin(0, "X", 100, True)]},
+            {"docentry": -3, "docnum": "Trasllat 26000003", "carrega": 29,
+             "linies": [lin(1, "30150", 4500, False), lin(4, "30650", 3375, True)]},
+        ],
+        "pistolejats": [{"comanda": 3, "linia": 0, "sacs": 4, "kg": 100}],
+        "estats": {},
+        "albarans": [{"comanda": -3, "albara": 1, "docnum": 26020001}],
+    }
+    r = calc.progres_per_carrega(dades)[29]
+    assert r["estat"] == "parcial" and r["n_comandes"] == 2
+    assert r["comandes_albara"] == [{"comanda": "Trasllat 26000003", "albarans": [26020001]}]
+    det = calc.progres_per_article(dades)
+    assert det["Trasllat 26000003"]["albarans"] == [26020001]
+    assert det["Trasllat 26000003"]["articles"]["30150"]["estat"] == "complet"
+    assert det["Trasllat 26000003"]["articles"]["30650"]["estat"] == "pendent"
+    assert det["26600003"]["articles"]["X"]["estat"] == "complet"

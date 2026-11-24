@@ -289,6 +289,13 @@ def _tanca(acc: dict | None) -> dict:
     }
 
 
+def _num_doc(c: dict):
+    """DocNum de la comanda (int), o el text "Trasllat N" d'un trasllat: es
+    com el detall de la carrega anomena cada document."""
+    num = c.get("docnum")
+    return int(num or 0) if not isinstance(num, str) or num.isdigit() else num
+
+
 def progres_per_carrega(dades: dict) -> dict[int, dict]:
     """Progres del pistolejat de cada carrega sencera (pagina principal).
 
@@ -319,9 +326,9 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
                     "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
                     "n_comandes": len(cms),
                     "comandes_albara": sorted(
-                        ({"comanda": int(c.get("docnum") or 0), "albarans": albarans[int(c["docentry"])]}
+                        ({"comanda": _num_doc(c), "albarans": albarans[int(c["docentry"])]}
                          for c in cms if albarans.get(int(c["docentry"]))),
-                        key=lambda x: x["comanda"])}
+                        key=lambda x: str(x["comanda"]))}
     return out
 
 
