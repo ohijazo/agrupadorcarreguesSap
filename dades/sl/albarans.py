@@ -35,6 +35,8 @@ def llistar_albarans_carregues(carregues: list[int]) -> list[dict]:
 
 
 def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[dict]:
+    # PENDENT: els trasllats d'estoc (OWTR) nomes surten per SQL, que es el
+    # backend d'aquesta funcio a produccio.
     usuaris = sorted({int(u) for u in usuaris or []})
     if not usuaris:
         return []
@@ -63,4 +65,5 @@ def _doc(d: dict) -> dict:
         "usuari": int(d["UserSign"]) if d.get("UserSign") is not None else None,
         "obert": d.get("DocumentStatus") == "bost_Open",
         "cancelat": d.get("CancelStatus") == "csYes",
+        "tipus": "albara",
     }

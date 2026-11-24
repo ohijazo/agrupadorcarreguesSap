@@ -87,28 +87,42 @@ function estat(a) {
     return `<span class="alb-estat is-tancat">Tancat</span>`;
 }
 
+// Els trasllats d'estoc (de la càrrega a un altre magatzem nostre) surten
+// amb els albarans; porten DocEntry negatiu (vegeu /api/albarans).
+function esTrasllat(a) {
+    return a.tipus === "trasllat";
+}
+
+// "l'albarà 26700001" / "el trasllat 26020001"
+function nomDoc(a) {
+    return `${esTrasllat(a) ? "el trasllat" : "l'albarà"} ${a.docnum}`;
+}
+
 function pintaFila(a) {
     const pdf = albState.pdf && !a.cancelat
         ? `<a class="btn btn-ghost alb-pdf" href="/albarans/${a.docentry}/pdf" target="_blank" rel="noopener"
-              aria-label="Obre l'albarà ${escA(a.docnum)} en PDF">📄 PDF</a>`
+              aria-label="Obre ${escA(nomDoc(a))} en PDF">📄 PDF</a>`
         : "";
     const cancel = a.cancelable
         ? `<button type="button" class="btn btn-ghost alb-cancel" data-act="cancel-alb"
                    data-docentry="${a.docentry}" data-docnum="${escA(a.docnum)}"
-                   aria-label="Cancel·la l'albarà ${escA(a.docnum)} a SAP">✖ Cancel·la</button>`
+                   data-nom="${escA(nomDoc(a))}"
+                   aria-label="Cancel·la ${escA(nomDoc(a))} a SAP">✖ Cancel·la</button>`
         : "";
     const sel = albState.sel.has(a.docentry);
     const check = imprimible(a)
         ? `<label class="alb-check">
                <input type="checkbox" data-act="sel-alb" data-docentry="${a.docentry}" ${sel ? "checked" : ""}
-                      aria-label="Selecciona l'albarà ${escA(a.docnum)} per imprimir">
+                      aria-label="Selecciona ${escA(nomDoc(a))} per imprimir">
            </label>`
         : "";
     return `
         <tr class="${a.cancelat ? "is-cancelat" : ""} ${sel ? "is-sel" : ""}">
             <td class="alb-sel">${check}</td>
             <td data-lbl="Data">${escA(a.data ? fmtData(a.data) : "")}</td>
-            <td data-lbl="Albarà" class="alb-num">${escA(a.docnum)}</td>
+            <td data-lbl="Albarà" class="alb-num">${esTrasllat(a)
+                ? `<span class="badge badge-warn" title="Trasllat d'estoc a un altre magatzem">T</span> `
+                : ""}${escA(a.docnum)}</td>
             <td data-lbl="Càrrega">${a.carrega != null ? `#${escA(a.carrega)}` : "—"}</td>
             <td data-lbl="Client">
                 <div class="alb-cli">${escA(a.cli_nom || a.cli_codi)}</div>
@@ -290,13 +304,13 @@ async function refrescar() {
 // seu codi (no es veu en pantalla); a la llista només hi surt el seu nom. El
 // motiu queda a l'app (a SAP la cancel·lació la signa l'usuari del SL).
 async function cancelaAlbara(btn) {
-    const docnum = btn.dataset.docnum;
+    const nom = btn.dataset.nom;   // "l'albarà N" / "el trasllat N"
     const resp = await window.mostrarInput({
-        titol: `Cancel·lar l'albarà ${docnum} a SAP`,
+        titol: `Cancel·lar ${nom} a SAP`,
         secret: { label: "Codi d'operari", placeholder: "El teu codi" },
         etiqueta: "Motiu de la cancel·lació (obligatori). Això no es pot desfer.",
         placeholder: "Ex.: lot equivocat, s'ha de tornar a pistolejar",
-        btnOk: "Cancel·la l'albarà",
+        btnOk: nom.startsWith("el trasllat") ? "Cancel·la el trasllat" : "Cancel·la l'albarà",
         btnCancel: "No",
         maxlength: 200,
     });
@@ -319,7 +333,8 @@ async function cancelaAlbara(btn) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ codi, motiu: motiu.trim() }),
         });
-        toast("success", `Albarà ${docnum} cancel·lat a SAP per ${j.operari}`);
+        const Nom = nom.charAt(0).toUpperCase() + nom.slice(1);
+        toast("success", `${Nom} cancel·lat a SAP per ${j.operari}`);
     } catch (e) {
         toast("error", e.message);
     }

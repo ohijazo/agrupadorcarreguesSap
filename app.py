@@ -939,9 +939,15 @@ class _ErrorPdf(Exception):
 
 def _crystal_pdf(url: str, doc_entry: int) -> tuple[bytes, str]:
     """PDF d'un albara i el seu DocNum. Layout: CRYSTAL_PDF_LAYOUT (DLN20011
-    si no hi es); buit = el per defecte de SAP."""
-    params = {"tipus": "DLN2", "docentry": doc_entry}
-    layout = os.environ.get("CRYSTAL_PDF_LAYOUT", "DLN20011").strip()
+    si no hi es); buit = el per defecte de SAP. Un `doc_entry` negatiu es un
+    trasllat d'estoc (OWTR, vegeu `llistar_albarans_dates`): tipus WTR1 i
+    layout CRYSTAL_PDF_LAYOUT_TRASLLAT (buit = el per defecte, WTR10003)."""
+    if doc_entry < 0:
+        params = {"tipus": "WTR1", "docentry": -doc_entry}
+        layout = os.environ.get("CRYSTAL_PDF_LAYOUT_TRASLLAT", "").strip()
+    else:
+        params = {"tipus": "DLN2", "docentry": doc_entry}
+        layout = os.environ.get("CRYSTAL_PDF_LAYOUT", "DLN20011").strip()
     if layout:
         params["layout"] = layout
     try:
@@ -955,13 +961,17 @@ def _crystal_pdf(url: str, doc_entry: int) -> tuple[bytes, str]:
         log.exception("crystal-pdf no respon (albara %s)", doc_entry)
         raise _ErrorPdf(503, _NO_RESPON_PDF)
     if r.status_code == 404:
-        raise _ErrorPdf(404, "Aquest albarà no existeix a SAP.")
+        raise _ErrorPdf(404, f"Aquest {_nom_doc(doc_entry)} no existeix a SAP.")
     if r.status_code != 200 or not r.headers.get("Content-Type", "").startswith("application/pdf"):
         log.error("crystal-pdf ha respost %s per a l'albara %s: %s",
                   r.status_code, doc_entry, r.text[:300])
         raise _ErrorPdf(503, "No s'ha pogut generar el PDF de l'albarà. Avisa administració.")
     num = r.headers.get("X-DocNum", "")
     return r.content, (num if num.isdigit() else str(doc_entry))
+
+
+def _nom_doc(doc_entry: int) -> str:
+    return "trasllat" if doc_entry < 0 else "albarà"
 
 
 def _resposta_pdf(contingut: bytes, nom: str):
@@ -984,7 +994,7 @@ def _fora_de_granel(ids: list[int]) -> list[int] | None:
     return [d for d in ids if d not in permesos]
 
 
-@app.route("/albarans/<int:doc_entry>/pdf")
+@app.route("/albarans/<int(signed=True):doc_entry>/pdf")
 @auth.requires_rol("admin", "oficina", auth.ROL_GRANEL)
 def albara_pdf(doc_entry: int):
     """PDF de l'albara amb el layout per defecte de SAP, tal com l'imprimeix SAP."""
@@ -1002,17 +1012,18 @@ def albara_pdf(doc_entry: int):
     except _ErrorPdf as e:
         return _text(str(e), e.status)
     audit.log("imprimir_albara", target=num, detall={"docentry": doc_entry})
-    return _resposta_pdf(contingut, f"Albara_{num}.pdf")
+    return _resposta_pdf(contingut, f"{'Trasllat' if doc_entry < 0 else 'Albara'}_{num}.pdf")
 
 
-def _ids_url(param: str) -> list[int] | None:
-    """`12,15,18` -> [12, 15, 18] sense repetits; None si n'hi ha cap de no vàlid."""
+def _ids_url(param: str, negatius: bool = False) -> list[int] | None:
+    """`12,15,18` -> [12, 15, 18] sense repetits; None si n'hi ha cap de no
+    vàlid. Amb `negatius`, -3 = trasllat d'estoc (nomes als albarans)."""
     ids: list[int] = []
     for tros in (request.args.get(param) or "").split(","):
         tros = tros.strip()
         if not tros:
             continue
-        if not tros.isdigit() or int(tros) <= 0:
+        if not (tros.removeprefix("-") if negatius else tros).isdigit() or int(tros) == 0:
             return None
         if int(tros) not in ids:
             ids.append(int(tros))
@@ -1029,7 +1040,7 @@ def albarans_pdf():
     url = _crystal_pdf_url()
     if not url:
         return _text("La impressió d'albarans no està activada.", 404)
-    ids = _ids_url("ids")
+    ids = _ids_url("ids", negatius=True)
     if ids is None:
         return _text("La selecció d'albarans no és vàlida.", 400)
     if not ids:
@@ -1083,7 +1094,7 @@ def albarans_pdf():
     return _resposta_pdf(sortida.getvalue(), f"Albarans_{date.today():%Y%m%d}_{len(docnums)}.pdf")
 
 
-@app.route("/api/albarans/<int:doc_entry>/cancelar", methods=["POST"])
+@app.route("/api/albarans/<int(signed=True):doc_entry>/cancelar", methods=["POST"])
 @auth.requires_rol("admin", "oficina")
 def cancelar_albara(doc_entry: int):
     """Cancel·la a SAP un albara fet per l'SGA. Cos: `{"codi": "...", "motiu": "..."}`.
@@ -1118,21 +1129,26 @@ def cancelar_albara(doc_entry: int):
 
 
 def _cancela_albara_bloquejat(doc_entry: int, motiu: str, operari: str):
-    """Comprovacio d'estat i POST a SAP. S'ha de cridar amb `_bloqueig_albara`."""
+    """Comprovacio d'estat i POST a SAP. S'ha de cridar amb `_bloqueig_albara`.
+    Un `doc_entry` negatiu es un trasllat d'estoc (OWTR -doc_entry)."""
+    trasllat = doc_entry < 0
+    nom = _nom_doc(doc_entry)
+    el_nom = "el trasllat" if trasllat else "l'albarà"
     try:
-        estat = escriptura_albarans.estat_albara(doc_entry)
+        estat = (escriptura_albarans.estat_trasllat(-doc_entry) if trasllat
+                 else escriptura_albarans.estat_albara(doc_entry))
     except (SLError, requests.RequestException):
-        log.exception("SL no respon llegint l'albara %s", doc_entry)
+        log.exception("SL no respon llegint el %s %s", nom, doc_entry)
         return jsonify({"error": "SAP no respon. Torna-ho a provar d'aquí a una estona."}), 503
     if estat is None:
-        return jsonify({"error": "Aquest albarà no existeix a SAP."}), 404
-    motiu_no = escriptura_albarans.motiu_no_cancelable(estat, _usuaris_sga())
+        return jsonify({"error": f"Aquest {nom} no existeix a SAP."}), 404
+    motiu_no = escriptura_albarans.motiu_no_cancelable(estat, _usuaris_sga(), nom)
     if motiu_no:
         return jsonify({"error": motiu_no}), 409
 
     detall = {"docentry": doc_entry, "carrega": estat["carrega"], "motiu": motiu, "operari": operari}
     try:
-        escriptura_albarans.cancelar_albara(doc_entry)
+        escriptura_albarans.cancelar_albara(abs(doc_entry), trasllat=trasllat)
     except SLError as e:
         msg_sap = escriptura_albarans.missatge_sap(e)
         log.error("SAP no ha cancel·lat l'albara %s (%s): %s", doc_entry,
@@ -1141,8 +1157,8 @@ def _cancela_albara_bloquejat(doc_entry: int, motiu: str, operari: str):
                   detall={**detall, "error": msg_sap or str(e)[:300]})
         status = getattr(e, "status_code", None)
         if status and 400 <= status < 500 and msg_sap:
-            return jsonify({"error": f"SAP no ha deixat cancel·lar l'albarà: {msg_sap}"}), 409
-        return jsonify({"error": "No s'ha pogut cancel·lar l'albarà a SAP. Avisa administració."}), 503
+            return jsonify({"error": f"SAP no ha deixat cancel·lar {el_nom}: {msg_sap}"}), 409
+        return jsonify({"error": f"No s'ha pogut cancel·lar {el_nom} a SAP. Avisa administració."}), 503
 
     log.info("Albara %s (DocEntry %s) cancel·lat per %s", estat["docnum"], doc_entry, operari)
     _desa_cancelat(doc_entry, estat["docnum"], operari, motiu)

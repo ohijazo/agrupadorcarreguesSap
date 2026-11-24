@@ -71,9 +71,26 @@ def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[
               AND  o.CANCELED <> 'C'
         """, desde, fins, desde, fins, *usuaris).fetchall()
         albarans = [_fila(r) for r in files]
+        # Trasllats d'estoc (OWTR) que l'SGA fa en acabar de pistolejar una
+        # sol·licitud de trasllat: fan d'albara d'una carrega cap a un altre
+        # magatzem nostre. DocEntry NEGATIU: els d'OWTR i ODLN es repeteixen.
+        # El "client" es el magatzem de desti.
+        for r in conn.execute(f"""
+            SELECT t.DocEntry, t.DocNum, t.DocDate, t.U_SEIOrdCargId AS carrega,
+                   RTRIM(t.ToWhsCode) AS cli_codi, RTRIM(w.WhsName) AS cli_nom,
+                   t.UserSign, t.DocStatus, t.CANCELED
+            FROM   OWTR t WITH (NOLOCK)
+            LEFT   JOIN OWHS w WITH (NOLOCK) ON w.WhsCode = t.ToWhsCode
+            WHERE  ((t.DocDate >= ? AND t.DocDate <= ?)
+                    OR (t.CreateDate >= ? AND t.CreateDate <= ?))
+              AND  t.UserSign IN ({ph})
+              AND  t.U_SEIOrdCargId IS NOT NULL
+              AND  t.CANCELED <> 'C'
+        """, desde, fins, desde, fins, *usuaris).fetchall():
+            albarans.append({**_fila(r), "docentry": -int(r.DocEntry), "tipus": "trasllat"})
     finally:
         conn.close()
-    return sorted(albarans, key=lambda a: (a["data"] or "", a["docentry"]), reverse=True)
+    return sorted(albarans, key=lambda a: (a["data"] or "", abs(a["docentry"])), reverse=True)
 
 
 # --- Albarans de granel amb transport propi (rol 'granel') ------------------
@@ -153,4 +170,5 @@ def _fila(r) -> dict:
         "usuari": int(r.UserSign) if r.UserSign is not None else None,
         "obert": r.DocStatus == "O",
         "cancelat": r.CANCELED == "Y",
+        "tipus": "albara",
     }

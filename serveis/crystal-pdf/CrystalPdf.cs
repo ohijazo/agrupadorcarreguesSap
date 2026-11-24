@@ -39,6 +39,7 @@ namespace CrystalPdf
         public static readonly Dictionary<string, string> Capcalera = new Dictionary<string, string>
         {
             { "DLN2", "ODLN" },   // Albara de venda (articles)
+            { "WTR1", "OWTR" },   // Trasllat d'estoc (el "albara" d'una sol·licitud de trasllat)
         };
     }
 

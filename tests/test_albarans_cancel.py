@@ -50,7 +50,7 @@ class _Fals:
             raise self.error_estat
         return self.estat or None
 
-    def motiu_no_cancelable(self, estat, usuaris_sga):
+    def motiu_no_cancelable(self, estat, usuaris_sga, nom="albarà"):
         if estat["cancelat"]:
             return "Aquest albarà ja està cancel·lat."
         if estat["usuari"] not in usuaris_sga:
@@ -59,10 +59,14 @@ class _Fals:
             return "Facturat."
         return None
 
-    def cancelar_albara(self, doc_entry):
+    def estat_trasllat(self, doc_entry):
+        self.trasllat_llegit = doc_entry
+        return self.estat_albara(doc_entry)
+
+    def cancelar_albara(self, doc_entry, trasllat=False):
         if self.error_cancel:
             raise self.error_cancel
-        self.cancelats.append(doc_entry)
+        self.cancelats.append(f"T{doc_entry}" if trasllat else doc_entry)
 
     def missatge_sap(self, e):
         return ((getattr(e, "body", None) or {}).get("error") or {}).get("message", {}).get("value", "")
@@ -348,3 +352,17 @@ def test_magatzem_no_pot_cancel_lar(client, monkeypatch):
         sess.update(user_id=1, user_name="Prova", user_username="prova@pytest.local", user_rol="magatzem")
     assert _cancela(c).status_code == 403
     assert fals.cancelats == [] and auditats == []
+
+
+def test_cancela_trasllat_d_estoc(client, monkeypatch):
+    """DocEntry negatiu = trasllat d'estoc (OWTR): es llegeix i es cancel·la
+    com a trasllat, amb el DocEntry positiu, i el bloqueig i el registre van
+    amb el negatiu (no xoquen amb l'albara del mateix numero)."""
+    c, app_module, auditats = client
+    fals = _posa(monkeypatch, app_module, _Fals())
+    r = _cancela(c, n=-1)
+    assert r.status_code == 200
+    assert fals.trasllat_llegit == 1
+    assert fals.cancelats == ["T1"]
+    assert app_module._bloquejats == [-1]
+    assert app_module._desats[0][0] == -1

@@ -218,7 +218,7 @@ def test_pdf_diversos_servei_caigut(client, monkeypatch):
     assert auditats == []
 
 
-@pytest.mark.parametrize("qs", ["", "ids=", "ids=12,abc", "ids=12,-3", "ids=0",
+@pytest.mark.parametrize("qs", ["", "ids=", "ids=12,abc", "ids=12,-x", "ids=12,-0", "ids=0",
                                 "ids=" + ",".join(str(i) for i in range(1, 42))])
 def test_pdf_diversos_valida(client, monkeypatch, qs):
     c, app_module, _ = client
@@ -434,3 +434,27 @@ def test_oficina_no_passa_pel_filtre_granel(amb_rol, monkeypatch):
     monkeypatch.setattr(app_module, "albarans_granel_propi",
                         lambda ids: pytest.fail("oficina no s'ha de filtrar per granel"))
     assert amb_rol("oficina").get("/albarans/148/pdf").status_code == 200
+
+
+# --- Trasllats d'estoc (DocEntry negatiu) -----------------------------------
+def test_pdf_trasllat_demana_wtr1_amb_el_docentry_positiu(client, monkeypatch):
+    c, app_module, auditats = client
+    crides = _mock_get(monkeypatch, app_module, _Resp(docnum="26020001"))
+    r = c.get("/albarans/-1/pdf")
+    assert r.status_code == 200
+    assert r.headers["Content-Disposition"] == 'inline; filename="Trasllat_26020001.pdf"'
+    assert crides[0]["params"] == {"tipus": "WTR1", "docentry": 1}
+
+
+def test_pdf_conjunt_barreja_albarans_i_trasllats(client, monkeypatch):
+    c, app_module, _ = client
+    vist = []
+
+    def fals(url, params=None, headers=None, timeout=None):
+        vist.append((params["tipus"], params["docentry"]))
+        return _Resp(content=_pdf_real(300 + len(vist)))
+
+    monkeypatch.setattr(app_module.requests, "get", fals)
+    r = c.get("/albarans/pdf?ids=148,-1")
+    assert r.status_code == 200
+    assert sorted(vist) == [("DLN2", 148), ("WTR1", 1)]

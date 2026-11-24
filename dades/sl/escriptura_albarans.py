@@ -46,31 +46,58 @@ def estat_albara(doc_entry: int) -> dict | None:
     }
 
 
-def motiu_no_cancelable(estat: dict, usuaris_sga: set[int]) -> str | None:
-    """Per que no es pot cancel·lar des de l'app, o None si es pot."""
+def estat_trasllat(doc_entry: int) -> dict | None:
+    """El mateix per a un trasllat d'estoc (OWTR, `StockTransfers`), o None.
+    Sense `$select`: no tots els camps de l'albara existeixen al trasllat."""
+    try:
+        d = client()._get(f"StockTransfers({int(doc_entry)})")
+    except SLNotFoundError:
+        return None
+    return {
+        "docentry": int(d["DocEntry"]),
+        "docnum": int(d["DocNum"]),
+        "carrega": int(d["U_SEIOrdCargId"]) if d.get("U_SEIOrdCargId") is not None else None,
+        "usuari": int(d["UserSign"]) if d.get("UserSign") is not None else None,
+        "obert": d.get("DocumentStatus") == "bost_Open",
+        "cancelat": d.get("CancelStatus") in ("csYes", "csCancellation"),
+        "linies_tancades": 0,   # un trasllat no es factura
+    }
+
+
+def motiu_no_cancelable(estat: dict, usuaris_sga: set[int], nom: str = "albarà") -> str | None:
+    """Per que no es pot cancel·lar des de l'app, o None si es pot. `nom`:
+    "albarà" o "trasllat", per al missatge."""
     if estat["cancelat"]:
-        return "Aquest albarà ja està cancel·lat."
+        return f"Aquest {nom} ja està cancel·lat."
     if estat["usuari"] not in usuaris_sga:
-        return "Només es poden cancel·lar des d'aquí els albarans fets pel magatzem (SGA). Aquest s'ha de cancel·lar a SAP."
+        plural = "albarans" if nom == "albarà" else f"{nom}s"
+        return (f"Només es poden cancel·lar des d'aquí els {plural} fets pel magatzem (SGA). "
+                "Aquest s'ha de cancel·lar a SAP.")
     if not estat["obert"] or estat["linies_tancades"]:
+        if nom != "albarà":
+            return f"Aquest {nom} ja està tancat. S'ha de gestionar a SAP."
         return "Aquest albarà ja està facturat o té una devolució. S'ha de gestionar a SAP."
     return None
 
 
-def cancelar_albara(doc_entry: int) -> None:
-    """Cancel·la l'albara. Llença SLError amb el missatge de SAP si no pot.
+def cancelar_albara(doc_entry: int, trasllat: bool = False) -> None:
+    """Cancel·la l'albara (o el trasllat d'estoc, `StockTransfers(N)/Cancel`,
+    provat a DB_FARIN_TEST el 24-11-2026: SAP no el deixa cancel·lar si la
+    mercaderia ja no es al magatzem de desti, i ho diu). Llença SLError amb
+    el missatge de SAP si no pot.
 
     El client reintenta els 5xx, i un timeout no diu si SAP ha arribat a
     cancel·lar. En tots dos casos tornem a llegir l'estat: si l'albara ja surt
     cancel·lat, la cancel·lacio s'ha fet i no es un error.
     """
+    entitat = "StockTransfers" if trasllat else "DeliveryNotes"
     try:
-        client()._request("POST", f"DeliveryNotes({int(doc_entry)})/Cancel")
+        client()._request("POST", f"{entitat}({int(doc_entry)})/Cancel")
         return
     except (SLError, requests.RequestException) as e:
         error = e
     try:
-        estat = estat_albara(doc_entry)
+        estat = (estat_trasllat if trasllat else estat_albara)(doc_entry)
     except (SLError, requests.RequestException):
         estat = None
     if estat and estat["cancelat"]:
