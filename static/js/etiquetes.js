@@ -199,7 +199,7 @@ function pintaPrevia() {
     document.getElementById("etq-previa").innerHTML = html.join("");
     document.getElementById("etq-titol-previa").hidden = n === 0;
     document.getElementById("etq-resum").textContent =
-        `${n} etiquetes · ${Math.ceil(n / 2)} fulls A4`;
+        `${n} etiquetes · ${n} fulls A4 horitzontals`;
     document.getElementById("etq-imprimir").disabled = n === 0;
 }
 

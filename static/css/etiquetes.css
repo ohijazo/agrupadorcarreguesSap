@@ -1,5 +1,6 @@
-/* Etiquetes de palet (/etiquetes). Mateix format que l'etiqueta de Word del
-   magatzem: A5 apaïsat (210 × 148 mm), dues per full A4 vertical. */
+/* Etiquetes de palet (/etiquetes). Mateix disseny que l'etiqueta de Word del
+   magatzem, maquetat en A5 apaïsat (210 × 148 mm). S'imprimeix ampliat a A4
+   horitzontal (297 × 210 mm), una per full. */
 
 /* --- Editor ------------------------------------------------------------ */
 .etq-barra {
@@ -84,14 +85,17 @@
     .etq { zoom: .45; }
 }
 
-/* --- Impressió: només les etiquetes, dues A5 per full A4 ---------------- */
+/* --- Impressió: només les etiquetes, una per full A4 horitzontal --------- */
+/* L'A5 x √2 = A4: el zoom amplia tota l'etiqueta (lletres, caixes i logo)
+   sense tocar-ne el disseny. 148 mm x 1.414 = 209.3 mm, cap dins els 210. */
 @media print {
-    @page { size: A4 portrait; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
     body { background: #fff !important; }
     .mag-header, .etq-barra, .etq-ajuda, #etq-taula, #etq-editor, .etq-titol-previa,
     #etq-error, #etq-carregant, .toasts, .user-menu { display: none !important; }
     main.container { padding: 0 !important; margin: 0 !important; max-width: none !important; }
     .etq-previa { display: block; margin: 0; gap: 0; }
-    .etq { zoom: 1; border: none; height: 148.5mm; page-break-inside: avoid; break-inside: avoid; }
-    .etq:nth-child(2n) { page-break-after: always; break-after: page; }
+    .etq { zoom: 1.414; border: none; page-break-inside: avoid; break-inside: avoid;
+           page-break-after: always; break-after: page; }
+    .etq:last-child { page-break-after: auto; break-after: auto; }
 }
