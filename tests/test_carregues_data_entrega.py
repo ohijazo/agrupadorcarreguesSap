@@ -30,7 +30,8 @@ def test_sql_branca_d_entrega_i_parentesis(monkeypatch):
     fila = SimpleNamespace(
         DocEntry=7, DocNum=7, Series=-1, CreateDate=datetime(2026, 11, 21), U_SEINomCarg="MATAS",
         U_SEIDataS=datetime(2026, 11, 23), U_SEIHoraS=2000, U_SEIDataE=datetime(2026, 11, 24),
-        U_SEIDataT=None, U_SEIHoraT=None, U_SEIEstado="P", tra_codi="138",
+        U_SEIDataT=None, U_SEIHoraT=None, plan_DataS=None, plan_HoraS=None,
+        U_SEIEstado="P", tra_codi="138",
         transportista_nom=NOMS["138"], matricula="", U_SEIPesoC=0, observacions="", ruta="",
         palletitzable=False, is_granel=False, kg_total=0, num_comandes=0)
 
@@ -82,3 +83,32 @@ def test_nom_dels_transportistes_de_l_excepcio():
     assert sl._TRANSP_PER_ENTREGA.match("Mª Soledad López (SACS) 1315MST")
     assert sl._TRANSP_PER_ENTREGA.match("Agri Energia, SA (Volvo plataforma)")
     assert not sl._TRANSP_PER_ENTREGA.match("TISA Logistics, SL.")
+
+
+def test_sql_carrega_sortida_es_queda_al_dia_planificat(monkeypatch):
+    """Ordre 3 de produccio: planificada el 23/11 8:00, tancada el 24/11 11:51.
+    SAP sobreescriu U_SEIDataS en tancar; el calendari la deixa al 23/11 (la
+    de l'historic) i la sortida real va a part."""
+    vist = {}
+    fila = SimpleNamespace(
+        DocEntry=3, DocNum=3, Series=-1, CreateDate=datetime(2026, 11, 21), U_SEINomCarg="JK ASIAN",
+        U_SEIDataS=datetime(2026, 11, 24), U_SEIHoraS=1151, U_SEIDataE=datetime(2026, 11, 23),
+        U_SEIDataT=None, U_SEIHoraT=None, plan_DataS=datetime(2026, 11, 23), plan_HoraS=800,
+        U_SEIEstado="S", tra_codi="064", transportista_nom=NOMS["064"], matricula="", U_SEIPesoC=0,
+        observacions="", ruta="", palletitzable=True, is_granel=False, kg_total=0, num_comandes=0)
+
+    class Conn:
+        def execute(self, s, *params):
+            vist.setdefault("sql", s)
+            return SimpleNamespace(fetchall=lambda: [fila], fetchone=lambda: SimpleNamespace(n=1))
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(sql, "connectar", Conn)
+    it = sql.llistar_carregues("2026-11-23", "2026-11-23")["items"][0]
+    assert (it["car_fecsalida"], it["car_fecsalida_hora"]) == ("2026-11-23", "08:00")
+    assert (it["car_sortida_real"], it["car_sortida_real_hora"]) == ("2026-11-24", "11:51")
+    s = " ".join(vist["sql"].split())
+    assert "OUTER APPLY" in s and "[@ASEI_ORDENCARGA]" in s
+    assert "COALESCE(p.DataS, h.U_SEIDataS, h.CreateDate) >= ?" in s

@@ -739,6 +739,8 @@
         const matricula = (c.car_matricula || "").trim();
         const dataCarrega = fmtDataLlarga(c.car_fecsalida || c.car_fecha, c.car_fecsalida_hora);
         const dataEntrega = fmtDataLlarga(c.car_fecllegada, c.car_fecllegada_hora);
+        // Càrrega ja sortida: SAP hi desa l'hora real; la "Data càrrega" és la planificada.
+        const sortidaReal = fmtDataLlarga(c.car_sortida_real, c.car_sortida_real_hora);
         const rows = [
             `<div class="cal-tt-titol">${escapeHtml(nom)}</div>`,
             `<div class="cal-tt-id muted"><code>${escapeHtml(c.carrega_id)}</code></div>`,
@@ -869,6 +871,8 @@
     function renderModalMeta(c) {
         const dataCarrega = fmtDataLlarga(c.car_fecsalida || c.car_fecha, c.car_fecsalida_hora);
         const dataEntrega = fmtDataLlarga(c.car_fecllegada, c.car_fecllegada_hora);
+        // Càrrega ja sortida: SAP hi desa l'hora real; la "Data càrrega" és la planificada.
+        const sortidaReal = fmtDataLlarga(c.car_sortida_real, c.car_sortida_real_hora);
         const transp = (c.transportista || c.tra_codi || "").trim();
         const matricula = (c.car_matricula || "").trim();
         const conductor = (c.car_nomconductor || "").trim();
@@ -878,6 +882,7 @@
             descripcio ? `<div class="cal-modal-meta-row"><strong>${escapeHtml(descripcio)}</strong></div>` : "",
             dataCarrega ? `<div class="cal-modal-meta-row"><span class="muted">Data càrrega:</span> ${escapeHtml(dataCarrega)}</div>` : "",
             dataEntrega ? `<div class="cal-modal-meta-row"><span class="muted">Data entrega:</span> ${escapeHtml(dataEntrega)}</div>` : "",
+            sortidaReal ? `<div class="cal-modal-meta-row"><span class="muted">Sortida real:</span> ${escapeHtml(sortidaReal)}</div>` : "",
             transp ? `<div class="cal-modal-meta-row"><span class="muted">Transportista:</span> ${escapeHtml(transp)}</div>` : "",
             matricula ? `<div class="cal-modal-meta-row"><span class="muted">Matrícula:</span> ${escapeHtml(matricula)}</div>` : "",
             conductor ? `<div class="cal-modal-meta-row"><span class="muted">Conductor:</span> ${escapeHtml(conductor)}</div>` : "",

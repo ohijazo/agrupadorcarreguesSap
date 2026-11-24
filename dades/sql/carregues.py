@@ -50,6 +50,22 @@ _CONN_STR = (
 # Transportistes que el calendari pinta el dia d'entrega i no el de sortida
 # (excepcio heretada de KAIS, vegeu static/js/calendari.js `usaDataArribada`).
 # El backend SL fa el mateix en Python amb `dades.sl.carregues._TRANSP_PER_ENTREGA`.
+# Sortida planificada d'una carrega ja sortida ('S'): la de l'ultima versio
+# en estat 'P' a l'historic. Per a les que encara son 'P', p.* es NULL i val
+# la de la capcalera.
+_APPLY_PLANIFICADA = """
+        OUTER APPLY (
+            SELECT TOP 1 a.U_SEIDataS AS DataS, a.U_SEIHoraS AS HoraS
+            FROM   [@ASEI_ORDENCARGA] a WITH (NOLOCK)
+            WHERE  a.DocEntry = h.DocEntry
+              AND  UPPER(RTRIM(h.U_SEIEstado)) = 'S'
+              AND  UPPER(RTRIM(a.U_SEIEstado)) = 'P'
+              AND  a.U_SEIDataS IS NOT NULL
+            ORDER  BY a.LogInst DESC
+        ) p
+"""
+_DATA_SORTIDA = "COALESCE(p.DataS, h.U_SEIDataS, h.CreateDate)"
+
 _SQL_TRANSP_PER_ENTREGA = "t.Name LIKE 'AGRI%' OR t.Name LIKE 'M% SOLEDAD L%PEZ%'"
 
 
@@ -140,7 +156,12 @@ def llistar_carregues(
     elif tra_codis is None:
         tra_codis = []
 
-    # WHERE base: rang de data sobre U_SEIDataS (fallback a CreateDate).
+    # WHERE base: rang de data sobre la sortida PLANIFICADA (fallback a
+    # CreateDate). En tancar una carrega (P -> S), SAP sobreescriu U_SEIDataS i
+    # U_SEIHoraS amb la sortida real (U_SEIDataT queda buit): la 3, planificada
+    # pel 23/11 a les 8:00, va quedar al 24/11 11:51 i el calendari la movia
+    # de dia. La planificada es l'ultima versio en estat 'P' de l'historic de
+    # l'objecte (@ASEI_ORDENCARGA): vegeu `_APPLY_PLANIFICADA`.
     # No filtrem per Canceled: SAP B1 ignora aquest flag a la finestra
     # "Ordenes de Carga Abiertas" (mostra fins i tot Canceled='Y' si
     # U_SEIEstado='P'). Si cal restringir a un estat concret, es fa amb
@@ -152,8 +173,8 @@ def llistar_carregues(
     where_sql = f"""
         WHERE (
                 (
-                        COALESCE(h.U_SEIDataS, h.CreateDate) >= ?
-                    AND COALESCE(h.U_SEIDataS, h.CreateDate) <  ?
+                        {_DATA_SORTIDA} >= ?
+                    AND {_DATA_SORTIDA} <  ?
                 )
              OR (
                         h.U_SEIDataE >= ?
@@ -271,6 +292,7 @@ def llistar_carregues(
         SELECT h.DocEntry, h.DocNum, h.Series, h.CreateDate,
                h.U_SEINomCarg, h.U_SEIDataS, h.U_SEIHoraS,
                h.U_SEIDataE, h.U_SEIDataT, h.U_SEIHoraT,
+               p.DataS AS plan_DataS, p.HoraS AS plan_HoraS,
                h.U_SEIEstado, RTRIM(h.U_SEITransp) AS tra_codi,
                RTRIM(t.Name) AS transportista_nom,
                RTRIM(h.U_SEIMatric) AS matricula,
@@ -284,8 +306,9 @@ def llistar_carregues(
         FROM   [@SEI_ORDENCARGA] h WITH (NOLOCK)
         LEFT   JOIN [@SEITRANSPORTEF] t WITH (NOLOCK)
                ON t.Code = h.U_SEITransp
+        {_APPLY_PLANIFICADA}
         {where_sql}
-        ORDER  BY COALESCE(h.U_SEIDataS, h.CreateDate) DESC, h.DocNum DESC
+        ORDER  BY {_DATA_SORTIDA} DESC, h.DocNum DESC
         OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     """
     sql_count = f"""
@@ -293,6 +316,7 @@ def llistar_carregues(
         FROM   [@SEI_ORDENCARGA] h WITH (NOLOCK)
         LEFT   JOIN [@SEITRANSPORTEF] t WITH (NOLOCK)
                ON t.Code = h.U_SEITransp
+        {_APPLY_PLANIFICADA}
         {where_sql}
     """
 
@@ -318,8 +342,13 @@ def llistar_carregues(
             "carrega_id": _carrega_id(series, docentry),
             "car_descripcion": (r.U_SEINomCarg or "").strip() if r.U_SEINomCarg else "",
             "car_fecha": r.CreateDate.strftime("%Y-%m-%d") if r.CreateDate else None,
-            "car_fecsalida": r.U_SEIDataS.strftime("%Y-%m-%d") if r.U_SEIDataS else None,
-            "car_fecsalida_hora": _fmt_hora(r.U_SEIHoraS),
+            # Sortida planificada; si la carrega ja ha sortit, la real va a part.
+            "car_fecsalida": (r.plan_DataS or r.U_SEIDataS).strftime("%Y-%m-%d")
+                             if (r.plan_DataS or r.U_SEIDataS) else None,
+            "car_fecsalida_hora": _fmt_hora(r.plan_HoraS if r.plan_DataS else r.U_SEIHoraS),
+            "car_sortida_real": (r.U_SEIDataS.strftime("%Y-%m-%d")
+                                 if r.plan_DataS and r.U_SEIDataS else None),
+            "car_sortida_real_hora": _fmt_hora(r.U_SEIHoraS) if r.plan_DataS else None,
             # "Fecha de entrega prevista". SAP no en guarda l'hora.
             "car_fecllegada": r.U_SEIDataE.strftime("%Y-%m-%d") if r.U_SEIDataE else None,
             "car_fecllegada_hora": None,

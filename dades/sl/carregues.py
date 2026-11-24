@@ -467,6 +467,10 @@ def llistar_carregues(
 ) -> dict:
     """Llista carregues. Dues crides al Service Layer i una consulta a PostgreSQL.
 
+    PENDENT: la sortida planificada de les carregues ja sortides (l'historic
+    @ASEI_ORDENCARGA, vegeu el SQL) no es llegeix pel Service Layer; aqui
+    surt la U_SEIDataS de la capcalera. A produccio aquesta funcio va per SQL.
+
     `derivats` existeix per tenir la mateixa signatura que el SQL, on
     `derivats=False` estalvia 4 subconsultes per carrega; aqui s'ignora.
 
