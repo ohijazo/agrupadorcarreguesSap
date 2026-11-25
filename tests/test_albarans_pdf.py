@@ -439,11 +439,27 @@ def test_oficina_no_passa_pel_filtre_granel(amb_rol, monkeypatch):
 # --- Trasllats d'estoc (DocEntry negatiu) -----------------------------------
 def test_pdf_trasllat_demana_wtr1_amb_el_docentry_positiu(client, monkeypatch):
     c, app_module, auditats = client
-    crides = _mock_get(monkeypatch, app_module, _Resp(docnum="26020001"))
+    from io import BytesIO
+    from pypdf import PdfReader
+    crides = _mock_get(monkeypatch, app_module, _Resp(content=_pdf_real(300), docnum="26020001"))
     r = c.get("/albarans/-1/pdf")
     assert r.status_code == 200
     assert r.headers["Content-Disposition"] == 'inline; filename="Trasllat_26020001.pdf"'
     assert crides[0]["params"] == {"tipus": "WTR1", "docentry": 1}
+    # El layout de SAP en treu una: l'app en fa 3 (a Salzadella o Mallorca).
+    assert len(PdfReader(BytesIO(r.data)).pages) == 3
+
+
+def test_pdf_copies_trasllat_configurables(client, monkeypatch):
+    from io import BytesIO
+    from pypdf import PdfReader
+    c, app_module, _ = client
+    _mock_get(monkeypatch, app_module, _Resp(content=_pdf_real(300)))
+    monkeypatch.setenv("CRYSTAL_PDF_COPIES_TRASLLAT", "1")
+    assert len(PdfReader(BytesIO(c.get("/albarans/-1/pdf").data)).pages) == 1
+    # Els albarans no es tripliquen: les seves copies les fa el layout de SAP.
+    monkeypatch.delenv("CRYSTAL_PDF_COPIES_TRASLLAT")
+    assert len(PdfReader(BytesIO(c.get("/albarans/148/pdf").data)).pages) == 1
 
 
 def test_pdf_conjunt_barreja_albarans_i_trasllats(client, monkeypatch):

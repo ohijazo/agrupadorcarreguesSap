@@ -969,7 +969,36 @@ def _crystal_pdf(url: str, doc_entry: int) -> tuple[bytes, str]:
                   r.status_code, doc_entry, r.text[:300])
         raise _ErrorPdf(503, "No s'ha pogut generar el PDF de l'albarà. Avisa administració.")
     num = r.headers.get("X-DocNum", "")
-    return r.content, (num if num.isdigit() else str(doc_entry))
+    contingut = r.content
+    if doc_entry < 0:
+        contingut = _copies_pdf(contingut, _copies_trasllat(), doc_entry)
+    return contingut, (num if num.isdigit() else str(doc_entry))
+
+
+def _copies_trasllat() -> int:
+    """Copies de cada trasllat (a Salzadella o Mallorca): 3, o CRYSTAL_PDF_COPIES_TRASLLAT.
+    El layout WTR10003 de SAP en treu sempre una (la seva logica de copies
+    per adreca hi es comentada), aixi que les fa l'app."""
+    try:
+        return max(1, min(int(os.environ.get("CRYSTAL_PDF_COPIES_TRASLLAT", "3")), 10))
+    except ValueError:
+        return 3
+
+
+def _copies_pdf(contingut: bytes, copies: int, doc_entry: int) -> bytes:
+    """El mateix PDF repetit `copies` vegades, un darrere l'altre."""
+    if copies <= 1:
+        return contingut
+    try:
+        writer = PdfWriter()
+        for _ in range(copies):
+            writer.append(PdfReader(BytesIO(contingut)))
+        sortida = BytesIO()
+        writer.write(sortida)
+        return sortida.getvalue()
+    except Exception:
+        log.exception("No s'han pogut fer les copies del trasllat %s", doc_entry)
+        raise _ErrorPdf(503, "No s'ha pogut generar el PDF del trasllat. Avisa administració.")
 
 
 def _nom_doc(doc_entry: int) -> str:
