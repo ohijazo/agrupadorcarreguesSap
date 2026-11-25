@@ -297,6 +297,11 @@ def _tanca(acc: dict | None) -> dict:
     }
 
 
+def _senyal(acc: dict) -> str:
+    """Opac (el calendari es public): canvia quan canvien els kg fets o pistolejats."""
+    return format(zlib.crc32(f"{acc['kg_fets']:.3f}|{acc['kg_pistolejats']:.3f}".encode()), "08x")
+
+
 def _num_doc(c: dict):
     """DocNum de la comanda (int), o el text "Trasllat N" d'un trasllat: es
     com el detall de la carrega anomena cada document."""
@@ -319,13 +324,16 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
     albarans = _albarans_per_comanda(dades)
     creats = _creats(dades)
     accs: dict[int, dict] = {}
+    accs_comanda: dict[int, dict] = {}   # docentry de la comanda -> acumulat
     comandes: dict[int, list] = {}
     for c in dades.get("comandes") or []:
         if c.get("linies"):
             comandes.setdefault(int(c["carrega"]), []).append(c)
         for l in c.get("linies") or []:
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
-            _acumula(accs.setdefault(int(c["carrega"]), _nou_acc()), l, _linia(l, pist.get(clau)))
+            lc = _linia(l, pist.get(clau))
+            _acumula(accs.setdefault(int(c["carrega"]), _nou_acc()), l, lc)
+            _acumula(accs_comanda.setdefault(int(c["docentry"]), _nou_acc()), l, lc)
     out: dict[int, dict] = {}
     for car, acc in accs.items():
         t = _tanca(acc)
@@ -337,7 +345,11 @@ def progres_per_carrega(dades: dict) -> dict[int, dict]:
                     # el calendari hi veu "s'esta pistolejant ara". Opac: el
                     # calendari es public i no ha d'ensenyar kg. L'SGA no desa
                     # l'hora de les lectures (@SEIOPIC), aixi que no hi ha res millor.
-                    "senyal": format(zlib.crc32(f"{acc['kg_fets']:.3f}|{acc['kg_pistolejats']:.3f}".encode()), "08x"),
+                    "senyal": _senyal(acc),
+                    # El mateix per comanda ("Sèrie/DocNum" del detall -> DocNum,
+                    # o "Trasllat N"): el detall marca quina s'esta pistolejant.
+                    "senyals": {str(_num_doc(c)): _senyal(accs_comanda[int(c["docentry"])])
+                                for c in cms if int(c["docentry"]) in accs_comanda},
                     "n_comandes": len(cms),
                     "comandes_albara": sorted(
                         ({"comanda": _num_doc(c), "albarans": albarans[int(c["docentry"])],

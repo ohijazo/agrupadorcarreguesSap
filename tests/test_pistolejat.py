@@ -417,6 +417,7 @@ def test_progres_per_carrega_parcial_complet_i_amb_albara():
     }
     r = calc.progres_per_carrega(dades)
     senyal = r[87].pop("senyal")
+    assert set(r[87].pop("senyals")) == {"1"}   # un senyal per comanda (el seu DocNum)
     assert r[87] == {"estat": "parcial", "percent": 25, "kg_total": 1000, "kg_fets": 250,
                      "n_comandes": 1, "comandes_albara": []}
     assert len(senyal) == 8
@@ -509,7 +510,7 @@ def test_calendari_pistolejat_public_i_sense_kg(client, monkeypatch):
     monkeypatch.setattr(app_module, "progres_carregues", _progres_87)
     r = c.get("/api/carregues/pistolejat?ids=87")      # sense sessio
     assert r.status_code == 200
-    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25, "senyal": "",
+    assert r.get_json() == {"carregues": {"87": {"estat": "parcial", "percent": 25, "senyal": "", "senyals": {},
                                                  "n_comandes": 3, "comandes_albara": [{"comanda": 502, "albarans": [7001]}]}}}
 
 
@@ -656,3 +657,19 @@ def test_senyal_canvia_quan_es_pistoleja():
     assert un_sac["senyal"] != abans
     igual = calc.progres_per_carrega(_dades([linia], [{"comanda": 279, "linia": 0, "sacs": 1, "kg": 25}]))[87]
     assert igual["senyal"] == un_sac["senyal"]
+
+
+def test_senyal_per_comanda_nomes_canvia_la_que_es_pistoleja():
+    dades = {
+        "comandes": [
+            {"docentry": 1, "docnum": 501, "carrega": 87, "linies": [_linia(0)]},
+            {"docentry": 2, "docnum": "Trasllat 26000003", "carrega": 87, "linies": [_linia(0)]},
+        ],
+        "pistolejats": [], "estats": {},
+    }
+    abans = calc.progres_per_carrega(dades)[87]["senyals"]
+    dades["pistolejats"] = [{"comanda": 2, "linia": 0, "sacs": 1, "kg": 25}]
+    despres = calc.progres_per_carrega(dades)[87]["senyals"]
+    assert set(despres) == {"501", "Trasllat 26000003"}
+    assert despres["501"] == abans["501"]
+    assert despres["Trasllat 26000003"] != abans["Trasllat 26000003"]

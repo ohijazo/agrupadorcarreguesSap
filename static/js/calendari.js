@@ -176,17 +176,23 @@
 
     function actualitzaActivitat(nou) {
         const ara = Date.now();
+        const apunta = (clau, senyal) => {
+            if (!senyal) return;
+            const abans = activitat.get(clau);
+            const canvi = abans && abans.senyal !== senyal ? ara : (abans ? abans.canvi : 0);
+            activitat.set(clau, { senyal, canvi, vist: ara });
+        };
         for (const [k, v] of nou) {
-            if (!v.senyal) continue;
-            const abans = activitat.get(k);
-            const canvi = abans && abans.senyal !== v.senyal ? ara : (abans ? abans.canvi : 0);
-            activitat.set(k, { senyal: v.senyal, canvi, vist: ara });
+            apunta(k, v.senyal);
+            // Per comanda ("càrrega|DocNum"): el detall marca quina s'està pistolejant.
+            for (const [docnum, senyal] of Object.entries(v.senyals || {})) apunta(`${k}|${docnum}`, senyal);
         }
         try { localStorage.setItem(ACTIVITAT_KEY, JSON.stringify(Object.fromEntries(activitat))); } catch { /* sense storage */ }
     }
 
-    function esPistolejantAra(c) {
-        const a = activitat.get(String(c.car_numero || ""));
+    function esPistolejantAra(c, docnum) {
+        const clau = String(c.car_numero || "") + (docnum ? `|${docnum}` : "");
+        const a = activitat.get(clau);
         return !!(a && a.canvi && Date.now() - a.canvi < ACTIVITAT_MS);
     }
 
@@ -1000,6 +1006,19 @@
         const a = albaransDe(c);
         body.querySelectorAll(".comanda-block[data-comanda]").forEach(b => {
             const docnum = String(b.dataset.comanda).split("/").pop();
+            // Punt verd que batega a la comanda que s'està pistolejant ara.
+            let punt = b.querySelector(".cal-pist-ara");
+            if (esSap(c) && esPistolejantAra(c, docnum)) {
+                if (!punt) {
+                    punt = document.createElement("span");
+                    punt.className = "cal-pist-ara";
+                    punt.title = "S'està pistolejant ara (lectures dels últims minuts)";
+                    punt.setAttribute("aria-label", "S'està pistolejant ara");
+                    b.querySelector("h4 > span")?.prepend(punt);
+                }
+            } else if (punt) {
+                punt.remove();
+            }
             const albs = a ? a.perComanda.get(docnum) : null;
             let el = b.querySelector(".cal-evt-alb");
             if (!albs || !albs.length) { if (el) el.remove(); return; }
@@ -1301,9 +1320,10 @@
             carregaMes({ silenci: true });
         }, REFRESH_MS);
         // El pistolejat canvia mentre l'SGA carrega: es llegeix més sovint
-        // que la llista.
+        // que la llista. També amb el detall obert: només retoca pastilles i el
+        // punt verd de la comanda que s'està pistolejant, no redibuixa res.
         setInterval(() => {
-            if (document.hidden || dlg.hasAttribute("open")) return;
+            if (document.hidden) return;
             refrescaPistolejat();
         }, PISTOLEJAT_REFRESH_MS);
         // En tornar a la pestanya després d'estar a un altre tab, refresca un
