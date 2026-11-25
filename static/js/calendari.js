@@ -393,7 +393,7 @@
             : "";
         el.innerHTML = `<span class="cal-legend-lbl">Transportistes</span>${chips}${clear}` +
             `<span class="cal-legend-pist" title="Pistolejat a l'SGA (expedició)">` +
-            `<span class="cal-evt-pist">◐ 35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
+            `<span class="cal-evt-pist">35%</span> pistolejat · <span class="cal-evt-pist is-complet">✓</span> pistolejada` +
             ` · <span class="cal-evt-alb">A1/3</span> comandes amb albarà` +
             ` · <span class="cal-evt-alb is-tras is-totes">T</span> trasllat fet</span>`;
     }
@@ -647,7 +647,7 @@
         return p && (p.estat === "parcial" || p.estat === "complet") ? p : null;
     }
 
-    // Pastilla "◐ 35%" / "✓" a l'element d'una càrrega (la crea, l'actualitza
+    // Pastilla "35%" / "✓" a l'element d'una càrrega (la crea, l'actualitza
     // o la treu). No redibuixa la graella.
     function posaPastillaPistolejat(li, c) {
         const p = pistolejatDe(c);
@@ -666,7 +666,7 @@
         const ara = esSap(c) && esPistolejantAra(c);
         el.classList.toggle("is-complet", complet);
         el.classList.toggle("is-ara", ara);
-        el.textContent = complet ? "✓" : `◐ ${p.percent}%`;
+        el.textContent = complet ? "✓" : `${p.percent}%`;
         el.setAttribute("aria-label", (complet ? "Pistolejada" : `Pistolejat ${p.percent}%`)
             + (ara ? ". S'està pistolejant ara" : ""));
         el.title = ara ? "S'està pistolejant ara (lectures dels últims minuts)" : "";
