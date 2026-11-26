@@ -367,19 +367,28 @@ def progres_per_article(dades: dict) -> dict[str, dict]:
     `dades`: `obtenir_dades_pistolejat([carrega], incloure_tancades=True)`.
     Com a `progres_per_carrega`, el que ja te albara compta com a fet.
     Retorna {docnum_comanda: {albarans: [docnum], articles: {art_codi:
-    {estat, percent, kg_total, kg_fets, sacs_total, sacs_fets}}}}: per
-    article perque el detall no porta el numero de linia (si un article surt
-    en dues linies, se sumen). Sense lots: es public.
+    {estat, percent, kg_total, kg_fets, sacs_total, sacs_fets, kg_albara,
+    sacs_albara}}}}: per article perque el detall no porta el numero de linia
+    (si un article surt en dues linies, se sumen). Sense lots: es public.
+
+    `kg_albara` / `sacs_albara`: el que han servit els albarans (vegeu
+    `amb_servits` del backend); 0 si la comanda te albara pero aquest article
+    no hi es, None si la comanda encara no en te.
     """
     pist = _suma_pistolejats(dades)
     albarans = _albarans_per_comanda(dades)
     out: dict[str, dict] = {}
     for c in dades.get("comandes") or []:
         accs: dict[str, dict] = {}
+        servit: dict[str, list[float]] = {}
+        amb_albara = any("kg_albara" in l for l in c.get("linies") or [])
         for l in c.get("linies") or []:
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
             lc = _linia(l, pist.get(clau))
             _acumula(accs.setdefault(lc["art_codi"], _nou_acc()), l, lc)
+            s = servit.setdefault(lc["art_codi"], [0.0, 0.0])
+            s[0] += float(l.get("kg_albara") or 0)
+            s[1] += float(l.get("sacs_albara") or 0)
         articles = {}
         for art, acc in accs.items():
             t = _tanca(acc)
@@ -388,6 +397,8 @@ def progres_per_article(dades: dict) -> dict[str, dict]:
                 "percent": 100 if t["estat"] == ESTAT_COMPLET else min(t["percent"], 99),
                 "kg_total": t["kg_total"], "kg_fets": t["kg_fets"],
                 "sacs_total": t["sacs_total"], "sacs_fets": t["sacs_fets"],
+                "kg_albara": round(servit[art][0], 3) if amb_albara else None,
+                "sacs_albara": round(servit[art][1], 2) if amb_albara else None,
             }
         out[str(c.get("docnum"))] = {
             "albarans": albarans.get(int(c["docentry"]), []),

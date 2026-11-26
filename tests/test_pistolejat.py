@@ -555,8 +555,33 @@ def test_progres_per_article_suma_linies_i_compta_albara_com_fet():
     com = r["26600279"]
     assert com["albarans"] == [7001]
     assert com["articles"]["A"] == {"estat": "parcial", "percent": 12, "kg_total": 2000,
-                                    "kg_fets": 250, "sacs_total": 80, "sacs_fets": 10}
+                                    "kg_fets": 250, "sacs_total": 80, "sacs_fets": 10,
+                                    "kg_albara": None, "sacs_albara": None}
     assert com["articles"]["B"]["estat"] == "complet" and com["articles"]["B"]["percent"] == 100
+
+
+def test_progres_per_article_porta_el_servit_per_albara():
+    # Comanda de 2000 kg d'A i 1000 de B; l'albara nomes serveix 600 kg d'A.
+    dades = {
+        "comandes": [
+            {"docentry": 78, "docnum": 26600078, "carrega": 11, "linies": [
+                {**_linia(0, art="A", kg_oberts=0), "kg_albara": 600.0, "sacs_albara": 24.0},
+                {**_linia(1, art="A", kg_oberts=0), "kg_albara": 0.0, "sacs_albara": 0.0},
+                _linia(2, art="B", kg_oberts=0),
+            ]},
+        ],
+        "pistolejats": [], "estats": {}, "albarans": [],
+    }
+    arts = calc.progres_per_article(dades)["26600078"]["articles"]
+    assert (arts["A"]["kg_albara"], arts["A"]["sacs_albara"]) == (600, 24)
+    assert (arts["B"]["kg_albara"], arts["B"]["sacs_albara"]) == (0, 0)   # no servit
+
+
+def test_progres_per_article_sense_albara_no_porta_servit():
+    dades = {"comandes": [{"docentry": 5, "docnum": 1, "carrega": 1, "linies": [_linia(0, art="A")]}],
+             "pistolejats": [], "estats": {}, "albarans": []}
+    a = calc.progres_per_article(dades)["1"]["articles"]["A"]
+    assert a["kg_albara"] is None and a["sacs_albara"] is None
 
 
 def test_calendari_pistolejat_detall_public(client, monkeypatch):

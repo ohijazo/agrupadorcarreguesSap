@@ -955,7 +955,13 @@
     function renderDetallCarrega(data, ambPistolejat = true) {
         const thPist = ambPistolejat ? `<th title="Pistolejat a l'SGA (expedició). El que ja té albarà compta com a fet.">Pistolejat</th>` : "";
         const tdPist = ambPistolejat ? `<td class="cal-pist-cel muted">…</td>` : "";
-        const nCols = ambPistolejat ? 6 : 5;
+        // Pes i sacs que ha servit l'albarà (o el trasllat): s'omplen amb el
+        // pistolejat, perquè vénen de la mateixa crida a SAP.
+        const thAlb = ambPistolejat
+            ? `<th class="num cal-alb-th" title="El que ha servit l'albarà (o el trasllat)">Sacs alb.</th><th class="num cal-alb-th" title="El que ha servit l'albarà (o el trasllat)">Kg alb.</th>`
+            : "";
+        const tdAlb = ambPistolejat ? `<td class="num cal-alb-sacs muted">…</td><td class="num cal-alb-kg muted">…</td>` : "";
+        const nCols = ambPistolejat ? 8 : 5;
         if (!data.comandes || data.comandes.length === 0) {
             return `<div class="muted">Aquesta càrrega no té comandes associades.</div>`;
         }
@@ -970,6 +976,7 @@
                     <td>${escapeHtml(l.tunitat)}</td>
                     <td class="num">${fmtNum.format(l.sacs)}</td>
                     <td class="num">${fmtKg0.format(l.kg)}</td>
+                    ${tdAlb}
                     ${tdPist}
                 </tr>`;
             }).join("");
@@ -985,15 +992,15 @@
                 <div class="comanda-block" data-comanda="${escapeHtml(a.comanda)}">
                     <h4>
                         <span><code>${escapeHtml(a.comanda)}</code> ${tipoBadge} · ${escapeHtml(a.cli_codi)} ${escapeHtml(a.cli_nom)}${poblaHtml ? " · " + poblaHtml : ""}</span>
-                        <span class="muted">${fmtNum.format(a.total_sacs)} sacs · ${fmtKg0.format(a.total_kg)} kg</span>
+                        <span class="muted">${fmtNum.format(a.total_sacs)} sacs · ${fmtKg0.format(a.total_kg)} kg<span class="cal-alb-tot"></span></span>
                     </h4>
                     <table class="data-table data-table-mini">
-                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th>${thPist}</tr></thead>
+                        <thead><tr><th>Article</th><th>Descripció</th><th>TUnitat</th><th class="num">Sacs</th><th class="num">Kg</th>${thAlb}${thPist}</tr></thead>
                         <tbody>${linies || `<tr><td colspan="${nCols}" class="muted">Sense línies</td></tr>`}</tbody>
                     </table>
                 </div>`;
         }).join("");
-        return `<div class="detall-resum muted">${data.comandes.length} comandes · <strong>${fmtNum.format(data.total_sacs)}</strong> sacs · <strong>${fmtKg0.format(data.total_kg)}</strong> kg</div>${blocks}`;
+        return `<div class="detall-resum muted">${data.comandes.length} comandes · <strong>${fmtNum.format(data.total_sacs)}</strong> sacs · <strong>${fmtKg0.format(data.total_kg)}</strong> kg<span class="cal-alb-resum"></span></div>${blocks}`;
     }
 
     // "2026-11-24 10:18" -> "24/11 10:18"
@@ -1060,9 +1067,12 @@
             if (e.name === "AbortError") return;
             console.warn("pistolejat del detall:", e);
         }
+        let resumKg = 0, resumN = 0;
         body.querySelectorAll(".comanda-block[data-comanda]").forEach(b => {
             const docnum = String(b.dataset.comanda).split("/").pop();
             const articles = comandes && comandes[docnum] ? comandes[docnum].articles || {} : null;
+            const t = pintaServitAlbara(b, articles);
+            if (t) { resumKg += t.kg; resumN++; }
             b.querySelectorAll("tr[data-art] .cal-pist-cel").forEach(td => {
                 const tr = td.closest("tr");
                 const art = tr.dataset.art;
@@ -1073,6 +1083,52 @@
                 td.innerHTML = htmlPistolejatArticle(a, tr.dataset.tunitat);
             });
         });
+        const resum = body.querySelector(".cal-alb-resum");
+        if (resum) {
+            resum.innerHTML = resumN
+                ? ` · albarà${resumN > 1 ? "ns" : ""}: <strong>${escapeHtml(fmtKg0.format(resumKg))}</strong> kg`
+                : "";
+        }
+    }
+
+    // Columnes "Sacs alb." / "Kg alb." i total servit d'una comanda del
+    // detall. `articles` ve per article: si un article surt en dues línies,
+    // el total va a la primera. Retorna {kg, sacs} si la comanda té albarà.
+    function pintaServitAlbara(b, articles) {
+        const vistos = new Set();
+        let kg = 0, sacs = 0, ambAlbara = false;
+        b.querySelectorAll("tr[data-art]").forEach(tr => {
+            const tdS = tr.querySelector(".cal-alb-sacs");
+            const tdK = tr.querySelector(".cal-alb-kg");
+            if (!tdS || !tdK) return;
+            const a = articles && articles[tr.dataset.art];
+            const primera = !vistos.has(tr.dataset.art);
+            vistos.add(tr.dataset.art);
+            tdS.className = tdK.className = "num muted";
+            tdS.classList.add("cal-alb-sacs"); tdK.classList.add("cal-alb-kg");
+            if (!a || a.kg_albara == null || !primera) {
+                tdS.textContent = tdK.textContent = primera ? "—" : "";
+                return;
+            }
+            ambAlbara = true;
+            kg += a.kg_albara;
+            if (/^s/i.test((tr.dataset.tunitat || "").trim())) sacs += a.sacs_albara;
+            const dif = Math.abs(a.kg_albara - a.kg_total) > 0.001;
+            tdS.textContent = fmtNum.format(Math.round(a.sacs_albara));
+            tdK.textContent = fmtKg0.format(a.kg_albara);
+            for (const td of [tdS, tdK]) {
+                td.classList.remove("muted");
+                td.classList.toggle("is-dif", dif);
+                td.title = dif ? "L'albarà no ha servit el mateix que la comanda" : "";
+            }
+        });
+        const tot = b.querySelector(".cal-alb-tot");
+        if (tot) {
+            tot.textContent = ambAlbara
+                ? ` · albarà ${fmtNum.format(Math.round(sacs))} sacs · ${fmtKg0.format(kg)} kg`
+                : "";
+        }
+        return ambAlbara ? { kg, sacs } : null;
     }
 
     // Només són sacs les TUnitat que comencen per S (S25, S10...); la resta

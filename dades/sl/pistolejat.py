@@ -21,8 +21,9 @@ ESTATS = "U_SEIESTATSCOM"
 
 
 def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False,
-                             amb_lots: bool = False, amb_trasllats: bool = False) -> dict:
-    """Vegeu la versio SQL. PENDENT: `amb_trasllats` encara no es fa pel
+                             amb_lots: bool = False, amb_trasllats: bool = False,
+                             amb_servits: bool = False) -> dict:
+    """Vegeu la versio SQL. PENDENT: `amb_trasllats` i `amb_servits` encara no es fan pel
     Service Layer (a produccio aquesta funcio va per SQL); s'ignora. Una crida per tros de 40 carregues a `Orders`, i
     una per tros de 40 comandes a cadascuna de les dues UDT. Amb `amb_lots`,
     les lectures porten el lot (`U_MdAbsEntry`) i despres es demana el numero

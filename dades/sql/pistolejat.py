@@ -25,7 +25,8 @@ def _trossos(valors: list[int]):
 
 
 def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = False,
-                             amb_lots: bool = False, amb_trasllats: bool = False) -> dict:
+                             amb_lots: bool = False, amb_trasllats: bool = False,
+                             amb_servits: bool = False) -> dict:
     """Linies obertes de les comandes obertes d'aquestes carregues, les
     lectures de `@SEIOPIC` encara sense albara, i l'ultim estat de cada comanda.
 
@@ -39,6 +40,10 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
 
     `albarans`: els albarans no cancel·lats de cada comanda ({comanda,
     albara, docnum}), via les lectures de `@SEIOPIC` que hi apunten.
+
+    Amb `amb_servits`, cada linia que ja te albara (o trasllat) no cancel·lat
+    porta `kg_albara` i `sacs_albara`: el que s'ha servit de debo, que pot
+    ser menys que la comanda. Per al detall de la carrega del calendari.
     """
     ids = sorted({int(c) for c in carregues or []})
     if not ids:
@@ -216,6 +221,8 @@ def obtenir_dades_pistolejat(carregues: list[int], incloure_tancades: bool = Fal
         if amb_trasllats:
             _afegeix_trasllats(conn, ids, incloure_tancades, comandes, pistolejats, albarans)
             docs = sorted(comandes)
+        if amb_servits:
+            _afegeix_servits(conn, comandes)
     finally:
         conn.close()
 
@@ -317,3 +324,43 @@ def _afegeix_trasllats(conn, carregues, incloure_tancades, comandes, pistolejats
                              "creat": _creat(r.CreateDate, r.DocTime)})
     pistolejats.sort(key=lambda p: (p["comanda"], p["linia"]))
     albarans.sort(key=lambda a: (a["comanda"], a["albara"]))
+
+
+def _afegeix_servits(conn, comandes: dict[int, dict]) -> None:
+    """`kg_albara` / `sacs_albara` a cada linia amb albara (DLN1) o trasllat
+    (WTR1) no cancel·lat, per la linia base. DocEntry negatiu = trasllat."""
+    from dades.sql.carregues import _sacs_trasllat
+
+    servits: dict[tuple[int, int], list[float]] = {}
+    for negatiu, sql in (
+        (False, """
+            SELECT d.BaseEntry AS doc, d.BaseLine AS linia,
+                   SUM(d.InvQty) AS kg, SUM(d.PackQty) AS sacs
+            FROM   DLN1 d WITH (NOLOCK)
+            JOIN   ODLN n WITH (NOLOCK) ON n.DocEntry = d.DocEntry
+            WHERE  d.BaseType = 17 AND n.CANCELED = 'N' AND d.BaseEntry IN ({ph})
+            GROUP  BY d.BaseEntry, d.BaseLine"""),
+        (True, f"""
+            SELECT d.BaseEntry AS doc, d.BaseLine AS linia,
+                   SUM(d.InvQty) AS kg, SUM(d.PackQty) AS sacs
+            FROM   WTR1 d WITH (NOLOCK)
+            JOIN   OWTR n WITH (NOLOCK) ON n.DocEntry = d.DocEntry
+            WHERE  d.BaseType = {OBJ_SOL_TRASLLAT} AND n.CANCELED = 'N' AND d.BaseEntry IN ({{ph}})
+            GROUP  BY d.BaseEntry, d.BaseLine"""),
+    ):
+        docs = sorted(-d if negatiu else d for d in comandes if (d < 0) == negatiu)
+        for tros in _trossos(docs):
+            ph = ",".join(["?"] * len(tros))
+            for r in conn.execute(sql.format(ph=ph), *tros).fetchall():
+                doc = -int(r.doc) if negatiu else int(r.doc)
+                servits[(doc, int(r.linia))] = [float(r.kg or 0), float(r.sacs or 0)]
+    for doc, c in comandes.items():
+        for l in c["linies"]:
+            s = servits.get((doc, l["linia"]))
+            if s is None:
+                continue
+            kg, sacs = s
+            if doc < 0 and sacs <= 0:   # al trasllat PackQty sol ser 0
+                sacs = float(_sacs_trasllat(kg, l["unitat"]))
+            l["kg_albara"] = round(kg, 3)
+            l["sacs_albara"] = round(sacs, 2)

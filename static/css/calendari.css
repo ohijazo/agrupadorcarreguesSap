@@ -700,6 +700,9 @@
 .comanda-block h4 .cal-evt-alb { margin-left: .4rem; vertical-align: middle; }
 /* Columna "Pistolejat" del detall: barreta + sacs (o kg) fets / total. */
 .cal-pist-cel { white-space: nowrap; font-size: .8rem; }
+/* Servit per l'albarà, al detall: en taronja si no és el que deia la comanda. */
+.cal-alb-sacs, .cal-alb-kg { white-space: nowrap; }
+.cal-alb-sacs.is-dif, .cal-alb-kg.is-dif { color: var(--warning); font-weight: 600; }
 .cal-pist-art { display: inline-flex; align-items: center; gap: .35rem; font-variant-numeric: tabular-nums; }
 .cal-pist-barra { width: 3rem; height: .4rem; background: #edf2f7; border-radius: 2px; overflow: hidden; flex-shrink: 0; }
 .cal-pist-barra > span { display: block; height: 100%; background: #4a7fc1; }
