@@ -128,6 +128,7 @@ function pintaFila(a) {
                 <div class="alb-cli">${escA(a.cli_nom || a.cli_codi)}</div>
                 <div class="alb-cli-codi">${escA(a.cli_codi)}</div>
             </td>
+            <td data-lbl="Usuari" class="alb-usuari">${escA(a.usuari_nom || (a.usuari != null ? `#${a.usuari}` : ""))}</td>
             <td data-lbl="Estat">${estat(a)}</td>
             <td class="alb-accions">${pdf}${cancel}</td>
         </tr>`;

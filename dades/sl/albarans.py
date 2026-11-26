@@ -63,6 +63,7 @@ def _doc(d: dict) -> dict:
         "cli_codi": (d.get("CardCode") or "").strip(),
         "cli_nom": (d.get("CardName") or "").strip(),
         "usuari": int(d["UserSign"]) if d.get("UserSign") is not None else None,
+        "usuari_nom": "",   # PENDENT: el nom (OUSR.USER_CODE) nomes surt per SQL
         "obert": d.get("DocumentStatus") == "bost_Open",
         "cancelat": d.get("CancelStatus") == "csYes",
         "tipus": "albara",
