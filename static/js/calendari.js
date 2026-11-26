@@ -71,8 +71,7 @@
         if (c.is_granel) return 0;
         const tra = (c.transportista || "").trim().toUpperCase();
         if (tra.startsWith("AGRI")) return 1;
-        const traNorm = tra.normalize("NFD").replace(/[̀-ͯª]/g, "");
-        if (traNorm.startsWith("M SOLEDAD LOPEZ")) return 2;
+        if (esSoledad(c)) return 2;
         const traCodi = (c.tra_codi || "").trim();
         // 199 té preferència sobre la regla d'"alerta capacitat" (>17 t en una
         // sola comanda): aquest transportista ja gestiona aquest cas com a
@@ -89,8 +88,13 @@
     function usaDataArribada(c) {
         const tra = (c.transportista || "").trim().toUpperCase();
         if (tra.startsWith("AGRI")) return true;
-        const traNorm = tra.normalize("NFD").replace(/[̀-ͯª]/g, "");
-        return traNorm.startsWith("M SOLEDAD LOPEZ");
+        return esSoledad(c);
+    }
+
+    // Transportista "Mª Soledad López" (sense accents ni ª).
+    function esSoledad(c) {
+        const tra = (c.transportista || "").trim().toUpperCase();
+        return tra.normalize("NFD").replace(/[̀-ͯª]/g, "").startsWith("M SOLEDAD LOPEZ");
     }
 
     function dataCalendari(c) {
@@ -503,11 +507,12 @@
                     ul.className = "cal-cell-list";
                     // Separem grans i petites. Les petites (<LLINDAR_PETITES_KG)
                     // s'agrupen al final en un <details> desplegable per reduir
-                    // scroll vertical al calendari.
+                    // scroll vertical al calendari. Les de Mª Soledad López
+                    // sempre van a part, encara que pesin poc.
                     const grans = [];
                     const petites = [];
                     for (const c of llista) {
-                        (kgDeCarrega(c) < LLINDAR_PETITES_KG ? petites : grans).push(c);
+                        (kgDeCarrega(c) < LLINDAR_PETITES_KG && !esSoledad(c) ? petites : grans).push(c);
                     }
                     let rangAnt = null;
                     for (const c of grans) {
