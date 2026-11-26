@@ -385,6 +385,12 @@ def progres_per_article(dades: dict) -> dict[str, dict]:
         for l in c.get("linies") or []:
             clau = (int(c["docentry"]), int(l.get("linia") or 0))
             lc = _linia(l, pist.get(clau))
+            if amb_albara:
+                # Amb albara, el fet es el que ha servit (mes el pistolejat
+                # que encara no hi es), no "la linia ja no te res obert": una
+                # linia tancada amb menys sacs dels de la comanda no es completa.
+                kg_pend = float(l.get("kg") or 0) - float(l.get("kg_albara") or 0) - lc["kg_pistolejats"]
+                lc = {**lc, "kg_pendents": max(kg_pend, 0.0)}
             _acumula(accs.setdefault(lc["art_codi"], _nou_acc()), l, lc)
             s = servit.setdefault(lc["art_codi"], [0.0, 0.0])
             s[0] += float(l.get("kg_albara") or 0)

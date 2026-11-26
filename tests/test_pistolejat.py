@@ -575,6 +575,9 @@ def test_progres_per_article_porta_el_servit_per_albara():
     arts = calc.progres_per_article(dades)["26600078"]["articles"]
     assert (arts["A"]["kg_albara"], arts["A"]["sacs_albara"]) == (600, 24)
     assert (arts["B"]["kg_albara"], arts["B"]["sacs_albara"]) == (0, 0)   # no servit
+    # Les linies estan tancades, pero el fet es el que ha servit l'albara.
+    assert arts["A"]["estat"] == "parcial" and arts["A"]["kg_fets"] == 600
+    assert arts["B"]["estat"] == "pendent" and arts["B"]["kg_fets"] == 0
 
 
 def test_progres_per_article_sense_albara_no_porta_servit():

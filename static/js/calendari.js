@@ -953,7 +953,7 @@
     // `ambPistolejat` = false per a les càrregues heretades de KAIS: no tenen
     // pistolejat a SAP, i el calendari de KAIS no tenia aquesta columna.
     function renderDetallCarrega(data, ambPistolejat = true) {
-        const thPist = ambPistolejat ? `<th title="Pistolejat a l'SGA (expedició). El que ja té albarà compta com a fet.">Pistolejat</th>` : "";
+        const thPist = ambPistolejat ? `<th title="Pistolejat a l'SGA (expedició). Amb albarà, compta el que l'albarà ha servit.">Pistolejat</th>` : "";
         const tdPist = ambPistolejat ? `<td class="cal-pist-cel muted">…</td>` : "";
         // Pes i sacs que ha servit l'albarà (o el trasllat): s'omplen amb el
         // pistolejat, perquè vénen de la mateixa crida a SAP.
