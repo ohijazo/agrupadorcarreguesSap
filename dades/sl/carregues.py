@@ -553,6 +553,8 @@ def llistar_carregues(
     pagina = capceleres[offset:offset + limit]
 
     # --- Camps derivats, de la taula d'agregats ---------------------------
+    # PENDENT: per SQL, kg_total ja agafa els kg de l'albara de les comandes
+    # que en tenen; els agregats encara sumen nomes les comandes.
     docentries = [int(h["DocEntry"]) for h in pagina]
     derivats = agregats.per_carrega(docentries)
     neutre = {"kg_total": 0.0, "num_comandes": 0,

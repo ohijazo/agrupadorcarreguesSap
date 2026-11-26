@@ -259,17 +259,34 @@ def llistar_carregues(
               AND  m3.Quantity > 0
         )
     """
+    # Kg de la carrega: per a cada comanda (o sol·licitud de trasllat), els
+    # de l'albara (o trasllat) si ja n'hi ha de no cancel·lats; si no, els de
+    # la comanda. En fer l'albara els kg poden variar respecte la comanda.
     kg_total_sql = """
         ISNULL((
-            SELECT SUM(l4.Quantity)
-            FROM   ORDR o4 WITH (NOLOCK)
-            JOIN   RDR1 l4 WITH (NOLOCK) ON l4.DocEntry = o4.DocEntry
-            WHERE  o4.U_SEIOrdCargId = h.DocEntry
+            SELECT SUM(COALESCE(a4.kg, r4.kg))
+            FROM   (SELECT o4.DocEntry, SUM(l4.Quantity) AS kg
+                    FROM   ORDR o4 WITH (NOLOCK)
+                    JOIN   RDR1 l4 WITH (NOLOCK) ON l4.DocEntry = o4.DocEntry
+                    WHERE  o4.U_SEIOrdCargId = h.DocEntry
+                    GROUP  BY o4.DocEntry) r4
+            OUTER  APPLY (SELECT SUM(d4.Quantity) AS kg
+                          FROM   DLN1 d4 WITH (NOLOCK)
+                          JOIN   ODLN n4 WITH (NOLOCK) ON n4.DocEntry = d4.DocEntry
+                          WHERE  d4.BaseType = 17 AND d4.BaseEntry = r4.DocEntry
+                            AND  n4.CANCELED = 'N') a4
         ), 0) + ISNULL((
-            SELECT SUM(m4.Quantity)
-            FROM   OWTQ q4 WITH (NOLOCK)
-            JOIN   WTQ1 m4 WITH (NOLOCK) ON m4.DocEntry = q4.DocEntry
-            WHERE  q4.U_SEIOrdCargId = h.DocEntry
+            SELECT SUM(COALESCE(t4.kg, q4.kg))
+            FROM   (SELECT w4.DocEntry, SUM(m4.Quantity) AS kg
+                    FROM   OWTQ w4 WITH (NOLOCK)
+                    JOIN   WTQ1 m4 WITH (NOLOCK) ON m4.DocEntry = w4.DocEntry
+                    WHERE  w4.U_SEIOrdCargId = h.DocEntry
+                    GROUP  BY w4.DocEntry) q4
+            OUTER  APPLY (SELECT SUM(x4.Quantity) AS kg
+                          FROM   WTR1 x4 WITH (NOLOCK)
+                          JOIN   OWTR y4 WITH (NOLOCK) ON y4.DocEntry = x4.DocEntry
+                          WHERE  x4.BaseType = 1250000001 AND x4.BaseEntry = q4.DocEntry
+                            AND  y4.CANCELED = 'N') t4
         ), 0)
     """
     num_comandes_sql = """
