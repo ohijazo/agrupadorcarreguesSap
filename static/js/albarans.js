@@ -98,6 +98,13 @@ function nomDoc(a) {
     return `${esTrasllat(a) ? "el trasllat" : "l'albarà"} ${a.docnum}`;
 }
 
+// Quan es va fer a SAP: "fet 25/11 03:51" (a.creat = "2026-11-25 03:51").
+function fetA(a) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(a.creat || "");
+    if (!m) return "";
+    return `<div class="alb-cli-codi" title="Data i hora en què es va fer a SAP">fet ${m[3]}/${m[2]}${m[4] ? " " + m[4] : ""}</div>`;
+}
+
 function pintaFila(a) {
     const pdf = albState.pdf && !a.cancelat
         ? `<a class="btn btn-ghost alb-pdf" href="/albarans/${a.docentry}/pdf" target="_blank" rel="noopener"
@@ -119,7 +126,7 @@ function pintaFila(a) {
     return `
         <tr class="${a.cancelat ? "is-cancelat" : ""} ${sel ? "is-sel" : ""}">
             <td class="alb-sel">${check}</td>
-            <td data-lbl="Data">${escA(a.data ? fmtData(a.data) : "")}</td>
+            <td data-lbl="Data">${escA(a.data ? fmtData(a.data) : "")}${fetA(a)}</td>
             <td data-lbl="Albarà" class="alb-num">${esTrasllat(a)
                 ? `<span class="badge badge-warn" title="Trasllat d'estoc a un altre magatzem">T</span> `
                 : ""}${escA(a.docnum)}</td>

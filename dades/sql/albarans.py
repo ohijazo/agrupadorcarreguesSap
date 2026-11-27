@@ -5,7 +5,7 @@ DocEntry, amb un dict per albara:
 
     docentry, docnum, data (YYYY-MM-DD), carrega, cli_codi, cli_nom,
     usuari (UserSign: 22/23 = SGA1/SGA2), usuari_nom (OUSR.USER_CODE),
-    obert, cancelat
+    creat ("YYYY-MM-DD HH:MM"), obert, cancelat
 
 No hi surten els documents de cancel·lacio (CANCELED = 'C'): son el contrapunt
 intern de SAP d'un albara cancel·lat, no un albara que s'hagi d'imprimir.
@@ -22,6 +22,7 @@ from __future__ import annotations
 from datetime import date
 
 from dades.sql.carregues import connectar
+from dades.sql.pistolejat import _creat
 
 _TROS = 500
 
@@ -39,7 +40,7 @@ def llistar_albarans_carregues(carregues: list[int]) -> list[dict]:
             for r in conn.execute(f"""
                 SELECT o.DocEntry, o.DocNum, o.DocDate, o.U_SEIOrdCargId AS carrega,
                        RTRIM(o.CardCode) AS cli_codi, RTRIM(o.CardName) AS cli_nom,
-                       o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.DocStatus, o.CANCELED
+                       o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.CreateDate, o.DocTime, o.DocStatus, o.CANCELED
                 FROM   ODLN o WITH (NOLOCK)
             LEFT   JOIN OUSR u WITH (NOLOCK) ON u.USERID = o.UserSign
                 WHERE  o.U_SEIOrdCargId IN ({ph})
@@ -64,7 +65,7 @@ def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[
         files = conn.execute(f"""
             SELECT o.DocEntry, o.DocNum, o.DocDate, o.U_SEIOrdCargId AS carrega,
                    RTRIM(o.CardCode) AS cli_codi, RTRIM(o.CardName) AS cli_nom,
-                   o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.DocStatus, o.CANCELED
+                   o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.CreateDate, o.DocTime, o.DocStatus, o.CANCELED
             FROM   ODLN o WITH (NOLOCK)
             LEFT   JOIN OUSR u WITH (NOLOCK) ON u.USERID = o.UserSign
             WHERE  ((o.DocDate >= ? AND o.DocDate <= ?)
@@ -81,7 +82,7 @@ def llistar_albarans_dates(desde: date, fins: date, usuaris: list[int]) -> list[
         for r in conn.execute(f"""
             SELECT t.DocEntry, t.DocNum, t.DocDate, t.U_SEIOrdCargId AS carrega,
                    RTRIM(t.ToWhsCode) AS cli_codi, RTRIM(w.WhsName) AS cli_nom,
-                   t.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, t.DocStatus, t.CANCELED
+                   t.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, t.CreateDate, t.DocTime, t.DocStatus, t.CANCELED
             FROM   OWTR t WITH (NOLOCK)
             LEFT   JOIN OUSR u WITH (NOLOCK) ON u.USERID = t.UserSign
             LEFT   JOIN OWHS w WITH (NOLOCK) ON w.WhsCode = t.ToWhsCode
@@ -124,7 +125,7 @@ def llistar_albarans_granel_dates(desde: date, fins: date) -> list[dict]:
         files = conn.execute(f"""
             SELECT o.DocEntry, o.DocNum, o.DocDate, o.U_SEIOrdCargId AS carrega,
                    RTRIM(o.CardCode) AS cli_codi, RTRIM(o.CardName) AS cli_nom,
-                   o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.DocStatus, o.CANCELED
+                   o.UserSign, RTRIM(u.USER_CODE) AS usuari_nom, o.CreateDate, o.DocTime, o.DocStatus, o.CANCELED
             FROM   ODLN o WITH (NOLOCK)
             LEFT   JOIN OUSR u WITH (NOLOCK) ON u.USERID = o.UserSign
             LEFT JOIN [@SEI_ORDENCARGA] oc WITH (NOLOCK) ON oc.DocEntry = o.U_SEIOrdCargId
@@ -174,6 +175,8 @@ def _fila(r) -> dict:
         "cli_nom": (r.cli_nom or "").strip(),
         "usuari": int(r.UserSign) if r.UserSign is not None else None,
         "usuari_nom": (getattr(r, "usuari_nom", None) or "").strip(),
+        # Quan es va fer a SAP: "2026-11-25 03:51" (CreateDate + DocTime).
+        "creat": _creat(getattr(r, "CreateDate", None), getattr(r, "DocTime", None)),
         "obert": r.DocStatus == "O",
         "cancelat": r.CANCELED == "Y",
         "tipus": "albara",
